@@ -57,6 +57,10 @@ await test(
         rawHash: 'search-fixture',
       },
     });
+    // Keep fixtures active as the real calendar advances.
+    const futureDeadline = new Date();
+    futureDeadline.setUTCFullYear(futureDeadline.getUTCFullYear() + 1);
+    futureDeadline.setUTCHours(0, 0, 0, 0);
     for (let i = 0; i < 8; i++) {
       await prisma.post.create({
         data: {
@@ -68,7 +72,7 @@ await test(
           applicationLastDate:
             i === 7
               ? null
-              : new Date(`2026-11-${String(i + 1).padStart(2, '0')}T00:00:00Z`),
+              : new Date(futureDeadline.getTime() + i * 86_400_000),
           eligibilityRules: {
             education_options: [
               {
