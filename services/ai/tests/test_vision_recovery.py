@@ -348,6 +348,132 @@ class VisionRecoveryTests(unittest.TestCase):
         self.assertIn("vision-page-5", section_ids)
         self.assertEqual(out_pdf["content"]["coverage"]["unreadable_pages"], [4, 6])
 
+    def test_html_complete_skips_pdf_while_missing_qualification_targets_short_and_long_pdf_with_ocr_and_null_handling(self):
+        # 1. HTML-complete notice skips PDF/OCR/Vision even when PDF has unreadable pages
+        complete_bundle = make_bundle(readable_pdf=False)
+        html_doc = next(d for d in complete_bundle["documents"] if d["document_id"] == "summary-html")
+        html_doc["content"]["blocks"] = [
+            {
+                "type": "paragraph",
+                "text": (
+                    "Issuer: UPESSC Board | Advertisement No: 09/2026 | Post: Headmaster (Balak)\n"
+                    "Vacancies: 1037 | Essential Qualification: M.A. and B.Ed Degree\n"
+                    "Minimum Age: 30 years | Category Relaxation: SC/ST/OBC as per rules\n"
+                    "Experience: Minimum years 4 teaching experience | Last Date: 30-11-2026"
+                ),
+            }
+        ]
+        html_doc["content"]["links"].append(
+            {"url": "https://upessc.example.gov.in/apply", "text": "Apply Online Registration"}
+        )
+
+        provider = Mock()
+        res_complete = recover_unreadable_pdf_pages(
+            complete_bundle,
+            gemini_provider=provider,
+            pdf_bytes_by_doc={"official-pdf": FAKE_PDF_BYTES},
+            page_images_by_doc={"official-pdf": {6: FAKE_PNG_BYTES}},
+        )
+        self.assertFalse(res_complete["vision_called"])
+        self.assertFalse(res_complete["ocr_called"])
+        self.assertEqual(res_complete["status"], "not_needed")
+        provider.recover_pdf_page.assert_not_called()
+
+        # Check coverage also approves extraction directly when HTML is complete
+        prep_complete = prepare_extraction(complete_bundle)
+        self.assertIsNotNone(prep_complete["llm_input"])
+
+        # 2. HTML missing qualification -> long PDF ranks qualification table page highest, runs OCR + Vision,
+        #    and accepts null for an unreadable field alongside a grounded qualification fact.
+        long_bundle = make_bundle(readable_pdf=False)
+        long_html = next(d for d in long_bundle["documents"] if d["document_id"] == "summary-html")
+        long_html["content"]["blocks"] = [
+            {
+                "type": "paragraph",
+                "text": (
+                    "Issuer: UPESSC Board | Advertisement No: 09/2026 | Post: Headmaster (Balak)\n"
+                    "Vacancies: 1037 | Minimum Age: 30 years | Category Relaxation: OBC/SC/ST\n"
+                    "Experience: Minimum years 4 | Last Date: 30-11-2026"
+                ),
+            }
+        ]
+        long_html["content"]["links"].append(
+            {"url": "https://upessc.example.gov.in/apply", "text": "Apply Online"}
+        )
+        long_pdf = next(d for d in long_bundle["documents"] if d["document_id"] == "official-pdf")
+        long_pdf["content"]["pages"] = [
+            {"number": 1, "native_status": "usable_candidate"},
+            {"number": 2, "native_status": "suspicious_or_unusable", "heading": "General Instructions"},
+            {"number": 3, "native_status": "suspicious_or_unusable", "heading": "Fee Structure"},
+            {"number": 4, "native_status": "suspicious_or_unusable", "heading": "Examination Cities"},
+            {
+                "number": 5,
+                "native_status": "suspicious_or_unusable",
+                "heading": "Educational Qualification Table",
+                "has_table": True,
+            },
+            {"number": 6, "native_status": "suspicious_or_unusable", "heading": "Annexure Format"},
+        ]
+
+        payload_p5 = valid_vision_payload(page=5)
+        payload_p5["page_text_quote"] = (
+            "Post: Headmaster (Balak) | Educational Qualification: Postgraduate Degree with B.Ed. "
+            + payload_p5["page_text_quote"]
+        )
+        payload_p5["posts"][0]["post_binding_quote"] = (
+            "Post: Headmaster (Balak) | Educational Qualification: Postgraduate Degree with B.Ed."
+        )
+        payload_p5["posts"][0]["candidate_facts"] = [
+            {
+                "field_path": "education_required",
+                "value": "Postgraduate Degree with B.Ed",
+                "exact_quote": "Post: Headmaster (Balak) | Educational Qualification: Postgraduate Degree with B.Ed.",
+                "physical_pdf_page": 5,
+                "section_locator": "official-pdf:page-5:table-1",
+                "conditions": None,
+            },
+            {
+                "field_path": "min_marks_percent",
+                "value": None,
+                "exact_quote": "",
+                "physical_pdf_page": 5,
+                "section_locator": "official-pdf:page-5:table-1",
+                "conditions": None,
+            },
+        ]
+
+        vision_mock = Mock()
+        vision_mock.model = "gemini-2.5-flash"
+        vision_mock.recover_pdf_page.return_value = {
+            "status": "ok",
+            "retryable": False,
+            "reason": None,
+            "data": payload_p5,
+            "raw_text": "{}",
+        }
+        ocr_mock = Mock(return_value={"text": "Educational Qualification Postgraduate B.Ed", "engine": "tesseract", "config": {"lang": "hin+eng"}})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            res_long = recover_unreadable_pdf_pages(
+                long_bundle,
+                gemini_provider=vision_mock,
+                pdf_bytes_by_doc={"official-pdf": FAKE_PDF_BYTES},
+                page_images_by_doc={"official-pdf": {p: FAKE_PNG_BYTES for p in (2, 3, 4, 5, 6)}},
+                storage_dir=Path(tmpdir),
+                max_pages=1,
+                ocr_engine=ocr_mock,
+            )
+            self.assertTrue(res_long["vision_called"])
+            self.assertTrue(res_long["ocr_called"])
+            selected_reqs = [r for r in res_long["requests"] if r.get("vision_called")]
+            self.assertEqual(len(selected_reqs), 1)
+            self.assertEqual(selected_reqs[0]["physical_pdf_page"], 5)
+            self.assertEqual(selected_reqs[0]["status"], "recovered")
+            versions = selected_reqs[0]["evidence_versions"]
+            self.assertIn("ocr_output", versions)
+            self.assertEqual(versions["ocr_output"]["engine"], "tesseract")
+            self.assertTrue(Path(versions["ocr_output"]["artifact_path"]).exists())
+
 
 if __name__ == "__main__":
     unittest.main()

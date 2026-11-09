@@ -4,7 +4,9 @@ import copy
 import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
+
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from capture_store import atomic_write, now
 from extract_bundle import leaves
@@ -19,8 +21,30 @@ from vision_recovery import (
     ALLOWED_VISION_FACT_FIELDS,
     _is_string_or_date_grounded_in_quote,
     _norm as _vision_norm,
+    assess_html_completeness,
     recover_unreadable_pdf_pages,
 )
+
+REVIEW_FINDING_STATUSES = (
+    'supported',
+    'missing',
+    'conflicting',
+    'suspicious',
+    'needs_enrichment',
+)
+
+
+class ReviewFinding(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    field_path: str
+    status: Literal['supported', 'missing', 'conflicting', 'suspicious', 'needs_enrichment']
+    reason: str | None = None
+    evidence_quote: str | None = None
+
+
+class SecondLlmReviewResponse(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    findings: list[ReviewFinding] = []
 
 VALID_EDUCATION_LEVELS = {
     'TENTH',
@@ -366,6 +390,9 @@ def apply_validated_vision_recovery(
             for fact_idx, fact in enumerate(v_post.get('candidate_facts') or []):
                 if not isinstance(fact, dict):
                     continue
+                if fact.get('value') is None:
+                    # Null means unreadable text for this field on the page; skip without guessing.
+                    continue
                 raw_field = str(fact.get('field_path') or '').strip()
                 quote = (fact.get('exact_quote') or '').strip()
                 fact_page = fact.get('physical_pdf_page')
@@ -649,6 +676,127 @@ def apply_verified_enrichment_to_bundle(
     }
 
 
+def review_extracted_candidate(
+    extracted: dict[str, Any],
+    source_input: dict[str, Any],
+    *,
+    review_fn: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Run the second-stage Review LLM (or deterministic fallback) against supplied official evidence only.
+
+    The Review LLM returns structured findings (`supported`, `missing`, `conflicting`, `suspicious`,
+    or `needs_enrichment`) and never invents facts or computes eligibility.
+    """
+    if review_fn is not None:
+        raw_review = review_fn(copy.deepcopy(extracted), copy.deepcopy(source_input))
+        if not isinstance(raw_review, dict) or raw_review.get('status') in {'error', 'unresolved'}:
+            reason = (
+                raw_review.get('reason')
+                if isinstance(raw_review, dict)
+                else 'second_llm_review_failed'
+            ) or 'second_llm_review_failed'
+            retryable = bool(raw_review.get('retryable')) if isinstance(raw_review, dict) else False
+            return {
+                'status': 'retryable' if retryable else 'blocked',
+                'passed': False,
+                'retryable': retryable,
+                'findings': [],
+                'blocking_reasons': [reason] if not retryable else [],
+                'retryable_reasons': [reason] if retryable else [],
+            }
+        raw_data = raw_review.get('data') if isinstance(raw_review.get('data'), dict) else raw_review
+        try:
+            parsed = SecondLlmReviewResponse.model_validate_json(
+                json.dumps({'findings': raw_data.get('findings', [])}, ensure_ascii=False),
+                strict=True,
+            )
+            findings = [f.model_dump(mode='json') for f in parsed.findings]
+        except (ValidationError, TypeError, ValueError):
+            return {
+                'status': 'blocked',
+                'passed': False,
+                'retryable': False,
+                'findings': [],
+                'blocking_reasons': ['second_llm_review_malformed'],
+                'retryable_reasons': [],
+            }
+    else:
+        docs_by_id, units_by_id = _index_documents(source_input)
+        facts = extracted.get('facts') if isinstance(extracted.get('facts'), dict) else {}
+        citations = facts.get('evidence') if isinstance(facts.get('evidence'), list) else []
+        cit_by_path = {
+            c.get('field_path'): c
+            for c in citations
+            if isinstance(c, dict) and isinstance(c.get('field_path'), str)
+        }
+        findings = []
+        for idx, post in enumerate(facts.get('posts') or []):
+            if not isinstance(post, dict):
+                continue
+            prefix = f'posts.{idx}'
+            for field_name in ('post_name', 'recruiting_body', 'application_last_date', 'education_required', 'vacancies'):
+                fp = f'{prefix}.{field_name}'
+                val = post.get(field_name)
+                if field_name == 'education_required' and not val and _post_has_qualification(post):
+                    val = post.get('min_education_level') or 'options_present'
+                if field_name == 'vacancies' and val is None and (_post_has_age(post) or _post_has_experience(post)):
+                    val = 'secondary_metric_present'
+                if val is None or (isinstance(val, str) and not val.strip()):
+                    findings.append({
+                        'field_path': fp,
+                        'status': 'missing',
+                        'reason': 'Required recruitment field is missing.',
+                        'evidence_quote': None,
+                    })
+                    continue
+                cit = cit_by_path.get(fp)
+                if cit is None:
+                    findings.append({
+                        'field_path': fp,
+                        'status': 'supported',
+                        'reason': None,
+                        'evidence_quote': None,
+                    })
+                    continue
+                quote = (cit.get('quote') or '').strip()
+                unit = units_by_id.get(cit.get('evidence_id') or '')
+                sec_text = (unit.get('text') or '') if isinstance(unit, dict) else ''
+                if not quote or not unit or _vision_norm(quote) not in _vision_norm(sec_text):
+                    findings.append({
+                        'field_path': fp,
+                        'status': 'suspicious',
+                        'reason': 'Citation quote not grounded in supplied evidence unit.',
+                        'evidence_quote': quote or None,
+                    })
+                else:
+                    findings.append({
+                        'field_path': fp,
+                        'status': 'supported',
+                        'reason': None,
+                        'evidence_quote': quote,
+                    })
+
+    blocking_reasons: list[str] = []
+    retryable_reasons: list[str] = []
+    for f in findings:
+        fp = f.get('field_path') or 'facts'
+        st = f.get('status')
+        if st in {'conflicting', 'suspicious'}:
+            blocking_reasons.append(f'review_finding:{fp}:{st}')
+        elif st in {'missing', 'needs_enrichment'}:
+            retryable_reasons.append(f'review_finding:{fp}:{st}')
+
+    passed = not blocking_reasons and not retryable_reasons
+    return {
+        'status': 'blocked' if blocking_reasons else ('retryable' if retryable_reasons else 'supported'),
+        'passed': passed,
+        'retryable': bool(retryable_reasons and not blocking_reasons),
+        'findings': findings,
+        'blocking_reasons': sorted(set(blocking_reasons)),
+        'retryable_reasons': sorted(set(retryable_reasons)),
+    }
+
+
 def evaluate_automated_acceptance(
     extracted: dict[str, Any],
     source_input: dict[str, Any],
@@ -656,9 +804,10 @@ def evaluate_automated_acceptance(
     vision_requests: list[dict[str, Any]] | None = None,
     vision_merge_reasons: list[str] | None = None,
     enrichment_report: dict[str, Any] | None = None,
+    review_report: dict[str, Any] | None = None,
     research_exhausted: bool = False,
 ) -> dict[str, Any]:
-    """Evaluate the 7 deterministic rules for autonomous acceptance and publication."""
+    """Evaluate the deterministic gates for autonomous acceptance and publication."""
     blocked_reasons: list[str] = []
     retryable_reasons: list[str] = []
 
@@ -793,6 +942,19 @@ def evaluate_automated_acceptance(
     for post_label, missing_field in missing_core_fields:
         retryable_reasons.append(f'missing_core_field:{post_label}:{missing_field}')
 
+    # Gate: Second LLM review must have no blocking findings
+    active_review = (
+        review_report
+        if isinstance(review_report, dict)
+        else review_extracted_candidate(extracted, source_input)
+    )
+    for b_reason in active_review.get('blocking_reasons') or []:
+        if isinstance(b_reason, str) and b_reason.strip():
+            blocked_reasons.append(b_reason.strip())
+    for r_reason in active_review.get('retryable_reasons') or []:
+        if isinstance(r_reason, str) and r_reason.strip():
+            retryable_reasons.append(r_reason.strip())
+
     dedup_blocked = sorted(set(blocked_reasons))
     dedup_retryable = sorted(set(retryable_reasons))
 
@@ -804,6 +966,7 @@ def evaluate_automated_acceptance(
             'reason_codes': dedup_blocked,
             'core_fields_by_post': core_fields_by_post,
             'research_exhausted': research_exhausted,
+            'review_report': active_review,
             'validation': validation,
             'checked_at': now(),
         }
@@ -816,6 +979,7 @@ def evaluate_automated_acceptance(
             'reason_codes': dedup_retryable,
             'core_fields_by_post': core_fields_by_post,
             'research_exhausted': research_exhausted,
+            'review_report': active_review,
             'validation': validation,
             'checked_at': now(),
         }
@@ -827,6 +991,7 @@ def evaluate_automated_acceptance(
         'reason_codes': [],
         'core_fields_by_post': core_fields_by_post,
         'research_exhausted': research_exhausted,
+        'review_report': active_review,
         'validation': validation,
         'checked_at': now(),
     }
@@ -1040,6 +1205,7 @@ def run_autonomous_notice(
     extract_fn: Callable[[dict[str, Any]], dict[str, Any]],
     vision_bundle: dict[str, Any] | None = None,
     vision_provider: Any = None,
+    ocr_engine: Any = None,
     pdf_bytes_by_doc: dict[str, bytes] | None = None,
     page_images_by_doc: dict[str, dict[int, bytes]] | None = None,
     search_client: Any = None,
@@ -1047,6 +1213,7 @@ def run_autonomous_notice(
     issuer_hosts: dict[str, list[str]] | None = None,
     include_syllabus: bool = False,
     include_historical_cutoffs: bool = False,
+    review_fn: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None,
     persist_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> dict[str, Any]:
@@ -1094,19 +1261,25 @@ def run_autonomous_notice(
             'ingest_payload': None,
         }
 
-    # Step 1: Vision recovery ONLY when a verified PDF page is marked unusable
+    # Step 1: Vision/OCR recovery ONLY when HTML is not already complete and a verified PDF page is marked unusable
     vision_requests: list[dict[str, Any]] = []
     vision_called = False
+    ocr_called = False
     if vision_bundle is not None and vision_provider is not None:
-        v_res = recover_unreadable_pdf_pages(
-            vision_bundle,
-            gemini_provider=vision_provider,
-            pdf_bytes_by_doc=pdf_bytes_by_doc,
-            page_images_by_doc=page_images_by_doc,
-            storage_dir=root_path,
-        )
-        vision_requests = v_res['requests']
-        vision_called = v_res['vision_called']
+        html_check = assess_html_completeness(vision_bundle)
+        if not (html_check['has_html'] and html_check['complete']):
+            v_res = recover_unreadable_pdf_pages(
+                vision_bundle,
+                gemini_provider=vision_provider,
+                pdf_bytes_by_doc=pdf_bytes_by_doc,
+                page_images_by_doc=page_images_by_doc,
+                storage_dir=root_path,
+                missing_fields=html_check['missing_fields'] if html_check['has_html'] else None,
+                ocr_engine=ocr_engine,
+            )
+            vision_requests = v_res['requests']
+            vision_called = v_res['vision_called']
+            ocr_called = v_res.get('ocr_called', False)
 
     # Step 2: Structured extraction
     prepared_for_extract = copy.deepcopy(prepared)
@@ -1120,7 +1293,7 @@ def run_autonomous_notice(
         source_input = merged_vision['source_input']
         vision_merge_reasons = merged_vision.get('unresolved_reasons', [])
 
-    # Step 3: Targeted enrichment / bounded research when core or supported fields are missing/weak
+    # Step 3: Targeted enrichment / bounded single-pass research ONLY when required fields remain missing after HTML + PDF
     enrichment_report: dict[str, Any] | None = None
     reader_summary: dict[str, Any] | None = None
     official_syllabus: list[dict[str, Any]] = []
@@ -1147,6 +1320,9 @@ def run_autonomous_notice(
                 requested_fields=requested_fields,
                 include_syllabus=include_syllabus,
                 include_historical_cutoffs=include_historical_cutoffs,
+                pass_number=1,
+                max_passes=1,
+                storage_dir=root_path,
             )
             applied = apply_verified_enrichment_to_bundle(extracted, source_input, enrichment_report)
             extracted = applied['extracted']
@@ -1155,13 +1331,39 @@ def run_autonomous_notice(
             official_syllabus = applied['official_syllabus']
             historical_cutoffs = applied['historical_cutoffs']
 
-    # Step 4: Evaluate deterministic automated acceptance after bounded research
+    # Step 3.5: Persist validated merged facts and their evidence references as a separate artifact
+    merged_facts_path = root_path / 'merged_facts' / f'{bundle_id}.json'
+    atomic_write(
+        merged_facts_path,
+        json.dumps(
+            {
+                'bundle_id': bundle_id,
+                'evidence_fingerprint': fingerprint,
+                'recorded_at': _iso(_utc_now(clock)),
+                'facts': extracted.get('facts'),
+                'evidence': (extracted.get('facts') or {}).get('evidence', []),
+                'documents': source_input.get('documents', []),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ).encode('utf-8'),
+    )
+
+    # Step 3.8: Second LLM review against supplied official evidence only
+    review_report = review_extracted_candidate(
+        extracted,
+        source_input,
+        review_fn=review_fn,
+    )
+
+    # Step 4: Evaluate deterministic automated acceptance after bounded research & second LLM review
     final_acceptance = evaluate_automated_acceptance(
         extracted,
         source_input,
         vision_requests=vision_requests,
         vision_merge_reasons=vision_merge_reasons,
         enrichment_report=enrichment_report,
+        review_report=review_report,
         research_exhausted=True,
     )
     decision = final_acceptance['decision']
@@ -1270,6 +1472,7 @@ def run_autonomous_notice(
         'historicalCutoffs': historical_cutoffs,
         'visionRecovery': vision_requests,
         'enrichmentCandidates': enrichment_report.get('field_candidates') if enrichment_report else [],
+        'reviewReport': review_report,
         'auditLineage': audit_lineage,
     }
     atomic_write(payload_path, json.dumps(ingest_payload, ensure_ascii=False, indent=2).encode('utf-8'))
@@ -1283,12 +1486,15 @@ def run_autonomous_notice(
         'publication_status': final_acceptance['publication_status'],
         'persistence_allowed': final_acceptance['persistence_allowed'],
         'vision_called': vision_called,
+        'ocr_called': ocr_called,
         'reused_accepted': False,
         'backoff_skipped': False,
         'reason_codes': reason_codes,
         'storage_error': storage_error,
         'state': state_record,
         'extracted': extracted,
+        'review_report': review_report,
+        'merged_facts_path': str(merged_facts_path),
         'draft_envelope': draft_envelope,
         'ingest_payload': ingest_payload,
         'persistence_result': persistence_result,

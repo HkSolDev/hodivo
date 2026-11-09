@@ -22,6 +22,33 @@ from verify_bundle import grouping_blocking_reasons
 
 # Small documented maximum per notice so multi-page unreadable PDFs never fan out unboundedly.
 MAX_VISION_PAGES_PER_NOTICE = 3
+SHORT_PDF_PAGE_THRESHOLD = 4
+
+REQUIRED_RECRUITMENT_FIELDS = (
+    "post_name",
+    "recruiting_body",
+    "advertisement_number",
+    "dates",
+    "qualifications",
+    "age_conditions",
+    "category_conditions",
+    "vacancies",
+    "experience",
+    "application_links",
+)
+
+HTML_FIELD_PATTERNS: dict[str, tuple[str, ...]] = {
+    "post_name": ("post", "designation", "cadre", "पद", "प्रधानाध्यापक", "प्रवक्ता", "सहायक अध्यापक"),
+    "recruiting_body": ("commission", "board", "ministry", "authority", "institute", "आयोग", "बोर्ड"),
+    "advertisement_number": ("advt", "advertisement", "notification no", "exam", "विज्ञापन"),
+    "dates": ("last date", "closing date", "start date", "deadline", "अंतिम तिथि", "तिथि"),
+    "qualifications": ("qualification", "education", "degree", "diploma", "b.ed", "शैक्षिक", "अर्हता", "योग्यता"),
+    "age_conditions": ("age limit", "minimum age", "maximum age", "min age", "max age", "आयु", "उम्र"),
+    "category_conditions": ("category", "relaxation", "reservation", "sc", "st", "obc", "ews", "pwbd", "आरक्षण", "छूट"),
+    "vacancies": ("vacanc", "number of posts", "total posts", "रिक्ति", "पदों की संख्या"),
+    "experience": ("experience", "minimum years", "teaching experience", "अनुभव", "कार्यानुभव"),
+    "application_links": ("apply", "registration", "online form", "application link", "आवेदन"),
+}
 
 ALLOWED_VISION_FACT_FIELDS = {
     # Qualification
@@ -47,10 +74,13 @@ ALLOWED_VISION_FACT_FIELDS = {
 FIELD_TO_VISION_TOPIC = {
     "post_name": "posts",
     "posts": "posts",
+    "recruiting_body": "recruiting_body",
+    "advertisement_number": "advertisement_number",
     "education_required": "education",
     "min_education_level": "education",
     "min_marks_percent": "education",
     "qualification": "education",
+    "qualifications": "education",
     "education": "education",
     "application_start_date": "dates",
     "application_last_date": "dates",
@@ -60,16 +90,23 @@ FIELD_TO_VISION_TOPIC = {
     "min_age": "age",
     "max_age": "age",
     "age": "age",
+    "age_conditions": "age",
+    "category_conditions": "category",
+    "category_relaxation": "category",
     "vacancies": "vacancies",
     "total_vacancies": "vacancies",
     "experience_years": "experience",
     "minimum_experience_years": "experience",
     "experience_rules": "experience",
     "experience": "experience",
+    "application_links": "links",
+    "apply_url": "links",
 }
 
 VISION_TOPIC_KEYWORDS: dict[str, tuple[str, ...]] = {
     "posts": ("post", "designation", "cadre", "पद", "प्रधानाध्यापक", "प्रवक्ता", "सहायक अध्यापक"),
+    "recruiting_body": ("commission", "board", "ministry", "authority", "आयोग", "बोर्ड"),
+    "advertisement_number": ("advt", "advertisement", "notification no", "विज्ञापन"),
     "education": (
         "qualification",
         "education",
@@ -82,9 +119,11 @@ VISION_TOPIC_KEYWORDS: dict[str, tuple[str, ...]] = {
         "योग्यता",
     ),
     "age": ("age", "minimum age", "maximum age", "आयु", "उम्र"),
+    "category": ("category", "relaxation", "reservation", "sc", "st", "obc", "ews", "आरक्षण", "छूट"),
     "vacancies": ("vacanc", "number of posts", "रिक्ति", "पदों की संख्या"),
     "dates": ("last date", "closing date", "deadline", "date", "अंतिम तिथि", "तिथि", "दिनांक"),
     "experience": ("experience", "minimum years", "teaching", "अनुभव", "कार्यानुभव", "शिक्षण अनुभव"),
+    "links": ("apply", "registration", "online", "portal", "आवेदन"),
 }
 
 
@@ -222,6 +261,80 @@ def _native_text_for_page(document: dict[str, Any], page_number: int) -> str:
     return ""
 
 
+def assess_html_completeness(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Deterministically assess which required recruitment fields HTML documents already cover."""
+    html_docs = [
+        doc for doc in (bundle.get("documents") or [])
+        if isinstance(doc, dict) and doc.get("format") == "html"
+    ]
+    if not html_docs:
+        return {
+            "has_html": False,
+            "complete": False,
+            "present_fields": [],
+            "missing_fields": list(REQUIRED_RECRUITMENT_FIELDS),
+        }
+
+    text_chunks: list[str] = []
+    has_apply_link = False
+    identity = bundle.get("identity") or {}
+    if identity.get("issuer"):
+        text_chunks.append(str(identity["issuer"]))
+    if identity.get("advertisement_number") or identity.get("campaign"):
+        text_chunks.append(str(identity.get("advertisement_number") or identity.get("campaign")))
+
+    for doc in html_docs:
+        content = doc.get("content") or {}
+        if content.get("title"):
+            text_chunks.append(str(content["title"]))
+        for block in content.get("blocks") or []:
+            if not isinstance(block, dict):
+                continue
+            if isinstance(block.get("text"), str):
+                text_chunks.append(block["text"])
+            if block.get("type") == "table":
+                for row in block.get("rows") or []:
+                    if isinstance(row, list):
+                        text_chunks.append(" ".join(str(cell) for cell in row))
+        for link in content.get("links") or []:
+            if not isinstance(link, dict):
+                continue
+            link_text = _norm(str(link.get("text") or "") + " " + str(link.get("url") or ""))
+            text_chunks.append(link_text)
+            if any(_norm(kw) in link_text for kw in HTML_FIELD_PATTERNS["application_links"]):
+                has_apply_link = True
+
+    combined_norm = _norm(" \n ".join(text_chunks))
+    present: list[str] = []
+    missing: list[str] = []
+
+    for field in REQUIRED_RECRUITMENT_FIELDS:
+        if field == "recruiting_body" and (identity.get("issuer") or "").strip():
+            present.append(field)
+            continue
+        if field == "advertisement_number" and (
+            (identity.get("advertisement_number") or "").strip()
+            or (identity.get("campaign") or "").strip()
+        ):
+            present.append(field)
+            continue
+        if field == "application_links" and has_apply_link:
+            present.append(field)
+            continue
+        patterns = HTML_FIELD_PATTERNS.get(field, ())
+        if any(_norm(kw) in combined_norm for kw in patterns):
+            present.append(field)
+        else:
+            missing.append(field)
+
+    return {
+        "has_html": True,
+        "complete": len(missing) == 0,
+        "present_fields": present,
+        "missing_fields": missing,
+    }
+
+
 def _readable_bundle_quotes(bundle: dict[str, Any]) -> list[str]:
     quotes: list[str] = []
     for doc in bundle.get("documents", []):
@@ -293,16 +406,58 @@ def select_unreadable_pages_for_vision(
     *,
     missing_fields: set[str] | list[str] | None = None,
     remaining_budget: int = MAX_VISION_PAGES_PER_NOTICE,
+    short_pdf_page_threshold: int = SHORT_PDF_PAGE_THRESHOLD,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Deterministically select relevant unreadable pages up to remaining_budget."""
+    """Deterministically select relevant unreadable pages up to remaining_budget.
+
+    - If HTML already contains all required recruitment fields (`missing_fields` empty when
+      derived from HTML completeness), skip all PDF pages.
+    - For short PDFs (`<= short_pdf_page_threshold` pages), process every unreadable page
+      (unless explicitly marked `relevant=False`) within `remaining_budget`.
+    - For longer PDFs (`> short_pdf_page_threshold` pages), deterministically rank pages using
+      native extracted text, headings/section labels, page/table structure, keywords related to
+      the missing fields, page-local link/context hints, and document role (`main_notice` vs
+      `corrigendum`), selecting only the highest-value pages within `remaining_budget`.
+    """
+    if missing_fields is None:
+        doc_cov = (document.get("content") or {}).get("coverage") or {}
+        doc_missing = doc_cov.get("missing_required_fields")
+        if isinstance(doc_missing, list) and doc_missing:
+            missing_fields = doc_missing
+        else:
+            html_check = assess_html_completeness(bundle)
+            if html_check["has_html"]:
+                if html_check["complete"]:
+                    return {
+                        "selected": [],
+                        "skipped": list(unusable),
+                        "deferred": [],
+                    }
+                missing_fields = html_check["missing_fields"]
+
     missing_topics = _normalize_missing_topics(missing_fields)
     scored_relevant: list[tuple[int, int, dict[str, Any]]] = []
     skipped: list[dict[str, Any]] = []
 
+    content = document.get("content") or {}
+    all_pages = content.get("pages") or []
+    total_pages = max(len(all_pages), max((p.get("number", 0) for p in unusable), default=0))
+    is_short_pdf = total_pages <= short_pdf_page_threshold
+    doc_role = (document.get("role") or "main_notice").strip().casefold()
+    role_bonus = 15 if doc_role in {"corrigendum", "amendment"} else (5 if doc_role == "main_notice" else 0)
+
+    tables_by_page: dict[int, list[dict[str, Any]]] = {}
+    for tbl in content.get("tables") or []:
+        if isinstance(tbl, dict) and isinstance(tbl.get("page"), int):
+            tables_by_page.setdefault(tbl["page"], []).append(tbl)
+    for block in content.get("blocks") or []:
+        if isinstance(block, dict) and block.get("type") == "table" and isinstance(block.get("page"), int):
+            tables_by_page.setdefault(block["page"], []).append(block)
+
     link_hints_by_page: dict[int, str] = {}
     for other_doc in bundle.get("documents", []):
-        content = other_doc.get("content") or {}
-        for link in content.get("links") or []:
+        other_content = other_doc.get("content") or {}
+        for link in other_content.get("links") or []:
             if not isinstance(link, dict):
                 continue
             url = str(link.get("url") or "")
@@ -318,12 +473,28 @@ def select_unreadable_pages_for_vision(
                     )
                 except ValueError:
                     pass
+            elif isinstance(link.get("page"), int) and other_doc.get("document_id") == document.get("document_id"):
+                p_no = link["page"]
+                link_hints_by_page[p_no] = (
+                    link_hints_by_page.get(p_no, "")
+                    + " "
+                    + str(link.get("text") or "")
+                    + " "
+                    + json.dumps(link.get("context") or {}, ensure_ascii=False)
+                )
 
     for page_entry in unusable:
         page_num = page_entry["number"]
         if not missing_topics or page_entry.get("relevant") is False:
             skipped.append(page_entry)
             continue
+
+        has_table = bool(
+            page_entry.get("has_table")
+            or page_entry.get("tables")
+            or tables_by_page.get(page_num)
+        )
+        table_bonus = 10 if has_table else 0
 
         declared_raw = (
             list(page_entry.get("topics") or [])
@@ -337,17 +508,28 @@ def select_unreadable_pages_for_vision(
             }
             matched_declared = declared_topics & missing_topics
             if not matched_declared:
-                skipped.append(page_entry)
+                if is_short_pdf and missing_fields is None:
+                    scored_relevant.append((10 + role_bonus + table_bonus, page_num, page_entry))
+                else:
+                    skipped.append(page_entry)
                 continue
-            scored_relevant.append((100 + len(matched_declared) * 10, page_num, page_entry))
+            scored_relevant.append(
+                (100 + len(matched_declared) * 10 + role_bonus + table_bonus, page_num, page_entry)
+            )
             continue
 
+        native_page_text = _native_text_for_page(document, page_num)
+        table_text = " ".join(
+            json.dumps(t, ensure_ascii=False) for t in (tables_by_page.get(page_num) or [])
+        )
         hint_text = _norm(
             " ".join(
                 str(part)
                 for part in (
                     page_entry.get("heading"),
                     page_entry.get("section_hint"),
+                    native_page_text,
+                    table_text,
                     link_hints_by_page.get(page_num),
                 )
                 if part
@@ -365,13 +547,15 @@ def select_unreadable_pages_for_vision(
                 if any(_norm(kw) in hint_text for kw in VISION_TOPIC_KEYWORDS.get(topic, ()))
             }
             if matched_kw_topics:
-                scored_relevant.append((50 + len(matched_kw_topics) * 10, page_num, page_entry))
+                scored_relevant.append(
+                    (50 + len(matched_kw_topics) * 10 + role_bonus + table_bonus, page_num, page_entry)
+                )
                 continue
-            if non_missing_kw_topics:
+            if non_missing_kw_topics and not is_short_pdf:
                 skipped.append(page_entry)
                 continue
 
-        scored_relevant.append((1, page_num, page_entry))
+        scored_relevant.append((1 + role_bonus + table_bonus, page_num, page_entry))
 
     scored_relevant.sort(key=lambda item: (-item[0], item[1]))
     budget = max(0, int(remaining_budget))
@@ -473,6 +657,7 @@ def validate_vision_page_output(
         if not post.candidate_facts and not post.experience_alternatives:
             reasons.append("vision_post_has_no_facts")
 
+        non_null_fact_count = 0
         for fact in post.candidate_facts:
             if fact.field_path not in ALLOWED_VISION_FACT_FIELDS:
                 reasons.append("vision_unsupported_field")
@@ -481,11 +666,15 @@ def validate_vision_page_output(
             if not fact.section_locator.strip():
                 reasons.append("vision_missing_locator")
             quote_norm = _norm(fact.exact_quote)
+            if fact.value is None:
+                # Null indicates unreadable text on the page for this field; never guess.
+                if quote_norm and quote_norm not in page_quote_norm:
+                    reasons.append("vision_missing_or_ungrounded_quote")
+                continue
+            non_null_fact_count += 1
             if not quote_norm or quote_norm not in page_quote_norm:
                 reasons.append("vision_missing_or_ungrounded_quote")
-            if fact.value is None:
-                reasons.append("vision_null_candidate_fact")
-            elif isinstance(fact.value, str):
+            if isinstance(fact.value, str):
                 if not _is_string_or_date_grounded_in_quote(fact.value, fact.exact_quote, quote_norm):
                     reasons.append("vision_fact_value_not_in_quote")
             elif isinstance(fact.value, (int, float)) and not isinstance(fact.value, bool):
@@ -505,6 +694,9 @@ def validate_vision_page_output(
                 })
             else:
                 seen_post_field_values[key] = fact.value
+
+        if post.candidate_facts and non_null_fact_count == 0 and not post.experience_alternatives:
+            reasons.append("vision_null_candidate_fact")
 
         for alt in post.experience_alternatives:
             if alt.physical_pdf_page != expected_page_number:
@@ -563,14 +755,17 @@ def recover_unreadable_pdf_pages(
     storage_dir: Path | None = None,
     missing_fields: set[str] | list[str] | None = None,
     max_pages: int = MAX_VISION_PAGES_PER_NOTICE,
+    ocr_engine: Any = None,
+    short_pdf_page_threshold: int = SHORT_PDF_PAGE_THRESHOLD,
 ) -> dict[str, Any]:
-    """Run bounded Vision recovery only for verified unreadable PDF pages relevant to missing fields.
+    """Run bounded Vision/OCR recovery only for verified unreadable PDF pages relevant to missing fields.
 
     Returns a dictionary containing:
       - `bundle`: a copy of the bundle where native_text and existing HTML/PDF sections
         are untouched, and recovered PDF pages receive immutable `vision_recovery`
         metadata and citable `vision_recovered` sections.
       - `vision_called`: bool
+      - `ocr_called`: bool
       - `requests`: list of page recovery, skipped, and cap-deferred records
       - `status`: 'not_needed' | 'recovered' | 'unresolved' | 'retryable'
       - `reason_codes`: sorted list of machine-readable reason codes
@@ -585,6 +780,7 @@ def recover_unreadable_pdf_pages(
     all_reasons: list[str] = []
     any_retryable = False
     vision_called = False
+    ocr_called = False
     remaining_budget = max_pages
 
     for doc in updated_bundle.get("documents", []):
@@ -619,6 +815,7 @@ def recover_unreadable_pdf_pages(
             unusable,
             missing_fields=missing_fields,
             remaining_budget=remaining_budget,
+            short_pdf_page_threshold=short_pdf_page_threshold,
         )
         selected_entries = selection["selected"]
         skipped_entries = selection["skipped"]
@@ -682,6 +879,35 @@ def recover_unreadable_pdf_pages(
                 continue
 
             image_sha256 = hashlib.sha256(image_bytes).hexdigest()
+            ocr_text = ""
+            ocr_engine_name = None
+            ocr_config: dict[str, Any] = {}
+            if ocr_engine is not None:
+                ocr_called = True
+                if hasattr(ocr_engine, "__dict__") and "extract_text" in getattr(ocr_engine, "__dict__", {}) or (
+                    not callable(ocr_engine) and hasattr(ocr_engine, "extract_text")
+                ):
+                    ocr_raw = ocr_engine.extract_text(image_bytes, page_number=page_num)
+                elif callable(ocr_engine):
+                    ocr_raw = ocr_engine(image_bytes, page_num)
+                elif hasattr(ocr_engine, "extract_text"):
+                    ocr_raw = ocr_engine.extract_text(image_bytes, page_number=page_num)
+                else:
+                    ocr_raw = None
+                if isinstance(ocr_raw, dict):
+                    ocr_text = str(ocr_raw.get("text") or "")
+                    ocr_engine_name = str(ocr_raw.get("engine") or getattr(ocr_engine, "engine", "tesseract"))
+                    ocr_config = dict(ocr_raw.get("config") or getattr(ocr_engine, "config", {}))
+                elif isinstance(ocr_raw, str):
+                    ocr_text = ocr_raw
+                    ocr_engine_name = str(getattr(ocr_engine, "engine", "custom_ocr"))
+                    ocr_config = dict(getattr(ocr_engine, "config", {}))
+            ocr_sha256 = hashlib.sha256(ocr_text.encode("utf-8")).hexdigest() if ocr_called else None
+
+            supporting_ctx = _readable_bundle_quotes(updated_bundle)[:5]
+            if ocr_text.strip():
+                supporting_ctx.append(f"[OCR_CANDIDATE_PAGE_{page_num}] {ocr_text.strip()}")
+
             prompt = json.dumps(
                 {
                     "task": "vision_page_recovery",
@@ -690,7 +916,7 @@ def recover_unreadable_pdf_pages(
                     "document_id": doc_id,
                     "source_url": doc_url,
                     "physical_pdf_page": page_num,
-                    "supporting_context": _readable_bundle_quotes(updated_bundle)[:5],
+                    "supporting_context": supporting_ctx,
                 },
                 ensure_ascii=False,
             )
@@ -711,6 +937,7 @@ def recover_unreadable_pdf_pages(
 
             image_artifact_path = None
             vision_artifact_path = None
+            ocr_artifact_path = None
             if storage_dir is not None:
                 v_root = Path(storage_dir) / "vision"
                 img_path = v_root / "images" / f"{doc_id}-page-{page_num}-{image_sha256[:16]}.png"
@@ -726,7 +953,9 @@ def recover_unreadable_pdf_pages(
                             "pdf_sha256": pdf_sha256,
                             "native_sha256": native_sha256,
                             "image_sha256": image_sha256,
+                            "ocr_sha256": ocr_sha256,
                             "vision_sha256": vision_sha256,
+                            "prompt": prompt,
                             "raw_result": raw_res,
                         },
                         ensure_ascii=False,
@@ -735,6 +964,25 @@ def recover_unreadable_pdf_pages(
                 )
                 image_artifact_path = str(img_path.resolve())
                 vision_artifact_path = str(resp_path.resolve())
+                if ocr_called and ocr_sha256:
+                    ocr_path = v_root / "ocr" / f"{doc_id}-page-{page_num}-{ocr_sha256[:16]}.json"
+                    atomic_write(
+                        ocr_path,
+                        json.dumps(
+                            {
+                                "recorded_at": now(),
+                                "document_id": doc_id,
+                                "physical_pdf_page": page_num,
+                                "engine": ocr_engine_name,
+                                "config": ocr_config,
+                                "ocr_sha256": ocr_sha256,
+                                "text": ocr_text,
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        ).encode("utf-8"),
+                    )
+                    ocr_artifact_path = str(ocr_path.resolve())
 
             validation = validate_vision_page_output(
                 raw_res,
@@ -742,7 +990,7 @@ def recover_unreadable_pdf_pages(
                 bundle=updated_bundle,
                 existing_facts=existing_facts,
             )
-            evidence_versions = {
+            evidence_versions: dict[str, Any] = {
                 "canonical_pdf": {
                     "version_type": "canonical_pdf_bytes",
                     "sha256": pdf_sha256,
@@ -771,6 +1019,16 @@ def recover_unreadable_pdf_pages(
                     "raw_data": raw_res.get("data") if isinstance(raw_res, dict) else None,
                 },
             }
+            if ocr_called:
+                evidence_versions["ocr_output"] = {
+                    "version_type": "ocr_candidate_text",
+                    "sha256": ocr_sha256,
+                    "physical_pdf_page": page_num,
+                    "engine": ocr_engine_name,
+                    "config": ocr_config,
+                    "artifact_path": ocr_artifact_path,
+                    "text": ocr_text,
+                }
 
             page_record = {
                 "document_id": doc_id,
@@ -781,6 +1039,7 @@ def recover_unreadable_pdf_pages(
                 "reason_codes": validation["reason_codes"],
                 "conflicts": validation["conflicts"],
                 "vision_called": True,
+                "ocr_called": ocr_called,
                 "evidence_versions": evidence_versions,
                 "validated_response": validation["validated_response"],
             }
@@ -911,6 +1170,7 @@ def recover_unreadable_pdf_pages(
     return {
         "bundle": updated_bundle,
         "vision_called": vision_called,
+        "ocr_called": ocr_called,
         "status": overall_status,
         "reason_codes": sorted(set(all_reasons)),
         "requests": requests,

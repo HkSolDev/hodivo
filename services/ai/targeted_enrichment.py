@@ -14,13 +14,17 @@ Rules enforced deterministically:
 import copy
 import json
 import unicodedata
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict
 
+from capture_store import atomic_write
 from verify_bundle import year_from_ad
 
+
+MAX_ENRICHMENT_PASSES_PER_NOTICE = 1
 
 ALLOWED_ENRICHMENT_FIELDS = {
     "application_last_date",
@@ -120,6 +124,8 @@ class EnrichmentRequest(BaseModel):
         "historical_cutoff_requested",
     ]
     query: str
+    query_purpose: str
+    notice_title: str | None = None
     issuer: str
     advertisement_or_exam_identity: str
     year: str
@@ -226,6 +232,19 @@ def plan_enrichment_requests(
     ad_or_exam = id_info["ad_or_exam"]
     year = id_info["year"]
     ad_identity = id_info["advertisement_or_exam_identity"]
+    notice_title = next(
+        (
+            (doc.get("title") or "").strip()
+            for doc in (source_input.get("documents") or [])
+            if isinstance(doc, dict) and (doc.get("title") or "").strip()
+        ),
+        None,
+    ) or ((source_input.get("identity") or {}).get("campaign") or "").strip() or None
+    title_part = (
+        f" {notice_title}"
+        if notice_title and _norm(notice_title) != _norm(ad_or_exam)
+        else ""
+    )
 
     missing_reasons_by_path = {
         item.get("field_path"): (item.get("reason") or "")
@@ -287,7 +306,9 @@ def plan_enrichment_requests(
                         post_name=post_name,
                         field_path=field_name,
                         trigger_reason=trigger,
-                        query=f"{issuer} {ad_or_exam} {year} {post_name} {field_name} official notification",
+                        query=f"{issuer} {ad_or_exam} {year}{title_part} {post_name} {field_name} official notification",
+                        query_purpose=f"resolve_{trigger}:{post_name}:{field_name}",
+                        notice_title=notice_title,
                         issuer=issuer,
                         advertisement_or_exam_identity=ad_identity,
                         year=year,
@@ -305,7 +326,9 @@ def plan_enrichment_requests(
                         post_name=post_name,
                         field_path=None,
                         trigger_reason="syllabus_requested",
-                        query=f"{issuer} {ad_or_exam} {year} {post_name} official syllabus exam pattern",
+                        query=f"{issuer} {ad_or_exam} {year}{title_part} {post_name} official syllabus exam pattern",
+                        query_purpose=f"official_syllabus:{post_name}",
+                        notice_title=notice_title,
                         issuer=issuer,
                         advertisement_or_exam_identity=ad_identity,
                         year=year,
@@ -323,7 +346,9 @@ def plan_enrichment_requests(
                         post_name=post_name,
                         field_path=None,
                         trigger_reason="historical_cutoff_requested",
-                        query=f"{issuer} {ad_or_exam} {post_name} official previous year category cutoff marks",
+                        query=f"{issuer} {ad_or_exam}{title_part} {post_name} official previous year category cutoff marks",
+                        query_purpose=f"historical_cutoff:{post_name}",
+                        notice_title=notice_title,
                         issuer=issuer,
                         advertisement_or_exam_identity=ad_identity,
                         year=year,
@@ -521,8 +546,28 @@ def run_targeted_enrichment(
     include_historical_cutoffs: bool = False,
     include_reader_summary: bool = True,
     captured_at: str = "2026-11-03T10:00:00Z",
+    pass_number: int = 1,
+    max_passes: int = MAX_ENRICHMENT_PASSES_PER_NOTICE,
+    storage_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Execute planned targeted enrichment requests without mutating extraction output or Post."""
+    if not isinstance(max_passes, int) or isinstance(max_passes, bool) or max_passes < 1:
+        raise ValueError("max_passes must be a positive integer")
+    if pass_number > max_passes:
+        return {
+            "status": "unresolved",
+            "retryable": False,
+            "reason_codes": ["enrichment_pass_cap_exceeded"],
+            "pass_number": pass_number,
+            "max_passes": max_passes,
+            "requests": [],
+            "audit_log": [],
+            "field_candidates": [],
+            "reader_summary": None,
+            "official_syllabus": [],
+            "historical_cutoffs": [],
+        }
+
     plan = plan_enrichment_requests(
         facts,
         source_input,
@@ -541,7 +586,10 @@ def run_targeted_enrichment(
             "status": "unresolved",
             "retryable": False,
             "reason_codes": [plan["reason"] or "enrichment_requires_verified_identity"],
+            "pass_number": pass_number,
+            "max_passes": max_passes,
             "requests": [],
+            "audit_log": [],
             "field_candidates": [],
             "reader_summary": reader_summary,
             "official_syllabus": [],
@@ -551,6 +599,7 @@ def run_targeted_enrichment(
     field_candidates: list[dict[str, Any]] = []
     syllabus_candidates: list[dict[str, Any]] = []
     cutoff_candidates: list[dict[str, Any]] = []
+    audit_log: list[dict[str, Any]] = []
     reason_codes: list[str] = []
     any_retryable = False
 
@@ -630,6 +679,14 @@ def run_targeted_enrichment(
             distinct_vals = {json.dumps(v[0], sort_keys=True) for v in valid_values}
             if len(distinct_vals) > 1:
                 reason_codes.append("enrichment_conflicting_values")
+                audit_log.append({
+                    "request_id": req["request_id"],
+                    "query_purpose": req["query_purpose"],
+                    "query": req["query"],
+                    "resulting_url": valid_values[0][1].source_url,
+                    "captured_at": valid_values[0][1].captured_at,
+                    "identity_verification": "verified_conflict",
+                })
                 field_candidates.append(
                     FieldEnrichmentCandidate(
                         post_name=req["post_name"],
@@ -642,6 +699,14 @@ def run_targeted_enrichment(
                 )
             elif len(distinct_vals) == 1:
                 chosen_val, chosen_prov, binding_q = valid_values[0]
+                audit_log.append({
+                    "request_id": req["request_id"],
+                    "query_purpose": req["query_purpose"],
+                    "query": req["query"],
+                    "resulting_url": chosen_prov.source_url,
+                    "captured_at": chosen_prov.captured_at,
+                    "identity_verification": "verified",
+                })
                 field_candidates.append(
                     FieldEnrichmentCandidate(
                         post_name=req["post_name"],
@@ -656,6 +721,15 @@ def run_targeted_enrichment(
             else:
                 r_code = item_reasons[0] if item_reasons else "enrichment_no_verified_candidate"
                 reason_codes.append(r_code)
+                first_url = (items[0].get("source_url") if items and isinstance(items[0], dict) else None)
+                audit_log.append({
+                    "request_id": req["request_id"],
+                    "query_purpose": req["query_purpose"],
+                    "query": req["query"],
+                    "resulting_url": first_url,
+                    "captured_at": captured_at,
+                    "identity_verification": r_code,
+                })
                 field_candidates.append(
                     FieldEnrichmentCandidate(
                         post_name=req["post_name"],
@@ -843,13 +917,22 @@ def run_targeted_enrichment(
                             ).model_dump(mode="json")
                         )
 
-    return {
+    report = {
         "status": "retryable" if any_retryable else ("completed_with_unresolved" if reason_codes else "completed"),
         "retryable": any_retryable,
+        "pass_number": pass_number,
+        "max_passes": max_passes,
         "reason_codes": sorted(set(reason_codes)),
         "requests": plan["requests"],
+        "audit_log": audit_log,
         "field_candidates": field_candidates,
         "reader_summary": reader_summary,
         "official_syllabus": syllabus_candidates,
         "historical_cutoffs": cutoff_candidates,
     }
+    if storage_dir is not None:
+        bundle_id = str((source_input or {}).get("bundle_id") or "notice")
+        out_path = Path(storage_dir) / "enrichment" / f"{bundle_id}-pass-{pass_number}.json"
+        atomic_write(out_path, json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8"))
+        report["artifact_path"] = str(out_path.resolve())
+    return report

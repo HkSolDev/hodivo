@@ -403,6 +403,28 @@ class TargetedEnrichmentTests(unittest.TestCase):
         self.assertIsNone(res_conflict["field_candidates"][0]["value"])
         self.assertEqual(len(res_conflict["field_candidates"][0]["evidence"]), 2)
 
+        # Case 4: Notice title included in query, audit_log records query_purpose/resulting_url/captured_at/identity_verification,
+        # and second pass (> max_passes=1) is rejected deterministically.
+        self.assertEqual(len(res_3p["audit_log"]), 1)
+        self.assertEqual(res_3p["audit_log"][0]["query_purpose"], "resolve_missing_value:Headmaster (Balak):application_last_date")
+        self.assertEqual(res_3p["audit_log"][0]["resulting_url"], "https://sarkariresult.example.com/upessc-hm/")
+        self.assertEqual(res_3p["audit_log"][0]["identity_verification"], "third_party_source_not_official")
+        self.assertIn("Headmaster Recruitment", res_3p["requests"][0]["query"])
+
+        res_pass2 = run_targeted_enrichment(
+            facts,
+            source,
+            search_client=search_3p,
+            capture_client=capture_3p,
+            issuer_hosts={"UPESSC": ["upessc.example.gov.in"]},
+            requested_fields=["application_last_date"],
+            pass_number=2,
+            max_passes=1,
+        )
+        self.assertEqual(res_pass2["status"], "unresolved")
+        self.assertIn("enrichment_pass_cap_exceeded", res_pass2["reason_codes"])
+        self.assertEqual(res_pass2["requests"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

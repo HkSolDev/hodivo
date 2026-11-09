@@ -5,6 +5,7 @@ import re
 
 from link_discovery import url_identity
 from verify_bundle import content_units, grouping_blocking_reasons
+from vision_recovery import assess_html_completeness
 
 
 FIELD_HINTS = {
@@ -186,19 +187,42 @@ def check_coverage(bundle, *, missing_documents=None, recovery_pass=0, crawl=Non
         grouping_blocked = False
 
     # B. Content coverage gaps, unreadable PDFs, and selection budgets
+    # HTML is the primary extraction source when it already contains all required recruitment
+    # details; supplemental PDF unreadable pages do not block extraction in that case.
+    html_completeness = assess_html_completeness(bundle)
+    html_primary_complete = bool(
+        html_completeness.get('has_html') and html_completeness.get('complete')
+    )
+    if html_primary_complete:
+        reasons -= {'empty_content', 'content_coverage_gap', 'pdf_requires_review'}
+        if grouping_blocked and not grouping_blockers:
+            unclassified_after_html = (reasons - ADVISORY_REVIEW_REASONS) - {'grouping_needs_review'}
+            if not unclassified_after_html:
+                reasons.discard('grouping_needs_review')
+                grouping_blocked = False
     content_gap = False
     for document in bundle['documents']:
-        reasons.update(document.get('review_reasons', []))
+        doc_is_supplemental_pdf = (
+            html_primary_complete
+            and document.get('format') == 'pdf'
+            and document.get('role') != 'main_notice'
+        )
+        doc_reasons = set(document.get('review_reasons', []))
+        if doc_is_supplemental_pdf:
+            doc_reasons -= {'empty_content', 'content_coverage_gap', 'pdf_requires_review'}
+        reasons.update(doc_reasons)
         content = document.get('content') or {}
         coverage = content.get('coverage', {}) if isinstance(content, dict) else {}
         if any(coverage.get(key) for key in ('unreadable_pages', 'unavailable_blocks', 'omitted_sections')):
-            reasons.add('content_coverage_gap')
-            content_gap = True
+            if not doc_is_supplemental_pdf:
+                reasons.add('content_coverage_gap')
+                content_gap = True
         if document.get('format') == 'pdf' and (
             coverage.get('unreadable_pages') or not content.get('sections')
         ):
-            reasons.add('pdf_requires_review')
-            content_gap = True
+            if not doc_is_supplemental_pdf:
+                reasons.add('pdf_requires_review')
+                content_gap = True
         if coverage.get('unresolved_references'):
             reasons.add('unresolved_document_references')
         if (

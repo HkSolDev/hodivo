@@ -259,6 +259,32 @@ class GenericPipelineTests(unittest.TestCase):
         self.assertEqual(payload['posts'][0]['minEducation'], 'Postgraduate with B.Ed.')
         self.assertEqual(payload['posts'][0]['applicationLastDate'], '2026-12-15')
 
+        # Second LLM review blocking finding prevents publication in run_pipeline
+        pushed_blocked = []
+        report_blocked = run_pipeline(
+            self.root / 'pipeline_vision_review_blocked',
+            prepare=prepare,
+            extract=extract,
+            persist=pushed_blocked.append,
+            vision_provider=vision_provider,
+            review_fn=lambda _ext, _src: {
+                'findings': [
+                    {
+                        'field_path': 'posts.0.education_required',
+                        'status': 'suspicious',
+                        'reason': 'Qualification text appears truncated.',
+                        'evidence_quote': None,
+                    }
+                ]
+            },
+            pdf_bytes_by_doc={'official-pdf': b'%PDF-1.4'},
+            page_images_by_doc={'official-pdf': {6: b'\x89PNG\r\n\x1a\n'}},
+        )
+        counts_blocked = report_blocked['sources']['upessc_board']
+        self.assertEqual(counts_blocked['drafts'], 1)
+        self.assertEqual(counts_blocked['published'], 0)
+        self.assertEqual(pushed_blocked, [])
+
 
 if __name__ == '__main__':
     unittest.main()

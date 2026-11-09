@@ -21,8 +21,13 @@ from autonomous_pipeline import (
     _map_post_to_ingest_post,
     apply_validated_vision_recovery,
     evaluate_automated_acceptance,
+    review_extracted_candidate,
 )
-from vision_recovery import recover_unreadable_pdf_pages, unusable_pdf_pages
+from vision_recovery import (
+    assess_html_completeness,
+    recover_unreadable_pdf_pages,
+    unusable_pdf_pages,
+)
 
 
 def _resolve_vision_provider(vision_provider, *, allow_default=False):
@@ -78,8 +83,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                  extract=extract_bundle, validate=validate_candidate,
                  draft=prepare_storage, persist=None, prepare_only=False,
                  extraction_version=EXTRACTION_VERSION, retry_clock=None,
-                 vision_provider=None, pdf_bytes_by_doc=None,
-                 page_images_by_doc=None):
+                 vision_provider=None, ocr_engine=None, review_fn=None,
+                 pdf_bytes_by_doc=None, page_images_by_doc=None):
     """Crawl sources and process only coverage-approved evidence.
 
     When a verified PDF page is marked unusable by deterministic native-text
@@ -136,40 +141,50 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                 active_vision_provider = _resolve_vision_provider(
                     vision_provider, allow_default=(extract is extract_bundle)
                 )
-                if not is_extraction_approved(prepared) and not prepare_only and active_vision_provider is not None:
+                if not is_extraction_approved(prepared) and not prepare_only:
                     bundles_by_id = _load_bundles_for_source(source, path)
                     bundle = bundles_by_id.get(bundle_id) or (
                         prepared.get('bundle') if isinstance(prepared.get('bundle'), dict) else None
                     )
-                    has_unusable_pdf = bool(
-                        bundle
-                        and any(
-                            unusable_pdf_pages(doc)
-                            for doc in bundle.get('documents', [])
-                            if isinstance(doc, dict) and doc.get('format') == 'pdf'
+                    html_check = assess_html_completeness(bundle) if isinstance(bundle, dict) else {
+                        'has_html': False, 'complete': False, 'missing_fields': []
+                    }
+                    crawl_status = None
+                    if isinstance(source.get('crawl_path'), str) and Path(source['crawl_path']).exists():
+                        crawl_status = json.loads(
+                            Path(source['crawl_path']).read_text(encoding='utf-8')
+                        ).get('status')
+                    elif source.get('status') in {'scanned', 'partial', 'blocked'}:
+                        crawl_status = source.get('status')
+
+                    if html_check.get('has_html') and html_check.get('complete') and isinstance(bundle, dict):
+                        prepared = prepare_extraction(bundle, crawl_status=crawl_status)
+                        atomic_write(Path(path), json.dumps(prepared, ensure_ascii=False, indent=2).encode())
+                    elif active_vision_provider is not None:
+                        has_unusable_pdf = bool(
+                            bundle
+                            and any(
+                                unusable_pdf_pages(doc)
+                                for doc in bundle.get('documents', [])
+                                if isinstance(doc, dict) and doc.get('format') == 'pdf'
+                            )
                         )
-                    )
-                    if has_unusable_pdf:
-                        stage = 'vision_recovery'
-                        v_res = recover_unreadable_pdf_pages(
-                            bundle,
-                            gemini_provider=active_vision_provider,
-                            pdf_bytes_by_doc=pdf_bytes_by_doc,
-                            page_images_by_doc=page_images_by_doc,
-                            storage_dir=root,
-                        )
-                        vision_requests = v_res['requests']
-                        if v_res['vision_called']:
-                            counts['vision_called'] = counts.get('vision_called', 0) + 1
-                            crawl_status = None
-                            if isinstance(source.get('crawl_path'), str) and Path(source['crawl_path']).exists():
-                                crawl_status = json.loads(
-                                    Path(source['crawl_path']).read_text(encoding='utf-8')
-                                ).get('status')
-                            elif source.get('status') in {'scanned', 'partial', 'blocked'}:
-                                crawl_status = source.get('status')
-                            prepared = prepare_extraction(v_res['bundle'], crawl_status=crawl_status)
-                            atomic_write(Path(path), json.dumps(prepared, ensure_ascii=False, indent=2).encode())
+                        if has_unusable_pdf:
+                            stage = 'vision_recovery'
+                            v_res = recover_unreadable_pdf_pages(
+                                bundle,
+                                gemini_provider=active_vision_provider,
+                                pdf_bytes_by_doc=pdf_bytes_by_doc,
+                                page_images_by_doc=page_images_by_doc,
+                                storage_dir=root,
+                                missing_fields=html_check['missing_fields'] if html_check.get('has_html') else None,
+                                ocr_engine=ocr_engine,
+                            )
+                            vision_requests = v_res['requests']
+                            if v_res['vision_called']:
+                                counts['vision_called'] = counts.get('vision_called', 0) + 1
+                                prepared = prepare_extraction(v_res['bundle'], crawl_status=crawl_status)
+                                atomic_write(Path(path), json.dumps(prepared, ensure_ascii=False, indent=2).encode())
 
                 stage = 'prepared_input'
                 if not is_extraction_approved(prepared):
@@ -270,11 +285,17 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     if disposition == 'valid_recruitment_review_draft':
                         stage = 'draft_preparation'
                         src_name = _source_name(source_id, prepared)
+                        review_report = review_extracted_candidate(
+                            extracted,
+                            source_input,
+                            review_fn=review_fn,
+                        )
                         acceptance = evaluate_automated_acceptance(
                             extracted,
                             source_input,
                             vision_requests=vision_requests,
                             vision_merge_reasons=vision_merge_reasons,
+                            review_report=review_report,
                             research_exhausted=True,
                         )
                         if draft is prepare_storage:

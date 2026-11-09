@@ -746,6 +746,51 @@ class AutonomousPipelineTests(unittest.TestCase):
             self.assertTrue(r2['backoff_skipped'])
             self.assertEqual(retry_calls[0], 1)
 
+            # 5. Second LLM review stage blocks on conflicting/suspicious findings and retries on needs_enrichment
+            res_review_conflict = run_autonomous_notice(
+                Path(tmp) / 'review_conflict',
+                _make_base_prepared(bundle_id='review-conflict-bundle'),
+                source_name='UPESSC Official',
+                extract_fn=lambda _: _make_extracted(bundle_id='review-conflict-bundle'),
+                review_fn=lambda _ext, _src: {
+                    'findings': [
+                        {
+                            'field_path': 'posts.0.education_required',
+                            'status': 'conflicting',
+                            'reason': 'Corrigendum contradicts main notice qualification.',
+                            'evidence_quote': 'Minimum qualification: Postgraduate with B.Ed.',
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(res_review_conflict['decision'], 'blocked')
+            self.assertFalse(res_review_conflict['persistence_allowed'])
+            self.assertIn('review_finding:posts.0.education_required:conflicting', res_review_conflict['reason_codes'])
+            self.assertTrue(Path(res_review_conflict['merged_facts_path']).exists())
+
+            res_review_needs_enrich = run_autonomous_notice(
+                Path(tmp) / 'review_needs_enrich',
+                _make_base_prepared(bundle_id='review-enrich-bundle'),
+                source_name='UPESSC Official',
+                extract_fn=lambda _: _make_extracted(bundle_id='review-enrich-bundle'),
+                review_fn=lambda _ext, _src: {
+                    'findings': [
+                        {
+                            'field_path': 'posts.0.application_last_date',
+                            'status': 'needs_enrichment',
+                            'reason': 'Deadline references external corrigendum.',
+                            'evidence_quote': None,
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(res_review_needs_enrich['decision'], 'retryable')
+            self.assertFalse(res_review_needs_enrich['persistence_allowed'])
+            self.assertIn(
+                'review_finding:posts.0.application_last_date:needs_enrichment',
+                res_review_needs_enrich['reason_codes'],
+            )
+
 
 if __name__ == '__main__':
     unittest.main()
