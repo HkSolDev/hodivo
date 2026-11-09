@@ -201,7 +201,7 @@ export function Passkeys({
         error.name === 'InvalidStateError'
       ) {
         onError(
-          'This device already has a passkey for Aptus. Try signing in with it, or choose another device.',
+          'This device already has a passkey for Hodivo. Try signing in with it, or choose another device.',
         );
       } else {
         onError(

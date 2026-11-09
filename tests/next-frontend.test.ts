@@ -127,7 +127,7 @@ test('Next.js frontend: server-rendered SEO, private caching, in-memory workspac
 
       // Check title and meta
       assert.ok(
-        html.includes('<title>Aptus — Find your next possibility</title>'),
+        html.includes('<title>Hodivo — Find your next possibility</title>'),
       );
       assert.ok(
         html.includes(

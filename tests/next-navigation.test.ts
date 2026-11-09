@@ -222,7 +222,7 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
         await noJs.locator('.primary-navigation a[href="/"]').click();
         await expect(noJs.locator('[data-job-card]')).toHaveCount(1);
         const footerLink = noJs.getByRole('link', {
-          name: 'How Aptus works',
+          name: 'How Hodivo works',
           exact: true,
         });
         await footerLink.scrollIntoViewIfNeeded();
@@ -269,7 +269,7 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
       await expect(page.locator('header #google-sign-in')).toHaveCount(0);
       await page.locator('.header-signin').click();
       await expect(
-        page.getByRole('heading', { name: 'Sign in to Aptus' }),
+        page.getByRole('heading', { name: 'Sign in to Hodivo' }),
       ).toBeVisible();
       await expect(
         page.getByRole('button', { name: 'Continue with Google' }),

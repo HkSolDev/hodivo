@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function SignInPage() {
   return (
     <section className="signin-panel panel" aria-labelledby="signin-title">
-      <h1 id="signin-title">Sign in to Aptus</h1>
+      <h1 id="signin-title">Sign in to Hodivo</h1>
       <p className="muted">Get job recommendations based on your profile.</p>
       <AuthBar presentation="signin" />
       <p className="small muted">
@@ -20,7 +20,7 @@ export default function SignInPage() {
         Continue browsing jobs
       </Link>
       <div className="signin-note">
-        <strong>New to Aptus?</strong>
+        <strong>New to Hodivo?</strong>
         <p>Continue with Google. You can set up a passkey after signing in.</p>
       </div>
       <noscript>

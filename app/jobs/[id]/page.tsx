@@ -30,8 +30,8 @@ export async function generateMetadata(props: {
   const job = await fetchJobDetail(params.id);
   if (!job) {
     return {
-      title: 'Job Details | Aptus',
-      description: 'View government job eligibility details on Aptus.',
+      title: 'Job Details | Hodivo',
+      description: 'View government job eligibility details on Hodivo.',
     };
   }
   return jobMetadata(job, process.env.SITE_URL);
