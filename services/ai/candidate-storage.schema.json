@@ -174,11 +174,7 @@
       "additionalProperties": false,
       "properties": {
         "decision": {
-          "enum": [
-            "accepted",
-            "blocked",
-            "retryable"
-          ],
+          "enum": ["accepted", "blocked", "retryable"],
           "title": "Decision",
           "type": "string"
         },
@@ -274,11 +270,7 @@
           "type": "array"
         }
       },
-      "required": [
-        "posts",
-        "evidence",
-        "missing_fields"
-      ],
+      "required": ["posts", "evidence", "missing_fields"],
       "title": "BundleFacts",
       "type": "object"
     },
@@ -382,12 +374,7 @@
         "post_group": {
           "anyOf": [
             {
-              "enum": [
-                "A",
-                "B",
-                "C",
-                "D"
-              ],
+              "enum": ["A", "B", "C", "D"],
               "type": "string"
             },
             {
@@ -727,13 +714,7 @@
           "title": "Pwbd"
         }
       },
-      "required": [
-        "SC",
-        "ST",
-        "OBC",
-        "EWS",
-        "PwBD"
-      ],
+      "required": ["SC", "ST", "OBC", "EWS", "PwBD"],
       "title": "CategoryRelaxationRules",
       "type": "object"
     },
@@ -765,11 +746,7 @@
           "type": "array"
         }
       },
-      "required": [
-        "document_id",
-        "purpose",
-        "evidence"
-      ],
+      "required": ["document_id", "purpose", "evidence"],
       "title": "DocumentPurpose",
       "type": "object"
     },
@@ -1095,10 +1072,7 @@
           "title": "Snapshot Sha256"
         },
         "authority": {
-          "enum": [
-            "official",
-            "third_party"
-          ],
+          "enum": ["official", "third_party"],
           "title": "Authority",
           "type": "string"
         },
@@ -1210,10 +1184,7 @@
           "title": "Conditions"
         }
       },
-      "required": [
-        "minimum_years",
-        "conditions"
-      ],
+      "required": ["minimum_years", "conditions"],
       "title": "ExperienceRule",
       "type": "object"
     },
@@ -1262,12 +1233,7 @@
           "title": "Conditions"
         }
       },
-      "required": [
-        "categories",
-        "amount",
-        "currency",
-        "conditions"
-      ],
+      "required": ["categories", "amount", "currency", "conditions"],
       "title": "FeeRule",
       "type": "object"
     },
@@ -1309,11 +1275,7 @@
           "title": "Value"
         },
         "status": {
-          "enum": [
-            "verified",
-            "unresolved",
-            "conflicting"
-          ],
+          "enum": ["verified", "unresolved", "conflicting"],
           "title": "Status",
           "type": "string"
         },
@@ -1350,12 +1312,7 @@
           "type": "array"
         }
       },
-      "required": [
-        "post_name",
-        "field_path",
-        "value",
-        "status"
-      ],
+      "required": ["post_name", "field_path", "value", "status"],
       "title": "FieldEnrichmentCandidate",
       "type": "object"
     },
@@ -1375,11 +1332,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "field_path",
-        "evidence_id",
-        "quote"
-      ],
+      "required": ["field_path", "evidence_id", "quote"],
       "title": "FieldEvidence",
       "type": "object"
     },
@@ -1471,11 +1424,7 @@
           "type": "boolean"
         },
         "status": {
-          "enum": [
-            "verified",
-            "unresolved",
-            "conflicting"
-          ],
+          "enum": ["verified", "unresolved", "conflicting"],
           "title": "Status",
           "type": "string"
         },
@@ -1537,10 +1486,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "field_path",
-        "reason"
-      ],
+      "required": ["field_path", "reason"],
       "title": "MissingField",
       "type": "object"
     },
@@ -1591,11 +1537,7 @@
           "type": "array"
         },
         "status": {
-          "enum": [
-            "verified",
-            "unresolved",
-            "conflicting"
-          ],
+          "enum": ["verified", "unresolved", "conflicting"],
           "title": "Status",
           "type": "string"
         },
@@ -1632,11 +1574,7 @@
           "type": "array"
         }
       },
-      "required": [
-        "post_name",
-        "exam_name",
-        "status"
-      ],
+      "required": ["post_name", "exam_name", "status"],
       "title": "OfficialSyllabusCandidate",
       "type": "object"
     },
@@ -1723,10 +1661,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "evidence_id",
-        "quote"
-      ],
+      "required": ["evidence_id", "quote"],
       "title": "PurposeCitation",
       "type": "object"
     },
@@ -1745,11 +1680,7 @@
           "title": "Summary Text"
         },
         "status": {
-          "enum": [
-            "verified",
-            "unresolved",
-            "conflicting"
-          ],
+          "enum": ["verified", "unresolved", "conflicting"],
           "title": "Status",
           "type": "string"
         },
@@ -1774,10 +1705,7 @@
           "type": "array"
         }
       },
-      "required": [
-        "summary_text",
-        "status"
-      ],
+      "required": ["summary_text", "status"],
       "title": "ReaderSummaryCandidate",
       "type": "object"
     },
@@ -1793,10 +1721,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "field_path",
-        "reason"
-      ],
+      "required": ["field_path", "reason"],
       "title": "ReviewIssue",
       "type": "object"
     },
@@ -1838,11 +1763,7 @@
           "title": "Count"
         }
       },
-      "required": [
-        "category",
-        "region_or_organisation",
-        "count"
-      ],
+      "required": ["category", "region_or_organisation", "count"],
       "title": "VacancyCount",
       "type": "object"
     }

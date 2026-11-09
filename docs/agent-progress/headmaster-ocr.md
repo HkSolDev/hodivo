@@ -38,6 +38,7 @@ was existing local `aptus-worker:document-check`, digest
 `sha256:f75868e51fbf3955332070b446e9f760451266be4bc49630046fe8a4e5863edf`.
 
 Manually compared the original render/crop with unedited OCR:
+
 - Both `कम से कम 4 वर्ष` clauses survived.
 - `प्रवक्ता अथवा सहायक अध्यापक` and the alternative
   `जूनियर हाईस्कूल में प्रधानाध्यापक` survived (OCR adds an invisible joiner in
@@ -53,6 +54,7 @@ Manually compared the original render/crop with unedited OCR:
   or eligibility requirements. No later-page requirement was checked.
 
 Actionable findings (likelihood × impact, 1–5; observed failures, not guesses):
+
 1. **5 × 5 = 25, reproduced:** this OCR configuration corrupts the class limit
    and other numbers. Do not integrate; acceptance `classes_9_to_12` fails.
 2. **5 × 4 = 20, reproduced on unchanged identity base:** generic CID fonts let
@@ -65,6 +67,7 @@ Actionable findings (likelihood × impact, 1–5; observed failures, not guesses
 ## Reproduction and artifacts
 
 Use these shell variables in the OCR worktree:
+
 ```sh
 E=/private/var/folders/td/j1hpygvj2hd4vtbh_g2slst80000gn/T/opencode/aptus-headmaster-20261102
 W=/private/var/folders/td/j1hpygvj2hd4vtbh_g2slst80000gn/T/opencode/aptus-next-ocr-20261102
@@ -74,6 +77,7 @@ docker run --rm --network none --memory 1g --cpus 2 --cap-drop ALL --security-op
 python3 "$E/evaluate-experiment.py"
 docker run --rm --network none --memory 1g --cpus 2 --cap-drop ALL --security-opt no-new-privileges --mount "type=bind,source=$W,target=/src,readonly" --mount "type=bind,source=$E,target=/evidence" aptus-headmaster-ocr:20261102 /evidence/check-pipeline.py
 ```
+
 Build/recognition exited 0; acceptance evaluation exited **1**, exact failing
 check **`classes_9_to_12`**, other three checks true. Pipeline replay exited 0.
 No tuning, second OCR engine, benchmark expansion or correction of raw output.
@@ -91,6 +95,7 @@ temporary storage before relying on it across machine cleanup.
 ## Checks and remaining boundary
 
 In this worktree:
+
 ```sh
 PYTHONPATH=services/ai "$P" -m unittest discover -s services/ai/tests -p 'test_pdf*.py' -v
 PYTHONPATH=services/ai "$P" -m unittest discover -s services/ai/tests -p 'test_extraction_input.py' -v
@@ -99,6 +104,7 @@ pnpm lint
 git diff --check
 git diff 93a99368da9cc1de2b248444e7f9a170a34ab50b -- services/ai deployment
 ```
+
 25 PDF tests + 14 input tests passed; typecheck/lint/diff check passed; runtime
 diff empty. Existing ignored node_modules and a temporary generated-client link
 reused installed dependencies, no installs/config copied. Only our generated
@@ -153,20 +159,21 @@ render SHA-256 `ba797d5e5288374acce93842c3ba877b22ded902eae12fc31cbda1aaa6d7e42f
 
 Evaluation on RAW text (`evaluate-paddle.py`, checks unchanged from 2 November,
 no repair): **FAILED, 2/5 checks false** (script exits 1):
+
 1. `minimum_four_years_both_alternatives` — document shows ASCII `4` in both
    clauses; Paddle emitted Devanagari `४` twice (digit misrecognition, second
    instance also lost the space: `४ वर्षका`).
 2. `visible_certification_conditions` — the whole टिप्पणी (तीन) line
    (`अनुभव प्रमाण-पत्र का रख-रखाव सम्बन्धित कार्यालय द्वारा किया जायेगा`) is
    dropped from the output, and `क्षेत्रीय` is mangled to `्षे्रीय`.
-Passed: `permitted_role_alternatives`, `headmaster_alternative`,
-`classes_9_to_12` (the check Tesseract failed — `कक्षा 9 से 12` is intact here;
-also no `कक्षा 9 से 42`).
-Other observed errors recorded in `comparison.json` `reading_errors`: `३0`/`६२`
-(document `30`/`62`), `1० दिन`/`३ दिन` (document `10`/`3`), `एन०सी०्टी०्ई०`,
-`द्वरा`, `अप्ैल`, `प्राविधान`, `प्रतिस्पधा`, `बशर्त`, `निध्धारित` (document
-`निर्धारित`), `केन्र` (document `केन्द्र`), `जायेग` (document `जायेगा`), stray
-glyph `ऱ`, `₹` emitted as `र`, plus the dropped ``उच्चतर कक्षाओं`` phrase.
+   Passed: `permitted_role_alternatives`, `headmaster_alternative`,
+   `classes_9_to_12` (the check Tesseract failed — `कक्षा 9 से 12` is intact here;
+   also no `कक्षा 9 से 42`).
+   Other observed errors recorded in `comparison.json` `reading_errors`: `३0`/`६२`
+   (document `30`/`62`), `1० दिन`/`३ दिन` (document `10`/`3`), `एन०सी०्टी०्ई०`,
+   `द्वरा`, `अप्ैल`, `प्राविधान`, `प्रतिस्पधा`, `बशर्त`, `निध्धारित` (document
+   `निर्धारित`), `केन्र` (document `केन्द्र`), `जायेग` (document `जायेगा`), stray
+   glyph `ऱ`, `₹` emitted as `र`, plus the dropped `उच्चतर कक्षाओं` phrase.
 
 Verdict per condition: **FAIL → preserve result and stop; no runtime change.**
 Neither engine is acceptable as-is on numbers: Tesseract corrupts `9→42`
@@ -230,7 +237,7 @@ claims below were read from saved stage artifacts, not re-executed.**
    रख-रखाव), or lecturer/JHS-principal alternatives — those exist only on PDF
    page 6 (garbled native; both OCR engines failed acceptance).
 7. **OCR never consumed.** `report.json` `pipeline_consumes_ocr_artifacts =
-   false`; replay touches OCR dir only in its diagnostic section; only
+false`; replay touches OCR dir only in its diagnostic section; only
    `normalize_pdf.py` mentions OCR, to say "No OCR". Tesseract/Paddle outputs
    remain diagnostic-only.
 8. **HTML ordering/labels in the would-be payload:** `prepare_extraction`
@@ -241,12 +248,14 @@ claims below were read from saved stage artifacts, not re-executed.**
    HTML's role `main_notice` is its only de-facto "primary" marker.
 
 ### Unverified
+
 - Anything downstream of the gate: payload ordering at runtime, budget,
   model behaviour — never reached for this case.
 - Whether a future ocr_trust tier would change any existing test contract
   (no such change exists in `93a9936`).
 
 ### Exact blocking reason and stop decision
+
 `llm_input` is null ⇒ per objective: identify the exact gate and stop.
 Gate = `empty_content` on the PDF document (`verify_bundle.py:219`), hardened by
 Step A + Step B above. No bypass, no manual document merge, no OCR repair,
@@ -274,6 +283,7 @@ PDF (hash verified in the new dir), same 300 DPI PDFium 5.14.0 render —
 `text_recognition_model_name="devanagari_PP-OCRv3_mobile_rec"`.
 
 Commands (new dir `…/aptus-headmaster-ocr-paddle-20261103/followup-v3rec/`):
+
 ```sh
 F=.../aptus-headmaster-ocr-paddle-20261103/followup-v3rec
 docker build --platform linux/amd64 -t aptus-headmaster-ocr-paddle-v3rec:20261103 -f "$F/Dockerfile" "$F"
@@ -282,6 +292,7 @@ docker run --rm --network none --memory 4g --cpus 2 --cap-drop ALL \
   -v "$F":/evidence aptus-headmaster-ocr-paddle-v3rec:20261103 /evidence/paddle-experiment-v3rec.py
 python3 "$F/evaluate-v3rec.py"
 ```
+
 Build and run exited 0; 63 lines; raw SHA-256
 `a16012c697631f2a94ba59fed3eaef2e0418738e0cb69528edd0d1e413ed6591`.
 
@@ -307,7 +318,6 @@ layout-ordered line assembly over the v5 mobile output (fixes reading order,
 not digit corruption). Smallest next step: authorize ONE of those or stop the
 OCR experiments; do not resume integration automatically.
 
-
 ## Task A — evidence-input ordering for already-readable evidence — 3 November 2026
 
 **Scope:** only `prepare_extraction` assembly in `services/ai/build_extraction_input.py`
@@ -318,6 +328,7 @@ OCR routing, paid call, PDF rendering, gate change, deployment or publication.
 `select_pdf_sections.py` are untouched. Owned files: the two above plus this record.
 
 **Decisions**
+
 - Each prepared document gets `label`: `primary` iff its current verified role is
   `main_notice`, else `supporting`. The label controls reading order only; it does
   not rank a third-party HTML page above an official PDF.
@@ -351,11 +362,13 @@ fake OCR alternatives in the PDF content never appear in the payload (no `ocr_se
 no sentinel text, no "ocr" in the instructions); required instruction phrases present.
 
 **Checks** (run in this worktree, `P` = the project venv python):
+
 ```sh
 PYTHONPATH=services/ai "$P" -m unittest discover -s services/ai/tests -p 'test_extraction_input.py' -v   # 21 OK
 PYTHONPATH=services/ai "$P" -m unittest discover -s services/ai/tests -p 'test_*.py'                     # 385 OK
 git diff --check                                                                                          # clean
 ```
+
 Mutation check: with the sort disabled, 3 ordering tests fail; the sort was restored and
 the suite is green. The earlier failures (2 failures, 1 error) are fixed. `test_headmaster_identity`
 still asserts `prepare_extraction(...)['llm_input'] is None` for the real Headmaster
@@ -366,17 +379,18 @@ real Headmaster bundle is still blocked at the `empty_content` / `pdf_requires_r
 gate because page 6's native text is unusable. Separate next task: vision-based recovery of
 unusable PDF pages. Not started here.
 
-
 ### Task A follow-up — extraction version bump (`extract-bundle-v5`) — 3 November 2026
 
 **Scope & owned files:** `services/ai/notice_state.py`, `services/ai/tests/test_notice_state.py`, and this record (preserving existing uncommitted Task A changes in `services/ai/build_extraction_input.py` and `services/ai/tests/test_extraction_input.py`).
 
 **Decisions**
+
 - Updated `EXTRACTION_VERSION` from `extract-bundle-v4` to `extract-bundle-v5` because the Task A document-order instructions and supporting-document condition rules materially changed the prompt contract.
 - Kept `compute_evidence_fingerprint`'s stable `document_id` sorting unchanged.
 - Added `test_v5_extraction_version_invalidates_v4_draft_and_reuses_v5_draft` proving that identical evidence produces distinct fingerprints under `v4` and `v5`, a saved `v4` draft is not reused under `v5`, and a saved `v5` draft is reused when evidence is unchanged.
 
 **Checks** (run in this worktree with project venv `$P`):
+
 ```sh
 PYTHONPATH=services/ai "$P" -m unittest discover -s services/ai/tests -p 'test_notice_state*.py' -v   # 24 OK
 PYTHONPATH=services/ai "$P" -m unittest discover -s services/ai/tests -p 'test_*.py'                  # 386 OK
@@ -384,7 +398,6 @@ git diff --check                                                                
 ```
 
 **Remaining boundary:** Bumping `EXTRACTION_VERSION` prepares cached `v4` notices for fresh extraction on a future deployed worker run, without making any provider call, publishing any job, pushing, merging, or deploying during this task.
-
 
 ## Gemini 2.5 Flash vision recovery experiment — 3 November 2026
 
@@ -395,6 +408,7 @@ git diff --check                                                                
 - **Dedicated experiment artifact directory:** `/private/var/folders/td/j1hpygvj2hd4vtbh_g2slst80000gn/T/opencode/aptus-headmaster-gemini-vision-20261103/` (`gemini-experiment.py`, `evaluate-gemini.py`, `request-spec.json`, `gemini-raw-response.json`, `gemini-experiment.json`, `comparison.json`). All prior Tesseract (`aptus-headmaster-20261102`) and PaddleOCR (`aptus-headmaster-ocr-paddle-20261103`) artifacts were verified untouched via SHA-256.
 
 **Request method, model & source hashes**
+
 - **Endpoint & model:** `POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent` (`modelVersion: "gemini-2.5-flash"`, `temperature: 0.0`, `responseMimeType: "application/json"`, strict `responseJsonSchema`).
 - **Credential handling:** Loaded via `python-dotenv` and `extract_bundle.provider_keys("gemini")` without inspecting or printing `.env` or secret values (`key_pool_size: 11`, succeeded on `used_key_index: 1`, HTTP `200`, `finishReason: "STOP"`).
 - **Measured input size & token usage:**
@@ -414,6 +428,7 @@ git diff --check                                                                
   - `gemini-raw-response.json`: `acaec15e267f5a068688e4828916844da20f49c7f879d02a63cc6dd287353269`
 
 **Result & deterministic comparison verdict against `page-6.png`**
+
 1. **Both four-year alternatives present (`both_four_year_alternatives_present`): PASS**
    - Returned both official PDF clauses verbatim with ASCII `4` (never Devanagari `४`):
      - `"कम से कम 4 वर्ष का शिक्षण अनुभव"` (`value: "4 years"`, `source_type: "official_pdf_page"`, `physical_pdf_page: 6`, `confidence: "high"`)
@@ -434,7 +449,6 @@ git diff --check                                                                
 
 **Next recommended step:** Do not integrate into runtime yet from a single-page experiment. Before designing a vision-recovery stage for legacy-font PDFs, ensure the extraction prompt/schema requires role/experience rules to preserve their qualifying institution/scope clause (`जूनियर हाईस्कूल में प्रधानाध्यापक` vs `उच्चतर कक्षाओं (कक्षा 9 से 12) में प्रवक्ता अथवा सहायक अध्यापक`) as a complete condition rather than bare role nouns, and evaluate across the remaining unread pages (and a small multi-notice sample) with explicit cost/page-budget guards.
 
-
 ### Condition-level Gemini 2.5 Flash follow-up & dynamic post-binding instruction — 3 November 2026
 
 **Objective & boundary:** Prove that `gemini-2.5-flash` keeps each complete post-scoped eligibility/experience condition together (preserving `प्रधानाध्यापक` + `जूनियर हाईस्कूल` + `4` years as a distinct alternative from `प्रवक्ता` / `सहायक अध्यापक` + `उच्चतर कक्षाओं (कक्षा 9 से 12)` + `4` years) without hard-coding post names, and add a generic post-scoped extraction instruction to `services/ai/build_extraction_input.py`. No worker, pipeline gate, database schema, Docker image, deployment, or publication behavior changed.
@@ -454,6 +468,7 @@ git diff --check                                                                
   - `test_condition_experiment.py`: 8 focused unit tests covering `.env` non-loading, quota-only rotation, non-rotation on `400`/`401`/`403`/`500`, exhaustion stop, human-reviewed benchmark labeling, qualifier/class-42 rejection, and the saved real condition-level response.
 
 **Commands & results**
+
 ```sh
 E_GEM=/private/var/folders/td/j1hpygvj2hd4vtbh_g2slst80000gn/T/opencode/aptus-headmaster-gemini-vision-20261103
 W=/private/var/folders/td/j1hpygvj2hd4vtbh_g2slst80000gn/T/opencode/aptus-next-ocr-20261102
@@ -465,6 +480,7 @@ git -C "$W" diff --check                                                        
 ```
 
 **Acceptance check results (`condition-comparison.json`)**
+
 1. `two_complete_headmaster_experience_alternatives`: **PASS** — Both identified posts (`Headmaster (Balak)` and `Headmaster (Balika)`, bound via section `9.(क) प्रधानाध्यापक, अशासकीय सहायता प्राप्त विद्यालयों (बालक/बालिका)` and the HTML summary) have two separate, unmerged `official_pdf_page` experience alternatives.
 2. `second_alternative_retains_pradhanadhyapak_junior_high_school_and_4_years`: **PASS** — Alternative 2 explicitly retains `role_titles: ["प्रधानाध्यापक"]`, `institution_or_scope: "जूनियर हाईस्कूल"`, `class_scope: null`, `minimum_years: 4`, and its verbatim supporting quote.
 3. `first_alternative_retains_classes_9_to_12_and_never_42`: **PASS** — Alternative 1 retains `role_titles: ["प्रवक्ता", "सहायक अध्यापक"]`, `institution_or_scope: "केन्द्र / राज्य सरकार द्वारा मान्यता प्राप्त संस्था"`, `class_scope: "उच्चतर कक्षाओं (कक्षा 9 से 12)"`, `minimum_years: 4`, and `"42"` never appears.

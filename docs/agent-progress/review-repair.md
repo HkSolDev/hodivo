@@ -52,12 +52,33 @@ snapshot and becomes stale after subsequent edits.
 
 Confirmed issues addressed, scored for production conditions:
 
-| Issue and concrete trigger | Likelihood | Impact | Risk | Evidence / targeted fix |
-| --- | --- | --- | --- | --- |
-| Review flags a cited value but planner skips it | 6 | 7 | 42 | Pass review findings as validation errors; helper test asserts planner input |
-| Reviewer returns an object without findings and passes | 4 | 8 | 32 | Missing-findings regression; malformed response now fails closed |
-| Pending valid draft reused forever without another review | 6 | 7 | 42 | Scheduled retry regression resumes saved candidate and invokes reviewer |
-| Completed state recorded before persistence throws | 4 | 7 | 28 | Source ordering: completion now follows successful persistence |
-| Audit merged facts saved before repair | 6 | 5 | 30 | Save moved after repair and includes repair reports |
+| Issue and concrete trigger                                | Likelihood | Impact | Risk | Evidence / targeted fix                                                      |
+| --------------------------------------------------------- | ---------- | ------ | ---- | ---------------------------------------------------------------------------- |
+| Review flags a cited value but planner skips it           | 6          | 7      | 42   | Pass review findings as validation errors; helper test asserts planner input |
+| Reviewer returns an object without findings and passes    | 4          | 8      | 32   | Missing-findings regression; malformed response now fails closed             |
+| Pending valid draft reused forever without another review | 6          | 7      | 42   | Scheduled retry regression resumes saved candidate and invokes reviewer      |
+| Completed state recorded before persistence throws        | 4          | 7      | 28   | Source ordering: completion now follows successful persistence               |
+| Audit merged facts saved before repair                    | 6          | 5      | 30   | Save moved after repair and includes repair reports                          |
 
 No speculative concerns were used to justify unrelated refactoring.
+
+## Main integration and local failure diagnosis — 9 November 2026
+
+Merged locally available `origin/main` (`f8c6569`) without replacing Vision's
+worker implementation. Kept both automated records and main's review models,
+receipt validation, and extraction/provider metrics. Repair resumes retain saved
+facts without recording a fresh extraction call.
+
+The combined Python suite reproduced five storage validation errors: repair
+bookkeeping was written outside the strict draft schema. Moved those fields into
+existing `metadata`; extended the existing saved-draft/resume test to validate
+that envelope. All 461 offline Python tests pass. All three autonomous ingestion
+tests pass with in-memory database doubles; these do not prove live database or
+provider behavior. Their Python helper now uses the project virtualenv, matching
+CI dependency installation and the other contract tests.
+
+Prisma validation, type checking, lint, and repository formatting pass locally.
+Formatted six branch-owned files rejected by the formatting check. GitHub fetch
+and CI-log retrieval failed due to agent-environment DNS/connectivity, so the
+remote failure steps and latest main SHA remain unverified. No deployment,
+publication, paid provider call, or merge into main was performed.

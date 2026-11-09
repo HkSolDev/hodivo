@@ -157,10 +157,14 @@ with tempfile.TemporaryDirectory() as tmp:
     print(json.dumps(payload))
 `;
   return JSON.parse(
-    execFileSync('python3', ['-c', script, JSON.stringify(options)], {
-      env: { ...process.env, PYTHONPATH: aiDir },
-      encoding: 'utf8',
-    }),
+    execFileSync(
+      join(aiDir, '.venv', 'bin', 'python'),
+      ['-c', script, JSON.stringify(options)],
+      {
+        env: { ...process.env, PYTHONPATH: aiDir },
+        encoding: 'utf8',
+      },
+    ),
   ) as Record<string, unknown>;
 }
 
@@ -358,14 +362,19 @@ await test('accepted autonomous notice publishes Post, is idempotent on repeat, 
   });
 
   // 1. First accepted run publishes 1 Post and records AutomatedNoticeRecord + ExtractionCandidate
-  assert.ok(acceptedPayload.draftEnvelope, 'run_autonomous_notice must produce a non-null draftEnvelope');
-  const draftReview = (acceptedPayload.draftEnvelope as Record<string, unknown>).review as Record<string, unknown>;
+  assert.ok(
+    acceptedPayload.draftEnvelope,
+    'run_autonomous_notice must produce a non-null draftEnvelope',
+  );
+  const draftReview = (acceptedPayload.draftEnvelope as Record<string, unknown>)
+    .review as Record<string, unknown>;
   assert.equal(
     (draftReview.automated_decision as Record<string, unknown>).decision,
     'accepted',
   );
   assert.equal(
-    typeof (draftReview.automated_decision as Record<string, unknown>).extraction_version,
+    typeof (draftReview.automated_decision as Record<string, unknown>)
+      .extraction_version,
     'string',
   );
 
