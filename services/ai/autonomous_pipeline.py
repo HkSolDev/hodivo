@@ -707,11 +707,11 @@ def review_extracted_candidate(
         raw_data = raw_review.get('data') if isinstance(raw_review.get('data'), dict) else raw_review
         try:
             parsed = SecondLlmReviewResponse.model_validate_json(
-                json.dumps({'findings': raw_data.get('findings', [])}, ensure_ascii=False),
+                json.dumps({'findings': raw_data['findings']}, ensure_ascii=False),
                 strict=True,
             )
             findings = [f.model_dump(mode='json') for f in parsed.findings]
-        except (ValidationError, TypeError, ValueError):
+        except (ValidationError, KeyError, TypeError, ValueError):
             return {
                 'status': 'blocked',
                 'passed': False,
@@ -795,6 +795,33 @@ def review_extracted_candidate(
         'blocking_reasons': sorted(set(blocking_reasons)),
         'retryable_reasons': sorted(set(retryable_reasons)),
     }
+
+
+def review_and_repair(extracted, source_input, *, review_fn=None,
+                      search_client=None, capture_client=None, issuer_hosts=None,
+                      storage_dir=None, max_repairs=2):
+    """Repair review findings from verified official evidence, then review again."""
+    reports = []
+    for attempt in range(max_repairs + 1):
+        review = review_extracted_candidate(extracted, source_input, review_fn=review_fn)
+        if review['passed'] or attempt == max_repairs:
+            break
+        fields = sorted({f['field_path'].split('.')[-1]
+                         for f in review.get('findings', [])
+                         if f.get('status') != 'supported'})
+        if not fields or search_client is None or capture_client is None:
+            break
+        report = run_targeted_enrichment(
+            extracted.get('facts') or {}, source_input,
+            search_client=search_client, capture_client=capture_client,
+            issuer_hosts=issuer_hosts, requested_fields=fields,
+            validation_errors=review.get('findings', []),
+            pass_number=attempt + 2, max_passes=max_repairs + 1,
+            storage_dir=storage_dir)
+        reports.append(report)
+        applied = apply_verified_enrichment_to_bundle(extracted, source_input, report)
+        extracted, source_input = applied['extracted'], applied['source_input']
+    return extracted, source_input, review, reports
 
 
 def evaluate_automated_acceptance(
@@ -1331,6 +1358,13 @@ def run_autonomous_notice(
             official_syllabus = applied['official_syllabus']
             historical_cutoffs = applied['historical_cutoffs']
 
+    # Step 3.8: Second LLM review against supplied official evidence only
+    extracted, source_input, review_report, repair_reports = review_and_repair(
+        extracted, source_input, review_fn=review_fn,
+        search_client=search_client, capture_client=capture_client,
+        issuer_hosts=issuer_hosts, storage_dir=root_path,
+    )
+
     # Step 3.5: Persist validated merged facts and their evidence references as a separate artifact
     merged_facts_path = root_path / 'merged_facts' / f'{bundle_id}.json'
     atomic_write(
@@ -1343,17 +1377,11 @@ def run_autonomous_notice(
                 'facts': extracted.get('facts'),
                 'evidence': (extracted.get('facts') or {}).get('evidence', []),
                 'documents': source_input.get('documents', []),
+                'repair_reports': repair_reports,
             },
             ensure_ascii=False,
             indent=2,
         ).encode('utf-8'),
-    )
-
-    # Step 3.8: Second LLM review against supplied official evidence only
-    review_report = review_extracted_candidate(
-        extracted,
-        source_input,
-        review_fn=review_fn,
     )
 
     # Step 4: Evaluate deterministic automated acceptance after bounded research & second LLM review
@@ -1362,7 +1390,7 @@ def run_autonomous_notice(
         source_input,
         vision_requests=vision_requests,
         vision_merge_reasons=vision_merge_reasons,
-        enrichment_report=enrichment_report,
+        enrichment_report=repair_reports[-1] if repair_reports else enrichment_report,
         review_report=review_report,
         research_exhausted=True,
     )
@@ -1494,6 +1522,7 @@ def run_autonomous_notice(
         'state': state_record,
         'extracted': extracted,
         'review_report': review_report,
+        'repair_reports': repair_reports,
         'merged_facts_path': str(merged_facts_path),
         'draft_envelope': draft_envelope,
         'ingest_payload': ingest_payload,

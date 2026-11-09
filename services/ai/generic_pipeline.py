@@ -1,7 +1,9 @@
 """Run the generic crawl path; only ready evidence may reach extraction."""
 
+import copy
 import json
 import os
+import time
 from pathlib import Path
 
 from capture_store import atomic_write, now
@@ -22,6 +24,8 @@ from autonomous_pipeline import (
     apply_validated_vision_recovery,
     evaluate_automated_acceptance,
     review_extracted_candidate,
+    review_and_repair,
+    SecondLlmReviewResponse,
 )
 from vision_recovery import (
     assess_html_completeness,
@@ -84,7 +88,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                  draft=prepare_storage, persist=None, prepare_only=False,
                  extraction_version=EXTRACTION_VERSION, retry_clock=None,
                  vision_provider=None, ocr_engine=None, review_fn=None,
-                 pdf_bytes_by_doc=None, page_images_by_doc=None):
+                 pdf_bytes_by_doc=None, page_images_by_doc=None,
+                 search_client=None, capture_client=None, issuer_hosts=None):
     """Crawl sources and process only coverage-approved evidence.
 
     When a verified PDF page is marked unusable by deterministic native-text
@@ -96,6 +101,18 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     state_manager = NoticeStateManager(root)
+    if review_fn is None and extract is extract_bundle and gemini_api_keys():
+        reviewer = GeminiProvider()
+        from repair_clients import GeminiRepairSearch, OfficialRepairCapture
+        search_client = search_client or GeminiRepairSearch(reviewer)
+        capture_client = capture_client or OfficialRepairCapture(root / 'repair_capture')
+        def review_fn(candidate, evidence):
+            return reviewer.request_json(
+                system_prompt='Review every recruitment fact against the supplied evidence. '
+                              'Report missing, conflicting or suspicious facts. Never guess or compute eligibility.',
+                parts=[{'text': json.dumps({'candidate': candidate, 'evidence': evidence}, ensure_ascii=False)}],
+                response_schema=SecondLlmReviewResponse.model_json_schema(),
+            )
     retries = StageRetries(root, retry_clock)
     prepared_root = root / 'shared'
     sources = prepare(prepared_root, sources_path=sources_path, source_id=source_id,
@@ -121,6 +138,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
             bundle_id = None
             vision_requests = []
             vision_merge_reasons = []
+            review_report = None
+            repair_reports = []
             try:
                 raw_text = Path(path).read_text(encoding='utf-8')
                 prepared = json.loads(raw_text)
@@ -212,6 +231,12 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                 with state_manager.notice_lock(bundle_id):
                     cached_envelope = state_manager.get_reusable_draft(
                         bundle_id, fingerprint, extraction_version, source_input=source_input)
+                    repair_resume = None
+                    if cached_envelope is not None and cached_envelope.get('repair_pending'):
+                        if cached_envelope.get('repair_next_at', 0) <= (retry_clock or time.time)():
+                            repair_resume = cached_envelope['repair_candidate']
+                            source_input['documents'] = cached_envelope['source_evidence']
+                            cached_envelope = None
                     if cached_envelope is not None:
                         counts['reused'] += 1
                         disposition = cached_envelope.get('disposition', 'valid_recruitment_review_draft')
@@ -221,8 +246,7 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                             'disposition': disposition,
                             'reasons': ['unchanged_evidence_fingerprint'],
                         })
-                        # Publication is a separate explicit operator action;
-                        # an injected callback must not bypass draft approval.
+                        # Unchanged completed drafts need no additional extraction.
                         continue
 
                     stage = 'extraction'
@@ -230,7 +254,10 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     if extract is extract_bundle:
                         extractor = lambda value: extract_bundle(value, response_path=(
                             root / 'responses' / f'{fingerprint}.json'))
-                    extracted, resumed = extract_or_resume(retries, fingerprint, prepared, extractor)
+                    if repair_resume is not None:
+                        extracted, resumed = repair_resume, True
+                    else:
+                        extracted, resumed = extract_or_resume(retries, fingerprint, prepared, extractor)
                     if extracted is None:
                         retry = retries.read('extraction', fingerprint)
                         counts['blocked'] += retry['status'] == 'needs_review'
@@ -252,6 +279,12 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                         source_input = merged_vision['source_input']
                         vision_merge_reasons = merged_vision.get('unresolved_reasons', [])
                     stage = 'validation'
+                    if (extracted.get('facts') or {}).get('purpose') == 'recruitment':
+                        extracted, source_input, review_report, repair_reports = review_and_repair(
+                            extracted, source_input, review_fn=review_fn,
+                            search_client=search_client, capture_client=capture_client,
+                            issuer_hosts=issuer_hosts, storage_dir=root,
+                        )
                     validation = validate(extracted, source_input)
                     disposition = validation.get('disposition', 'validation_blocked')
                     if validation.get('status') == 'blocked':
@@ -285,17 +318,15 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     if disposition == 'valid_recruitment_review_draft':
                         stage = 'draft_preparation'
                         src_name = _source_name(source_id, prepared)
-                        review_report = review_extracted_candidate(
-                            extracted,
-                            source_input,
-                            review_fn=review_fn,
-                        )
+                        if review_report is None:
+                            review_report = review_extracted_candidate(extracted, source_input, review_fn=review_fn)
                         acceptance = evaluate_automated_acceptance(
                             extracted,
                             source_input,
                             vision_requests=vision_requests,
                             vision_merge_reasons=vision_merge_reasons,
                             review_report=review_report,
+                            enrichment_report=repair_reports[-1] if repair_reports else None,
                             research_exhausted=True,
                         )
                         if draft is prepare_storage:
@@ -312,11 +343,16 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                                 },
                             )
                         else:
-                            envelope = draft(extracted, source_input, source_name=src_name)
+                            envelope = copy.deepcopy(draft(extracted, source_input, source_name=src_name))
                         envelope['disposition'] = disposition
                         envelope['evidence_fingerprint'] = fingerprint
                         envelope['extraction_version'] = extraction_version
                         envelope['source_evidence'] = source_input['documents']
+                        envelope['review_report'] = review_report
+                        envelope['repair_reports'] = repair_reports
+                        envelope['repair_pending'] = acceptance['decision'] != 'accepted'
+                        envelope['repair_next_at'] = (retry_clock or time.time)() + 3600
+                        envelope['repair_candidate'] = extracted
                         envelope['metadata'] = {key: extracted.get(key) for key in ('provider', 'model', 'usage')}
                         draft_path = root / 'drafts' / f"{extracted['bundle_id']}.json"
                         atomic_write(draft_path, json.dumps(envelope, ensure_ascii=False, indent=2).encode())
@@ -327,8 +363,6 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                             'disposition': disposition,
                             'reasons': [],
                         })
-                        state_manager.record_outcome(bundle_id, fingerprint, extraction_version, draft_path,
-                                                     disposition=disposition)
                         active_persist = _resolve_persist(
                             persist, allow_default=(extract is extract_bundle)
                         )
@@ -363,6 +397,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                             atomic_write(payload_path, json.dumps(ingest_payload, ensure_ascii=False, indent=2).encode())
                             active_persist(ingest_payload)
                             counts['published'] += 1
+                        state_manager.record_outcome(bundle_id, fingerprint, extraction_version, draft_path,
+                                                     disposition=disposition)
                     elif disposition == 'amendment_pending_review':
                         stage = 'amendment_review_preparation'
                         out_dir = root / 'amendments'

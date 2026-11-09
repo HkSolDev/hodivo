@@ -15,6 +15,74 @@ from autonomous_pipeline import (
 from build_extraction_input import CandidatePost
 
 
+class ReviewRepairTests(unittest.TestCase):
+    def test_repair_is_reviewed_again_and_stops_after_success(self):
+        from unittest.mock import patch
+        from autonomous_pipeline import review_and_repair
+        failed = {'passed': False, 'findings': [
+            {'field_path': 'posts.0.application_last_date', 'status': 'missing'}]}
+        passed = {'passed': True, 'findings': []}
+        with patch('autonomous_pipeline.review_extracted_candidate', side_effect=[failed, passed]) as review, \
+             patch('autonomous_pipeline.run_targeted_enrichment', return_value={}) as enrich, \
+             patch('autonomous_pipeline.apply_verified_enrichment_to_bundle', return_value={
+                 'extracted': {'facts': {'repaired': True}}, 'source_input': {'new': True}}):
+            result = review_and_repair({'facts': {}}, {}, search_client=object(), capture_client=object())
+        self.assertTrue(result[2]['passed'])
+        self.assertEqual(review.call_count, 2)
+        self.assertEqual(enrich.call_count, 1)
+        self.assertEqual(enrich.call_args.kwargs['validation_errors'], failed['findings'])
+        self.assertEqual(review.call_args.args[0], {'facts': {'repaired': True}})
+
+    def test_captured_official_deadline_is_merged_before_second_review(self):
+        from unittest.mock import Mock
+        from autonomous_pipeline import review_and_repair
+        from test_targeted_enrichment import sample_source_input, sample_facts
+        source = sample_source_input()
+        quote = 'UPESSC Advt 09/2026 Post: Headmaster (Balak). Application last date: 2026-12-15.'
+        url = 'https://upessc.example.gov.in/notices/deadline.pdf'
+        search, capture = Mock(), Mock()
+        search.discover_for_request.return_value = {'status': 'ok', 'candidates': [{
+            'source_url': url, 'value': '2026-12-15', 'exact_quote': quote,
+            'post_binding_quote': 'Post: Headmaster (Balak)'}]}
+        capture.capture_source.return_value = {'status': 'captured', 'source_url': url,
+            'document_id': 'deadline-doc', 'sha256': 'a' * 64,
+            'captured_at': '2026-11-09T00:00:00Z',
+            'text_units': [{'page': 1, 'locator': 'page:1', 'text': quote}]}
+        observed = []
+        def review(candidate, evidence):
+            value = candidate['facts']['posts'][0]['application_last_date']
+            observed.append(value)
+            return {'findings': [] if value else [{
+                'field_path': 'posts.0.application_last_date', 'status': 'missing',
+                'reason': 'Deadline absent', 'evidence_quote': None}]}
+        result = review_and_repair({'facts': sample_facts()}, source, review_fn=review,
+            search_client=search, capture_client=capture,
+            issuer_hosts={'UPESSC': ['upessc.example.gov.in']})
+        self.assertEqual(observed, [None, '2026-12-15'])
+        self.assertTrue(result[2]['passed'])
+        self.assertEqual(result[0]['facts']['evidence'][-1]['quote'], quote)
+
+    def test_missing_reviewer_findings_never_passes(self):
+        from autonomous_pipeline import review_extracted_candidate
+        result = review_extracted_candidate({}, {}, review_fn=lambda *_: {'status': 'ok'})
+        self.assertFalse(result['passed'])
+        self.assertIn('second_llm_review_malformed', result['blocking_reasons'])
+
+    def test_repeated_failure_exhausts_budget_without_passing(self):
+        from unittest.mock import patch
+        from autonomous_pipeline import review_and_repair
+        failed = {'passed': False, 'findings': [
+            {'field_path': 'posts.0.application_last_date', 'status': 'missing'}]}
+        with patch('autonomous_pipeline.review_extracted_candidate', return_value=failed) as review, \
+             patch('autonomous_pipeline.run_targeted_enrichment', return_value={}) as enrich, \
+             patch('autonomous_pipeline.apply_verified_enrichment_to_bundle', return_value={
+                 'extracted': {'facts': {}}, 'source_input': {}}):
+            result = review_and_repair({'facts': {}}, {}, search_client=object(), capture_client=object())
+        self.assertFalse(result[2]['passed'])
+        self.assertEqual(review.call_count, 3)
+        self.assertEqual(enrich.call_count, 2)
+
+
 def _make_base_prepared(
     *,
     bundle_id: str = 'upessc-hm-2026',

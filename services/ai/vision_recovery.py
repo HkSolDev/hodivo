@@ -21,7 +21,7 @@ from verify_bundle import grouping_blocking_reasons
 
 
 # Small documented maximum per notice so multi-page unreadable PDFs never fan out unboundedly.
-MAX_VISION_PAGES_PER_NOTICE = 3
+MAX_VISION_PAGES_PER_NOTICE = 6
 SHORT_PDF_PAGE_THRESHOLD = 4
 
 REQUIRED_RECRUITMENT_FIELDS = (

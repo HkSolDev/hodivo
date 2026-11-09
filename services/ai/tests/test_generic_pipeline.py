@@ -285,6 +285,24 @@ class GenericPipelineTests(unittest.TestCase):
         self.assertEqual(counts_blocked['published'], 0)
         self.assertEqual(pushed_blocked, [])
 
+        # A due rejected draft resumes its saved facts and runs review again.
+        review_calls = []
+        retried = run_pipeline(
+            self.root / 'pipeline_vision_review_blocked',
+            prepare=prepare,
+            extract=lambda _: self.fail('Saved facts should avoid another extraction'),
+            persist=pushed_blocked.append,
+            vision_provider=vision_provider,
+            review_fn=lambda *_: review_calls.append('review') or {'findings': []},
+            retry_clock=lambda: 10**12,
+            pdf_bytes_by_doc={'official-pdf': b'%PDF-1.4'},
+            page_images_by_doc={'official-pdf': {6: b'\x89PNG\r\n\x1a\n'}},
+        )
+        self.assertEqual(review_calls, ['review'])
+        self.assertEqual(retried['sources']['upessc_board']['checkpoint_reused'], 1)
+        self.assertEqual(retried['sources']['upessc_board']['published'], 0)
+        self.assertEqual(pushed_blocked, [])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 from build_extraction_input import prepare_extraction
 from verify_bundle import verify_bundles
-from vision_recovery import recover_unreadable_pdf_pages
+from vision_recovery import recover_unreadable_pdf_pages, select_unreadable_pages_for_vision
 
 
 SUMMARY_URL = "https://upessc.example.gov.in/notices/headmaster-09-2026.html"
@@ -264,6 +264,14 @@ class VisionRecoveryTests(unittest.TestCase):
                 prep = prepare_extraction(result["bundle"])
                 self.assertIsNone(prep["llm_input"])
 
+    def test_default_budget_selects_six_and_defers_seventh_relevant_page(self):
+        document = {'content': {'pages': [{'number': n} for n in range(1, 8)]}}
+        pages = [{'number': n, 'relevant': True} for n in range(1, 8)]
+        result = select_unreadable_pages_for_vision(
+            {'documents': []}, document, pages, missing_fields=['education_required'])
+        self.assertEqual(len(result['selected']), 6)
+        self.assertEqual(len(result['deferred']), 1)
+
     def test_multi_page_selection_cap_skips_irrelevant_pages_and_preserves_valid_evidence(self):
         bundle = make_bundle(readable_pdf=False)
         pdf_doc = next(d for d in bundle["documents"] if d["document_id"] == "official-pdf")
@@ -317,6 +325,7 @@ class VisionRecoveryTests(unittest.TestCase):
         result = recover_unreadable_pdf_pages(
             bundle,
             gemini_provider=provider,
+            max_pages=3,
             pdf_bytes_by_doc={"official-pdf": FAKE_PDF_BYTES},
             page_images_by_doc={
                 "official-pdf": {p: FAKE_PNG_BYTES for p in (2, 3, 4, 5, 6)}
