@@ -21,8 +21,8 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: 'Aptus — Find your next possibility',
-    template: '%s | Aptus',
+    default: 'Hodivo — Find your next possibility',
+    template: '%s | Hodivo',
   },
   description:
     'Compare your education and age with government job notifications, understand the saved requirements, and verify the source.',

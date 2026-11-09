@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'How It Works',
   description:
-    'Understand how Aptus matches government job notifications and what to verify before applying.',
+    'Understand how Hodivo matches government job notifications and what to verify before applying.',
 };
 
 export default function HowItWorksPage() {
@@ -28,7 +28,7 @@ export default function HowItWorksPage() {
       </div>
       <div>
         <p>
-          Aptus compares your details with saved notification requirements. An
+          Hodivo compares your details with saved notification requirements. An
           incomplete or conditional rule needs a closer look at the source.
         </p>
         <details style={{ marginTop: 'var(--space-4)' }}>

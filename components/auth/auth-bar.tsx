@@ -34,7 +34,7 @@ async function authRequest(
     });
   } catch {
     throw new Error(
-      'Couldn’t reach Aptus. Check your connection and try again.',
+      'Couldn’t reach Hodivo. Check your connection and try again.',
     );
   }
   const data: unknown = await response.json().catch(() => null);
@@ -157,7 +157,7 @@ export function AuthBar({
           );
         }
         throw new Error(
-          'Couldn’t reach Aptus. Check your connection and try again.',
+          'Couldn’t reach Hodivo. Check your connection and try again.',
         );
       }
 

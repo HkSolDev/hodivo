@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Sign-in Error | Aptus',
+  title: 'Sign-in Error | Hodivo',
   robots: {
     index: false,
     follow: false,
@@ -35,7 +35,7 @@ export default function AuthErrorPage() {
         try again.
       </p>
       <Link className="button button-primary" href="/">
-        Return to Aptus home →
+        Return to Hodivo home →
       </Link>
     </section>
   );
