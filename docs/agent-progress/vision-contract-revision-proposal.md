@@ -1,6 +1,6 @@
 # Vision storage contract revision proposal — 9 November 2026
 
-Status: proposed; awaiting Hemant approval. No lock or protected checks changed.
+Status: approved by Hemant on 9 November 2026 via the explicit optional-field revision approval. Implemented as local-v1.2.
 
 ## Reproduction
 
@@ -47,3 +47,7 @@ production deadline filtering and all expected result assertions are unchanged.
 A PostgreSQL rerun could not start because local initdb fails with
 `could not look up effective user ID 501: user does not exist`, including outside
 the sandbox. This is not a claim that the database integration test passed.
+
+After Hemant approval: all 12 contract tests pass; consumer audit passes with zero
+findings. Typecheck, lint, formatting, and diff whitespace checks pass. The
+PostgreSQL integration rerun remains unavailable as documented above.

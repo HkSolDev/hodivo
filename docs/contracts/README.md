@@ -1,6 +1,6 @@
 # Aptus frontend, backend and worker contracts
 
-Revision: local-v1.1, 27 October 2026. Coordinator-owned. Read the
+Revision: local-v1.2, 9 November 2026. Coordinator-owned. Read the
 [coordination protocol](../AGENT_CONTRACT_PROTOCOL.md) before changing this set.
 
 ## Scope and authority
@@ -116,3 +116,14 @@ OAuth/passkey internals are delegated to the pinned library and existing auth
 tests; this is not a new complete authentication specification or security audit.
 No whole-product browser, real DB, production, performance or release claim
 follows from these artifacts. Consult the findings document for actual results.
+
+## Approved Vision storage revision
+
+Hemant approved local-v1.2 on 9 November 2026, in response to the concrete
+proposal in `../agent-progress/vision-contract-revision-proposal.md`. This
+adds six optional nullable review/enrichment properties and their referenced
+types to the storage schema; existing required fields, legacy fixtures,
+rejection checks, and legacy approval semantics remain unchanged. The
+autonomous ingestion path continues to enforce its separate acceptance checks.
+Deploy compatible producer and consumer together; rollback both together and
+retain extended drafts for a compatible validator.
