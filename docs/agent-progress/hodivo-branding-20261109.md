@@ -8,3 +8,13 @@
 - Verification: `pnpm typecheck` and `pnpm lint` passed. The targeted browser suite passed all 13 checks: `tests/next-frontend.test.ts` and `tests/next-navigation.test.ts`. A broader `pnpm test:web` run also built successfully; its initial failures were stale “Aptus” assertions, now corrected, and one unrelated missing `services/ai/.venv/bin/python` contract-test dependency in this isolated worktree.
 - Review: Antigravity’s read-only review found complete visible-brand coverage and no reason to rename internal `aptus` keys. The requested Luna review was started but did not return, so it is not used as evidence.
 - Status: implementation and review complete. No deploy, merge or push performed.
+
+## Follow-up verification — 9 November 2026
+
+Reproduced a Prettier failure in `components/results/results-view.tsx` caused by
+the longer Hodivo copy; corrected its line wrapping. Repository formatting,
+`pnpm typecheck`, and `pnpm lint` pass. Existing frontend/navigation browser tests
+were attempted again, but local Chrome terminated with SIGABRT before browser
+assertions; this run does not establish browser success. GitHub API access failed,
+so the exact remote failed check could not be inspected. No deployment or merge
+into main was performed.
