@@ -3,9 +3,9 @@ import Link from 'next/link';
 export function Footer() {
   return (
     <footer className="page-width site-footer">
-      <span className="brand">Aptus</span>
+      <span className="brand">Hodivo</span>
       <p>Check the recruitment notice before applying.</p>
-      <Link href="/how-it-works">How Aptus works</Link>
+      <Link href="/how-it-works">How Hodivo works</Link>
     </footer>
   );
 }

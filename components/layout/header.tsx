@@ -7,8 +7,8 @@ export function Header() {
   return (
     <header className="app-header">
       <div className="site-header page-width">
-        <Link href="/" className="brand" aria-label="Aptus home">
-          Aptus
+        <Link href="/" className="brand" aria-label="Hodivo home">
+          Hodivo
         </Link>
         <div className="header-actions">
           <PrimaryNavigation />

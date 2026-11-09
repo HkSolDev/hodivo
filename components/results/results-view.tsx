@@ -168,8 +168,8 @@ export function ResultsView({
           <div id="empty-results" className="empty-panel">
             <h3>No posts returned for this profile</h3>
             <p>
-              This only covers the notifications currently in Aptus. Review your
-              details or check back after more notices are added.
+              This only covers the notifications currently in Hodivo. Review
+              your details or check back after more notices are added.
             </p>
             <Link className="button button-secondary" href="/profile">
               Review my profile

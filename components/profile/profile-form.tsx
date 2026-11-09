@@ -263,7 +263,7 @@ export function ProfileForm() {
       }
 
       if (!data || !Array.isArray(data.matches)) {
-        throw new Error('Aptus returned an unexpected response.');
+        throw new Error('Hodivo returned an unexpected response.');
       }
 
       setResults(data);
