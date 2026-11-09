@@ -18,3 +18,13 @@ were attempted again, but local Chrome terminated with SIGABRT before browser
 assertions; this run does not establish browser success. GitHub API access failed,
 so the exact remote failed check could not be inspected. No deployment or merge
 into main was performed.
+
+## Calendar-dependent CI fixture fix
+
+The search integration fixture also used expired 1–7 November deadlines on this
+branch. Changed only fixture generation to ordered future dates, retaining its
+result and pagination assertions and production deadline filtering. All 12
+contract tests and the consumer audit pass (zero findings), as do typecheck,
+lint, and changed-file formatting. The PostgreSQL integration rerun remains
+unavailable locally due to the initdb user-ID lookup failure recorded for Vision;
+CI must verify the database case. No Vision contract revision is needed here.
