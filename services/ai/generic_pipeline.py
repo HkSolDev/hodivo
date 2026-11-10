@@ -53,6 +53,32 @@ def _resolve_persist(persist, *, allow_default=False):
     return None
 
 
+def _persist_recovered_review_report(state_manager, envelope, bundle_id, review_report):
+    """Attach a recovered second-review report without losing unknown metadata.
+
+    Rewrites the untouched candidate draft with the report attached, then
+    refreshes the durable state checksum so later reuse runs keep matching.
+    """
+    metadata = envelope.get('metadata')
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata['review_report'] = review_report
+    envelope['metadata'] = metadata
+    state = json.loads(state_manager.state_path(bundle_id).read_text(encoding='utf-8'))
+    if not isinstance(state, dict) or not isinstance(state.get('draft_path'), str):
+        raise ValueError('Notice state is missing draft integrity data')
+    draft_path = Path(state['draft_path'])
+    if not draft_path.is_file():
+        raise FileNotFoundError('Draft file missing')
+    draft_bytes = json.dumps(envelope, ensure_ascii=False, indent=2).encode()
+    atomic_write(draft_path, draft_bytes)
+    # Preserve unknown state keys; only the integrity checksum and timestamp change.
+    state['draft_sha256'] = hashlib.sha256(draft_bytes).hexdigest()
+    state['updated_at'] = now()
+    atomic_write(state_manager.state_path(bundle_id), json.dumps(state, indent=2).encode('utf-8'))
+    return draft_path
+
+
 def _source_name(source_id, prepared):
     documents = prepared['llm_input']['input']['documents']
     title = next((document.get('title') for document in documents if document.get('title')), None)
@@ -319,12 +345,43 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                             counts['published'] = counts.get('published', 0) + 1
                         elif disposition in {'valid_recruitment_review_draft', 'amendment_pending_review', 'unclear_purpose_review'}:
                             counts['reused_awaiting_review'] = counts.get('reused_awaiting_review', 0) + 1
+                        recovery_reasons = []
+                        recovered_metadata = cached_envelope.get('metadata')
+                        # Recovery never touches published or already-approved drafts:
+                        # approvals and receipts are keyed to these exact draft bytes.
+                        if (not is_published
+                                and disposition == 'valid_recruitment_review_draft'
+                                and review_fn is not None and draft_sha
+                                and not (isinstance(recovered_metadata, dict)
+                                         and isinstance(recovered_metadata.get('review_report'), dict))
+                                and not (root / 'publication' / 'approvals' / f'{draft_sha}.json').is_file()):
+                            try:
+                                recovery_report = review_extracted_candidate(
+                                    cached_envelope,
+                                    {'documents': cached_envelope.get('source_evidence') or []},
+                                    review_fn=review_fn,
+                                )
+                                finding_reasons = [reason for reason in
+                                                   (recovery_report.get('blocking_reasons') or []) +
+                                                   (recovery_report.get('retryable_reasons') or [])
+                                                   if str(reason).startswith('review_finding:')]
+                                if recovery_report.get('status') == 'supported' or finding_reasons:
+                                    _persist_recovered_review_report(
+                                        state_manager, cached_envelope, bundle_id, recovery_report)
+                                    counts['review_recovered'] = counts.get('review_recovered', 0) + 1
+                                    recovery_reasons.append('review_report_recovered')
+                                else:
+                                    # An unavailable reviewer keeps the draft untouched;
+                                    # the report is retried on a later reuse run.
+                                    recovery_reasons.append('review_report_recovery_deferred')
+                            except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+                                recovery_reasons.append('review_report_recovery_deferred')
 
                         counts['bundle_outcomes'].append({
                             'bundle_id': bundle_id,
                             'outcome': 'reused',
                             'disposition': disposition,
-                            'reasons': ['unchanged_evidence_fingerprint'],
+                            'reasons': sorted(set(['unchanged_evidence_fingerprint'] + recovery_reasons)),
                         })
                         # Unchanged completed drafts need no additional extraction.
                         continue
@@ -676,6 +733,7 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
 
     total_drafts_created = sum(report['sources'][s['source']].get('drafts', 0) for s in enabled_sources)
     total_reused_awaiting_review = sum(report['sources'][s['source']].get('reused_awaiting_review', 0) for s in enabled_sources)
+    total_review_recovered = sum(report['sources'][s['source']].get('review_recovered', 0) for s in enabled_sources)
     total_published_seen = sum(report['sources'][s['source']].get('published', 0) for s in enabled_sources)
     total_amendments = sum(report['sources'][s['source']].get('amendments', 0) for s in enabled_sources)
     total_unclear = sum(report['sources'][s['source']].get('unclear', 0) for s in enabled_sources)
@@ -786,6 +844,7 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
         'drafts': {
             'created': total_drafts_created,
             'reused_awaiting_review': total_reused_awaiting_review,
+            'review_reports_recovered': total_review_recovered,
             'awaiting_review': run_awaiting_review,
             'published': total_published_seen,
             'total_backlog_awaiting_review': total_backlog_awaiting_review,
