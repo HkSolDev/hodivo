@@ -35,6 +35,13 @@ class GeminiProviderTests(unittest.TestCase):
             self.assertEqual(gemini_api_keys(), ['key-a', 'key-b', 'key-c', 'key-d', 'key-e'])
             self.assertEqual(provider_keys('gemini'), ['key-a', 'key-b', 'key-c', 'key-d', 'key-e'])
 
+    def test_seven_comma_separated_pool_trims_deduplicates_and_selects_first(self):
+        env = {'GEMINI_API_KEYS': (
+            ' key-1 , key-2 , , key-3 , key-2 ,   , key-4 , key-1 , key-5 ')}
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(gemini_api_keys(), ['key-1', 'key-2', 'key-3', 'key-4', 'key-5'])
+            self.assertEqual(gemini_api_key(), 'key-1')
+
     def test_429_resource_exhausted_rotates_once_per_key_without_logging_keys(self):
         r429 = httpx.Response(429, json={'error': {'status': 'RESOURCE_EXHAUSTED'}})
         r200 = httpx.Response(200, json={
