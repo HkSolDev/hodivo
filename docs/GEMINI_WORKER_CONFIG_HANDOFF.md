@@ -193,3 +193,42 @@ passing).
 
 No merge, no push, no deploy, no production reads/writes, no restarts, no
 dependency changes, no Interactions API migration, no batch-record edits.
+
+## Coordinator continuation — 10 November 2026
+
+Completed the uncommitted retirement slice and added missing recovery backoff
+and xAI routing. Generic task settings SEARCH/REVIEW/VISION_PROVIDER and MODEL
+are now read; Gemini is the auxiliary default and retains GEMINI_*_MODEL
+fallbacks. xAI requires explicit models and XAI_API_KEY, never inherits a Gemini
+model, and never silently switches providers on authentication failure.
+The real extraction transport in extract_bundle.request_structured supports
+xAI in addition to the legacy provider factory. Web research uses /v1/responses
+with the web_search tool, output citation annotations and tool usage. Review
+and vision use structured chat completions; local fact/grounding gates remain.
+
+Retired exact bytes skip repair/recovery/publication and backlog counts. The
+existing retirement regression checks unchanged draft and state bytes, zero
+AI work, and version-scoped processing. Recovery has an isolated
+review_recovery ledger keyed by draft digest: transient failures wait 30/60
+seconds then 24 hours after three failures, allowing a fresh bounded cycle.
+Nonretryable errors require operator intervention/reset of that recovery
+record after fixing the cause. Publication retry state is untouched.
+
+Offline backfill against both saved cleanup manifests verified 82 original
+draft versions, with 0 missing and 0 mismatches; 82 markers staged outside the
+archive at /private/tmp/aptus-retirement-backfill-verified. This does not prove
+those original digests still match every current production cache file.
+Production application must compare the current cached bytes/state against the
+markers, and explicitly review any changed versions. No production writes,
+live provider calls, deployment, push or merge were performed.
+
+Official transport references checked:
+https://docs.x.ai/developers/tools/web-search
+https://docs.x.ai/developers/model-capabilities/text/structured-outputs
+
+Final verification: focused continuation tests 23 passed; full Python suite
+481 passed (4.683 seconds), including retirement, backfill, Gemini routing,
+xAI transport and recovery-budget tests. git diff --check passed. Graphify
+code-only index refreshed and request_structured/task_provider relationships
+queried, with actual callers independently inspected. SQL indexing was skipped
+because the optional SQL parser is absent; no dependency was installed.

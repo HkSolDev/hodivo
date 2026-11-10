@@ -3,6 +3,7 @@ import os
 from providers.base import LLMProvider
 from providers.gemini import GeminiProvider
 from providers.openai import OpenAIProvider
+from providers.xai import XaiProvider
 
 
 def get_llm_provider() -> LLMProvider:
@@ -11,6 +12,9 @@ def get_llm_provider() -> LLMProvider:
 
     if provider == "openai":
         return OpenAIProvider()
+
+    if provider == "xai":
+        return XaiProvider()
 
     if provider == "gemini":
         return GeminiProvider()

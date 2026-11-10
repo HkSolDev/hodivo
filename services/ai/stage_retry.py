@@ -56,7 +56,7 @@ class StageRetries:
         self.jitter = jitter
 
     def path(self, stage, key):
-        if stage not in {'capture', 'extraction', 'publication'}:
+        if stage not in {'capture', 'extraction', 'publication', 'review_recovery'}:
             raise ValueError('Unknown retry stage')
         return self.root / stage / (hashlib.sha256(key.encode()).hexdigest() + '.json')
 
@@ -97,6 +97,9 @@ class StageRetries:
     def begin(self, stage, key):
         state = self.read(stage, key)
         status = state.get('status')
+        if stage == 'review_recovery' and status == 'retry_wait' and state.get('next_at', 0) <= self.clock() and state.get('attempts', 0) >= self.MAX_ATTEMPTS:
+            state = {}
+            status = None
         if status == 'needs_review' or state.get('next_at', 0) > self.clock():
             return False
         if stage == 'extraction' and status == 'running':
@@ -130,6 +133,12 @@ class StageRetries:
             self.write(stage, key, {**state, 'attempts': attempts, 'reason': reason,
                 'status': 'retry_wait' if retryable else 'needs_review',
                 'next_at': next_at})
+            return
+        # Recovery preserves a saved draft: after three transient failures,
+        # pause for a day, then allow a fresh bounded attempt cycle.
+        if stage == 'review_recovery' and retryable and attempts >= self.MAX_ATTEMPTS:
+            self.write(stage, key, {**state, 'reason': reason, 'status': 'retry_wait',
+                                   'next_at': self.clock() + 86400})
             return
         retryable = retryable and attempts < self.MAX_ATTEMPTS
         delay = max(30 * 2 ** max(attempts - 1, 0), min(max(retry_after, 0), 86400))

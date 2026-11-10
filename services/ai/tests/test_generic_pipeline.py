@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import generic_pipeline
+import providers.tasks as task_providers
 from capture_store import atomic_write
 from generic_pipeline import run_pipeline
 from notice_state import NoticeStateManager
@@ -30,7 +31,7 @@ class GenericPipelineTests(unittest.TestCase):
         return [self.fixture.run_source()]
 
     def test_review_search_and_vision_providers_receive_their_own_models(self):
-        real_provider = generic_pipeline.GeminiProvider
+        real_provider = task_providers.GeminiProvider
         constructed = []
 
         def factory(**kwargs):
@@ -49,7 +50,7 @@ class GenericPipelineTests(unittest.TestCase):
             def prepare(_root, **_options):
                 return [{'source': 'wiring', 'status': 'scanned', 'prepared_inputs': 0,
                          'prepared_paths': []}]
-            with patch.object(generic_pipeline, 'GeminiProvider', factory):
+            with patch.object(task_providers, 'GeminiProvider', factory):
                 run_pipeline(self.root / 'model_wiring', prepare=prepare,
                              extract=generic_pipeline.extract_bundle)
             vision_provider = generic_pipeline._resolve_vision_provider(None, allow_default=True)
@@ -357,7 +358,7 @@ class GenericDraftReviewRecoveryTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.addCleanup(self.temp.cleanup)
 
-    def run_iteration(self, extract_calls, review_payloads):
+    def run_iteration(self, extract_calls, review_payloads, *, retry_clock=None):
         prepared_path = self.root / 'prepared.json'
         prepared_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(prepared_path,
@@ -386,7 +387,7 @@ class GenericDraftReviewRecoveryTests(unittest.TestCase):
             return review_payloads.pop(0)
 
         report = run_pipeline(self.root, prepare=prepare, extract=extract, validate=validate,
-                              draft=draft, review_fn=review_fn)
+                              draft=draft, review_fn=review_fn, retry_clock=retry_clock)
         return report, review_calls
 
     def rewrite_draft_without_report(self):
@@ -480,9 +481,90 @@ class GenericDraftReviewRecoveryTests(unittest.TestCase):
         self.assertEqual(draft_path.read_bytes(), legacy_bytes)
         self.assertEqual(state['draft_sha256'], hashlib.sha256(legacy_bytes).hexdigest())
 
-        report3, review_calls3 = self.run_iteration(extract_calls, [{'findings': []}])
+        digest = hashlib.sha256(legacy_bytes).hexdigest()
+        ledger = StageRetries(self.root)
+        wait_until = ledger.read('review_recovery', digest)['next_at']
+        report_wait, calls_wait = self.run_iteration(extract_calls, [], retry_clock=lambda: wait_until - 1)
+        self.assertEqual(calls_wait, [])
+        self.assertEqual(draft_path.read_bytes(), legacy_bytes)
+        self.assertIn('review_report_recovery_waiting', report_wait['sources']['test_board']['bundle_outcomes'][0]['reasons'])
+        report3, review_calls3 = self.run_iteration(extract_calls, [{'findings': []}], retry_clock=lambda: wait_until + 1)
         self.assertEqual(review_calls3, ['review'])
         self.assertEqual(report3['sources']['test_board']['review_recovered'], 1)
+        self.assertEqual(ledger.read('review_recovery', digest)['status'], 'success')
+        self.assertFalse(ledger.path('publication', digest).exists())
+
+    def mark_repair_pending(self):
+        """Make the saved envelope look like an interrupted repair attempt."""
+        manager = NoticeStateManager(self.root)
+        state = json.loads(manager.state_path('bnd_101').read_text())
+        draft_path = Path(state['draft_path'])
+        envelope = json.loads(draft_path.read_bytes())
+        metadata = envelope.get('metadata') or {}
+        metadata['repair_pending'] = True
+        metadata['repair_next_at'] = 0
+        metadata['repair_candidate'] = {'bundle_id': 'bnd_101'}
+        envelope['metadata'] = metadata
+        draft_bytes = json.dumps(envelope, ensure_ascii=False, indent=2).encode()
+        draft_path.write_bytes(draft_bytes)
+        state['draft_sha256'] = hashlib.sha256(draft_bytes).hexdigest()
+        manager.state_path('bnd_101').write_text(json.dumps(state, indent=2))
+        return draft_bytes
+
+    def retire_bytes(self, draft_bytes, reason='operator_retired_test'):
+        digest = hashlib.sha256(draft_bytes).hexdigest()
+        retirements = self.root / 'publication' / 'retirements'
+        retirements.mkdir(parents=True, exist_ok=True)
+        atomic_write(retirements / f'{digest}.json',
+                     json.dumps({'draft_sha256': digest, 'bundle_id': 'bnd_101',
+                                 'retired_at': '2026-11-10T00:00:00+00:00',
+                                 'reason': reason}).encode())
+        return digest
+
+    def test_retired_draft_is_skipped_without_ai_or_persistence(self):
+        extract_calls = []
+        self.run_iteration(extract_calls, [{'findings': []}])
+        self.rewrite_draft_without_report()
+        pending_bytes = self.mark_repair_pending()
+        digest = self.retire_bytes(pending_bytes)
+        state_path = NoticeStateManager(self.root).state_path('bnd_101')
+        state_bytes = state_path.read_bytes()
+
+        extract_calls.clear()
+        report2, review_calls2 = self.run_iteration(extract_calls, [])
+        self.assertEqual(review_calls2, [])
+        self.assertEqual(extract_calls, [])
+        counts2 = report2['sources']['test_board']
+        self.assertEqual(counts2['retired'], 1)
+        self.assertEqual(counts2['reused'], 0)
+        self.assertEqual(counts2['bundle_outcomes'][0]['outcome'], 'retired')
+        self.assertIn('operator_retired_exact_version', counts2['bundle_outcomes'][0]['reasons'])
+        self.assertEqual(report2['summary']['drafts']['retired'], 1)
+        self.assertEqual(report2['summary']['drafts']['total_backlog_awaiting_review'], 0)
+        state, draft_path = self.saved_state_and_draft()
+        self.assertEqual(draft_path.read_bytes(), pending_bytes)
+        self.assertEqual(state_path.read_bytes(), state_bytes)
+        self.assertEqual(state['draft_sha256'], digest)
+        self.assertFalse((self.root / 'publication' / 'receipts').exists())
+
+    def test_retirement_is_scoped_to_the_exact_draft_version(self):
+        extract_calls = []
+        self.run_iteration(extract_calls, [{'findings': []}])
+        self.rewrite_draft_without_report()
+        foreign_digest = 'a' * 64
+        retirements = self.root / 'publication' / 'retirements'
+        retirements.mkdir(parents=True, exist_ok=True)
+        atomic_write(retirements / f'{foreign_digest}.json',
+                     json.dumps({'draft_sha256': foreign_digest,
+                                 'reason': 'different_version'}).encode())
+
+        report2, review_calls2 = self.run_iteration(extract_calls, [{'findings': []}])
+        self.assertEqual(review_calls2, ['review'])
+        counts2 = report2['sources']['test_board']
+        self.assertEqual(counts2['reused'], 1)
+        self.assertEqual(counts2.get('retired', 0), 0)
+        self.assertIn('review_report_recovered', counts2['bundle_outcomes'][0]['reasons'])
+        self.assertEqual(report2['summary']['drafts']['retired'], 0)
 
     def test_published_draft_is_never_revised(self):
         extract_calls = []
