@@ -42,6 +42,33 @@ def gemini_api_key(env: dict[str, str] | None = None) -> str:
     return keys[0]
 
 
+# Auxiliary Gemini tasks each own their model setting. They must never inherit
+# the shared LLM_MODEL, which may name the DeepSeek model used for extraction.
+GEMINI_PURPOSE_MODEL_ENV = {
+    "search": "GEMINI_SEARCH_MODEL",
+    "review": "GEMINI_REVIEW_MODEL",
+    "vision": "GEMINI_VISION_MODEL",
+}
+GEMINI_PURPOSE_MODEL_DEFAULT = "gemini-3.8-flash"
+_MODEL_NAME_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,100}")
+
+
+def gemini_purpose_model(purpose: str, env: dict[str, str] | None = None) -> str:
+    """Resolve an auxiliary task's model from its dedicated env var; default when unset.
+
+    Raises ValueError for unknown purposes or malformed names so an invalid
+    setting fails loudly instead of silently corrupting the request URL.
+    """
+    if purpose not in GEMINI_PURPOSE_MODEL_ENV:
+        raise ValueError(f"Unknown Gemini model purpose: {purpose}")
+    source_env = env if env is not None else os.environ
+    model = (source_env.get(GEMINI_PURPOSE_MODEL_ENV[purpose]) or "").strip()
+    model = model or GEMINI_PURPOSE_MODEL_DEFAULT
+    if not _MODEL_NAME_PATTERN.fullmatch(model):
+        raise ValueError("Invalid Gemini model name")
+    return model
+
+
 def is_gemini_quota_exhausted(response: Any) -> bool:
     """Return True only for HTTP 429 or RESOURCE_EXHAUSTED quota errors."""
     status_code = getattr(response, "status_code", None)

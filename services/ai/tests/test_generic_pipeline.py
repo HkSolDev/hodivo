@@ -1,8 +1,11 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import generic_pipeline
 from generic_pipeline import run_pipeline
 from store_candidate import StorageCandidate
 from services.ai.tests import test_shared_pipeline
@@ -20,6 +23,36 @@ class GenericPipelineTests(unittest.TestCase):
 
     def prepare(self, root, **_options):
         return [self.fixture.run_source()]
+
+    def test_review_search_and_vision_providers_receive_their_own_models(self):
+        real_provider = generic_pipeline.GeminiProvider
+        constructed = []
+
+        def factory(**kwargs):
+            provider = real_provider(**kwargs)
+            constructed.append(dict(kwargs))
+            return provider
+
+        env = {
+            'GEMINI_API_KEYS': 'test-key-a',
+            'LLM_MODEL': 'deepseek-flash',
+            'GEMINI_SEARCH_MODEL': 'gemini-search-test',
+            'GEMINI_REVIEW_MODEL': 'gemini-review-test',
+            'GEMINI_VISION_MODEL': 'gemini-vision-test',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            def prepare(_root, **_options):
+                return [{'source': 'wiring', 'status': 'scanned', 'prepared_inputs': 0,
+                         'prepared_paths': []}]
+            with patch.object(generic_pipeline, 'GeminiProvider', factory):
+                run_pipeline(self.root / 'model_wiring', prepare=prepare,
+                             extract=generic_pipeline.extract_bundle)
+            vision_provider = generic_pipeline._resolve_vision_provider(None, allow_default=True)
+        self.assertEqual(
+            sorted(item['model'] for item in constructed),
+            ['gemini-review-test', 'gemini-search-test'])
+        self.assertNotIn('deepseek-flash', [item['model'] for item in constructed])
+        self.assertEqual(vision_provider.model, 'gemini-vision-test')
 
     def test_ready_html_pdf_bundle_creates_draft_without_bypassing_review(self):
         calls, pushed = [], []

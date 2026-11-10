@@ -13,7 +13,7 @@ from extract_bundle import extract_bundle
 from notice_state import (EXTRACTION_VERSION, NoticeStateManager,
                           compute_evidence_fingerprint)
 from pipeline import push_to_ts
-from providers.gemini import GeminiProvider, gemini_api_keys
+from providers.gemini import GeminiProvider, gemini_api_keys, gemini_purpose_model
 from shared_pipeline import prepare_sources
 from source_registry import DEFAULT_SOURCES_PATH
 from store_candidate import prepare_storage
@@ -41,7 +41,7 @@ def _resolve_vision_provider(vision_provider, *, allow_default=False):
     if vision_provider is not None:
         return vision_provider
     if allow_default and gemini_api_keys():
-        return GeminiProvider()
+        return GeminiProvider(model=gemini_purpose_model('vision'))
     return None
 
 
@@ -105,9 +105,11 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
     root.mkdir(parents=True, exist_ok=True)
     state_manager = NoticeStateManager(root)
     if review_fn is None and extract is extract_bundle and gemini_api_keys():
-        reviewer = GeminiProvider()
+        reviewer = GeminiProvider(model=gemini_purpose_model('review'))
         from repair_clients import GeminiRepairSearch, OfficialRepairCapture
-        search_client = search_client or GeminiRepairSearch(reviewer)
+        if search_client is None:
+            # Research discovery gets its own configured provider instance.
+            search_client = GeminiRepairSearch(GeminiProvider(model=gemini_purpose_model('search')))
         capture_client = capture_client or OfficialRepairCapture(root / 'repair_capture')
         def review_fn(candidate, evidence):
             return reviewer.request_json(
