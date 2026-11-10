@@ -22,8 +22,8 @@ the established Node address-family flags. The worker uses the existing pinned
 Python dependencies and non-root scheduler, with no HTTP service or exposed port.
 `.dockerignore` excludes environment files, generated output and local data.
 
-The frontend Dockerfile runs `pnpm next:build --webpack`, the locally verified
-build command. It copies `app`, `components`, `frontend`, and `public/css`, then
+The frontend Dockerfile runs `pnpm next:build`. That script is `next build
+--webpack`, the locally verified build command. It copies `app`, `components`, `frontend`, and `public/css`, then
 copies standalone output, static chunks and public assets into the runtime.
 The API copies all `src` modules, both runtime script dependencies (`match.ts`
 and `validate-post.ts`), shared `frontend` filter helpers, generated Prisma

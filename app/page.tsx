@@ -1,14 +1,22 @@
 import {
   CatalogueGrid,
   fetchPublicJobs,
+  type JobsApiResponse,
 } from '@/components/jobs/catalogue-grid';
 import Link from 'next/link';
 import { readJobFilters } from '@/frontend/public-job-filters';
-import { JobSearchControls } from '@/components/jobs/job-search-controls';
+import { JobSearchRegion } from '@/components/jobs/job-search-controls';
 import { readHomeView } from '@/frontend/home-view';
 import { HomeReviewControls } from '@/components/jobs/home-layout-controls';
 import { HomeReviewState } from '@/components/jobs/home-review-state';
 import { HomeRecommendations } from '@/components/jobs/home-recommendations';
+import type { SearchOutcome } from '@/frontend/search-pending';
+
+function searchOutcome(result: JobsApiResponse | null): SearchOutcome {
+  if (!result || !result.data) return 'unavailable';
+  if (result.freshnessUnconfirmed) return 'stale';
+  return 'results';
+}
 
 export default async function HomePage(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -71,29 +79,37 @@ export default async function HomePage(props: {
         </div>
       </section>
 
-      <JobSearchControls filters={filters} view={view} />
-      {view.reviewProfile === 'setup' && !searching && (
-        <section className="panel home-profile-gate">
-          <h2>Find jobs for your qualifications</h2>
-          <p>Complete your profile to see recommendations here.</p>
-          <Link className="button button-secondary" href="/profile">
-            Complete profile
-          </Link>
-        </section>
-      )}
-      {ready && result?.reviewRecommendations && (
-        <HomeRecommendations
-          jobs={result.reviewRecommendations}
-          filters={filters}
-          view={view}
-        />
-      )}
-      <CatalogueGrid
-        page={page}
+      <JobSearchRegion
         filters={filters}
         view={view}
-        result={result}
-      />
+        page={page}
+        outcome={searchOutcome(result)}
+        results={
+          <CatalogueGrid
+            page={page}
+            filters={filters}
+            view={view}
+            result={result}
+          />
+        }
+      >
+        {view.reviewProfile === 'setup' && !searching && (
+          <section className="panel home-profile-gate">
+            <h2>Find jobs for your qualifications</h2>
+            <p>Complete your profile to see recommendations here.</p>
+            <Link className="button button-secondary" href="/profile">
+              Complete profile
+            </Link>
+          </section>
+        )}
+        {ready && result?.reviewRecommendations && (
+          <HomeRecommendations
+            jobs={result.reviewRecommendations}
+            filters={filters}
+            view={view}
+          />
+        )}
+      </JobSearchRegion>
       {view.reviewProfile === 'guest' && (
         <div className="home-guest-note">
           <strong>Want suggestions based on your profile?</strong>{' '}
