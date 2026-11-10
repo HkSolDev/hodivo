@@ -146,5 +146,76 @@ class GeminiProviderTests(unittest.TestCase):
                 gemini_purpose_model('extraction')
 
 
+class GeminiGroundedSearchTests(unittest.TestCase):
+    def response(self, text, grounding=None, finish='STOP'):
+        candidate = {'finishReason': finish, 'content': {'parts': [{'text': text}]}}
+        if grounding is not None:
+            candidate['groundingMetadata'] = grounding
+        return httpx.Response(200, json={'candidates': [candidate],
+                                        'usageMetadata': {'totalTokenCount': 10}})
+
+    def test_search_then_schema_preserves_grounding_and_numeric_candidate(self):
+        metadata = {'webSearchQueries': ['SSC JE age'], 'groundingChunks': [
+            {'web': {'uri': 'https://ssc.gov.in/notice.pdf', 'title': 'SSC'}}]}
+        client = Mock()
+        client.post.side_effect = [self.response('Official notice says maximum age 30.', metadata),
+            self.response('{"candidates": [{"value": 30}]}')]
+        provider = GeminiProvider(keys=['test-only'], model='gemini-2.5-flash', client=client)
+        schema = {'type': 'object', 'properties': {'candidates': {'type': 'array'}}}
+        result = provider.discover_sources(query='SSC JE age', system_prompt='Official evidence only',
+                                           response_schema=schema)
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['data']['candidates'][0]['value'], 30)
+        first, second = [call.kwargs['json'] for call in client.post.call_args_list]
+        self.assertEqual(first['tools'], [{'google_search': {}}])
+        self.assertNotIn('responseMimeType', first.get('generationConfig', {}))
+        self.assertNotIn('responseJsonSchema', first.get('generationConfig', {}))
+        self.assertNotIn('tools', second)
+        self.assertEqual(second['generationConfig']['responseJsonSchema'], schema)
+        self.assertIn('maximum age 30', second['contents'][0]['parts'][0]['text'])
+        self.assertEqual(result['grounding_metadata'], metadata)
+        self.assertEqual(result['stage_usage']['search']['totalTokenCount'], 10)
+        self.assertEqual(result['stage_usage']['structure']['totalTokenCount'], 10)
+        self.assertEqual(result['attempt_count'], 2)
+
+    def test_missing_grounding_or_empty_text_skips_second_call(self):
+        for text, metadata in [('Answer without sources', None), ('', {'groundingChunks': [{}]})]:
+            client = Mock()
+            client.post.return_value = self.response(text, metadata)
+            result = GeminiProvider(keys=['test-only'], client=client).discover_sources(
+                query='q', system_prompt='s', response_schema={})
+            self.assertEqual(result['status'], 'unresolved')
+            self.assertEqual(result['reason'], 'gemini_search_ungrounded')
+            self.assertEqual(client.post.call_count, 1)
+
+    def test_search_failure_does_not_generate_and_structure_failure_retains_evidence(self):
+        client = Mock()
+        provider = GeminiProvider(keys=['test-only'], client=client)
+        client.post.return_value = httpx.Response(503)
+        self.assertEqual(provider.discover_sources(query='q', system_prompt='s', response_schema={})['reason'], 'gemini_http_503')
+        self.assertEqual(client.post.call_count, 1)
+        metadata = {'groundingChunks': [{'web': {'uri': 'https://ssc.gov.in'}}]}
+        client.post.reset_mock()
+        client.post.side_effect = [self.response('notice', metadata), self.response('invalid JSON')]
+        result = provider.discover_sources(query='q', system_prompt='s', response_schema={})
+        self.assertEqual(result['status'], 'unresolved')
+        self.assertEqual(result['reason'], 'gemini_json_invalid')
+        self.assertEqual(result['grounding_metadata'], metadata)
+        self.assertEqual(client.post.call_count, 2)
+
+    def test_quota_rotation_is_bounded_in_both_stages(self):
+        client = Mock()
+        metadata = {'groundingChunks': [{'web': {'uri': 'https://ssc.gov.in'}}]}
+        client.post.side_effect = [httpx.Response(429), self.response('notice', metadata),
+                                  httpx.Response(429), self.response('{"candidates": []}')]
+        result = GeminiProvider(keys=['secret-a', 'secret-b'], client=client).discover_sources(
+            query='q', system_prompt='s', response_schema={})
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['attempt_count'], 4)
+        self.assertEqual(client.post.call_count, 4)
+        self.assertNotIn('secret-a', json.dumps(result))
+        self.assertNotIn('secret-b', json.dumps(result))
+
+
 if __name__ == '__main__':
     unittest.main()
