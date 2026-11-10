@@ -1,11 +1,20 @@
+import hashlib
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import generic_pipeline
+import providers.tasks as task_providers
+from capture_store import atomic_write
 from generic_pipeline import run_pipeline
-from store_candidate import StorageCandidate
+from notice_state import NoticeStateManager
+from services.ai.tests import test_notice_state
 from services.ai.tests import test_shared_pipeline
+from stage_retry import StageRetries
+from store_candidate import StorageCandidate
 
 
 class GenericPipelineTests(unittest.TestCase):
@@ -20,6 +29,36 @@ class GenericPipelineTests(unittest.TestCase):
 
     def prepare(self, root, **_options):
         return [self.fixture.run_source()]
+
+    def test_review_search_and_vision_providers_receive_their_own_models(self):
+        real_provider = task_providers.GeminiProvider
+        constructed = []
+
+        def factory(**kwargs):
+            provider = real_provider(**kwargs)
+            constructed.append(dict(kwargs))
+            return provider
+
+        env = {
+            'GEMINI_API_KEYS': 'test-key-a',
+            'LLM_MODEL': 'deepseek-flash',
+            'GEMINI_SEARCH_MODEL': 'gemini-search-test',
+            'GEMINI_REVIEW_MODEL': 'gemini-review-test',
+            'GEMINI_VISION_MODEL': 'gemini-vision-test',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            def prepare(_root, **_options):
+                return [{'source': 'wiring', 'status': 'scanned', 'prepared_inputs': 0,
+                         'prepared_paths': []}]
+            with patch.object(task_providers, 'GeminiProvider', factory):
+                run_pipeline(self.root / 'model_wiring', prepare=prepare,
+                             extract=generic_pipeline.extract_bundle)
+            vision_provider = generic_pipeline._resolve_vision_provider(None, allow_default=True)
+        self.assertEqual(
+            sorted(item['model'] for item in constructed),
+            ['gemini-review-test', 'gemini-search-test'])
+        self.assertNotIn('deepseek-flash', [item['model'] for item in constructed])
+        self.assertEqual(vision_provider.model, 'gemini-vision-test')
 
     def test_ready_html_pdf_bundle_creates_draft_without_bypassing_review(self):
         calls, pushed = [], []
@@ -309,6 +348,254 @@ class GenericPipelineTests(unittest.TestCase):
         self.assertEqual(retried['sources']['upessc_board']['checkpoint_reused'], 1)
         self.assertEqual(retried['sources']['upessc_board']['published'], 0)
         self.assertEqual(pushed_blocked, [])
+
+
+class GenericDraftReviewRecoveryTests(unittest.TestCase):
+    """Recovery of missing second-review reports on reused unchanged drafts."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.addCleanup(self.temp.cleanup)
+
+    def run_iteration(self, extract_calls, review_payloads, *, retry_clock=None):
+        prepared_path = self.root / 'prepared.json'
+        prepared_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(prepared_path,
+                     json.dumps(test_notice_state.sample_prepared(), ensure_ascii=False).encode())
+        review_calls = []
+
+        def prepare(_root, **_options):
+            return [{'source': 'test_board', 'status': 'prepared_for_review',
+                     'prepared_inputs': 1, 'prepared_paths': [str(prepared_path)]}]
+
+        def extract(prepared):
+            extract_calls.append('extract')
+            return {'bundle_id': prepared['llm_input']['input']['bundle_id'],
+                    'facts': test_notice_state.sample_facts()}
+
+        def validate(_res, _src):
+            return {'status': 'needs_review', 'disposition': 'valid_recruitment_review_draft'}
+
+        def draft(res, _src, *, source_name):
+            return {'bundle_id': res['bundle_id'], 'source_name': source_name, 'facts': res['facts']}
+
+        def review_fn(_candidate, _evidence):
+            if not review_payloads:
+                self.fail('Unexpected second-review call')
+            review_calls.append('review')
+            return review_payloads.pop(0)
+
+        report = run_pipeline(self.root, prepare=prepare, extract=extract, validate=validate,
+                              draft=draft, review_fn=review_fn, retry_clock=retry_clock)
+        return report, review_calls
+
+    def rewrite_draft_without_report(self):
+        """Record the draft as a legacy envelope that predates saved review reports."""
+        manager = NoticeStateManager(self.root)
+        state = json.loads(manager.state_path('bnd_101').read_text())
+        draft_path = Path(state['draft_path'])
+        envelope = json.loads(draft_path.read_bytes())
+        metadata = envelope.get('metadata') or {}
+        for key in ('review_report', 'repair_pending', 'repair_next_at', 'repair_candidate'):
+            metadata.pop(key, None)
+        metadata['operator_observation'] = 'unknown-metadata-key-survives-recovery'
+        envelope['metadata'] = metadata
+        draft_bytes = json.dumps(envelope, ensure_ascii=False, indent=2).encode()
+        draft_path.write_bytes(draft_bytes)
+        state['draft_sha256'] = hashlib.sha256(draft_bytes).hexdigest()
+        manager.state_path('bnd_101').write_text(json.dumps(state, indent=2))
+        return draft_bytes
+
+    def saved_state_and_draft(self):
+        state = json.loads(NoticeStateManager(self.root).state_path('bnd_101').read_text())
+        return state, Path(state['draft_path'])
+
+    def mark_published(self, draft_bytes):
+        receipt = {'draft_sha256': hashlib.sha256(draft_bytes).hexdigest(),
+                   'candidate_id': 'candidate-1', 'content_hash': 'a' * 64,
+                   'post_ids': ['post-1']}
+        payload = json.dumps(receipt).encode()
+        receipts = self.root / 'publication' / 'receipts'
+        receipts.mkdir(parents=True, exist_ok=True)
+        atomic_write(receipts / f"{receipt['draft_sha256']}.json", payload)
+        stage = StageRetries(self.root)
+        stage.begin('publication', receipt['draft_sha256'])
+        stage.success('publication', receipt['draft_sha256'],
+                      receipt_sha256=hashlib.sha256(payload).hexdigest())
+
+    def approve_current_bytes(self, draft_bytes):
+        approvals = self.root / 'publication' / 'approvals'
+        approvals.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(draft_bytes).hexdigest()
+        atomic_write(approvals / f'{digest}.json', json.dumps({'draft_sha256': digest}).encode())
+
+    def test_missing_report_is_recovered_without_extraction_and_unknown_metadata_persists(self):
+        extract_calls = []
+        report1, _ = self.run_iteration(extract_calls, [{'findings': []}])
+        self.assertEqual(extract_calls, ['extract'])
+        self.assertEqual(report1['sources']['test_board']['drafts'], 1)
+
+        legacy_bytes = self.rewrite_draft_without_report()
+
+        extract_calls.clear()
+        report2, review_calls2 = self.run_iteration(extract_calls, [{'findings': []}])
+        self.assertEqual(extract_calls, [])
+        self.assertEqual(review_calls2, ['review'])
+        counts2 = report2['sources']['test_board']
+        self.assertEqual(counts2['reused'], 1)
+        self.assertEqual(counts2['review_recovered'], 1)
+        self.assertIn('review_report_recovered', counts2['bundle_outcomes'][0]['reasons'])
+
+        state, draft_path = self.saved_state_and_draft()
+        draft_now = draft_path.read_bytes()
+        self.assertNotEqual(draft_now, legacy_bytes)
+        self.assertEqual(state['draft_sha256'], hashlib.sha256(draft_now).hexdigest())
+        envelope = json.loads(draft_now)
+        self.assertEqual(envelope['disposition'], 'valid_recruitment_review_draft')
+        self.assertEqual(envelope['metadata']['review_report']['status'], 'supported')
+        self.assertEqual(envelope['metadata']['operator_observation'],
+                         'unknown-metadata-key-survives-recovery')
+        self.assertEqual(envelope['facts'], json.loads(legacy_bytes)['facts'])
+
+        report3, review_calls3 = self.run_iteration(extract_calls, [])
+        counts3 = report3['sources']['test_board']
+        self.assertEqual(counts3['reused'], 1)
+        self.assertEqual(counts3.get('review_recovered', 0), 0)
+        self.assertEqual(review_calls3, [])
+        self.assertEqual(extract_calls, [])
+
+    def test_unavailable_reviewer_defers_recovery_and_keeps_the_draft_untouched(self):
+        extract_calls = []
+        self.run_iteration(extract_calls, [{'findings': []}])
+        legacy_bytes = self.rewrite_draft_without_report()
+
+        report2, review_calls2 = self.run_iteration(extract_calls,
+                                                    [{'status': 'unresolved', 'retryable': True}])
+        self.assertEqual(review_calls2, ['review'])
+        counts2 = report2['sources']['test_board']
+        self.assertEqual(counts2['reused'], 1)
+        self.assertEqual(counts2.get('review_recovered', 0), 0)
+        self.assertIn('review_report_recovery_deferred', counts2['bundle_outcomes'][0]['reasons'])
+        state, draft_path = self.saved_state_and_draft()
+        self.assertEqual(draft_path.read_bytes(), legacy_bytes)
+        self.assertEqual(state['draft_sha256'], hashlib.sha256(legacy_bytes).hexdigest())
+
+        digest = hashlib.sha256(legacy_bytes).hexdigest()
+        ledger = StageRetries(self.root)
+        wait_until = ledger.read('review_recovery', digest)['next_at']
+        report_wait, calls_wait = self.run_iteration(extract_calls, [], retry_clock=lambda: wait_until - 1)
+        self.assertEqual(calls_wait, [])
+        self.assertEqual(draft_path.read_bytes(), legacy_bytes)
+        self.assertIn('review_report_recovery_waiting', report_wait['sources']['test_board']['bundle_outcomes'][0]['reasons'])
+        report3, review_calls3 = self.run_iteration(extract_calls, [{'findings': []}], retry_clock=lambda: wait_until + 1)
+        self.assertEqual(review_calls3, ['review'])
+        self.assertEqual(report3['sources']['test_board']['review_recovered'], 1)
+        self.assertEqual(ledger.read('review_recovery', digest)['status'], 'success')
+        self.assertFalse(ledger.path('publication', digest).exists())
+
+    def mark_repair_pending(self):
+        """Make the saved envelope look like an interrupted repair attempt."""
+        manager = NoticeStateManager(self.root)
+        state = json.loads(manager.state_path('bnd_101').read_text())
+        draft_path = Path(state['draft_path'])
+        envelope = json.loads(draft_path.read_bytes())
+        metadata = envelope.get('metadata') or {}
+        metadata['repair_pending'] = True
+        metadata['repair_next_at'] = 0
+        metadata['repair_candidate'] = {'bundle_id': 'bnd_101'}
+        envelope['metadata'] = metadata
+        draft_bytes = json.dumps(envelope, ensure_ascii=False, indent=2).encode()
+        draft_path.write_bytes(draft_bytes)
+        state['draft_sha256'] = hashlib.sha256(draft_bytes).hexdigest()
+        manager.state_path('bnd_101').write_text(json.dumps(state, indent=2))
+        return draft_bytes
+
+    def retire_bytes(self, draft_bytes, reason='operator_retired_test'):
+        digest = hashlib.sha256(draft_bytes).hexdigest()
+        retirements = self.root / 'publication' / 'retirements'
+        retirements.mkdir(parents=True, exist_ok=True)
+        atomic_write(retirements / f'{digest}.json',
+                     json.dumps({'draft_sha256': digest, 'bundle_id': 'bnd_101',
+                                 'retired_at': '2026-11-10T00:00:00+00:00',
+                                 'reason': reason}).encode())
+        return digest
+
+    def test_retired_draft_is_skipped_without_ai_or_persistence(self):
+        extract_calls = []
+        self.run_iteration(extract_calls, [{'findings': []}])
+        self.rewrite_draft_without_report()
+        pending_bytes = self.mark_repair_pending()
+        digest = self.retire_bytes(pending_bytes)
+        state_path = NoticeStateManager(self.root).state_path('bnd_101')
+        state_bytes = state_path.read_bytes()
+
+        extract_calls.clear()
+        report2, review_calls2 = self.run_iteration(extract_calls, [])
+        self.assertEqual(review_calls2, [])
+        self.assertEqual(extract_calls, [])
+        counts2 = report2['sources']['test_board']
+        self.assertEqual(counts2['retired'], 1)
+        self.assertEqual(counts2['reused'], 0)
+        self.assertEqual(counts2['bundle_outcomes'][0]['outcome'], 'retired')
+        self.assertIn('operator_retired_exact_version', counts2['bundle_outcomes'][0]['reasons'])
+        self.assertEqual(report2['summary']['drafts']['retired'], 1)
+        self.assertEqual(report2['summary']['drafts']['total_backlog_awaiting_review'], 0)
+        state, draft_path = self.saved_state_and_draft()
+        self.assertEqual(draft_path.read_bytes(), pending_bytes)
+        self.assertEqual(state_path.read_bytes(), state_bytes)
+        self.assertEqual(state['draft_sha256'], digest)
+        self.assertFalse((self.root / 'publication' / 'receipts').exists())
+
+    def test_retirement_is_scoped_to_the_exact_draft_version(self):
+        extract_calls = []
+        self.run_iteration(extract_calls, [{'findings': []}])
+        self.rewrite_draft_without_report()
+        foreign_digest = 'a' * 64
+        retirements = self.root / 'publication' / 'retirements'
+        retirements.mkdir(parents=True, exist_ok=True)
+        atomic_write(retirements / f'{foreign_digest}.json',
+                     json.dumps({'draft_sha256': foreign_digest,
+                                 'reason': 'different_version'}).encode())
+
+        report2, review_calls2 = self.run_iteration(extract_calls, [{'findings': []}])
+        self.assertEqual(review_calls2, ['review'])
+        counts2 = report2['sources']['test_board']
+        self.assertEqual(counts2['reused'], 1)
+        self.assertEqual(counts2.get('retired', 0), 0)
+        self.assertIn('review_report_recovered', counts2['bundle_outcomes'][0]['reasons'])
+        self.assertEqual(report2['summary']['drafts']['retired'], 0)
+
+    def test_published_draft_is_never_revised(self):
+        extract_calls = []
+        self.run_iteration(extract_calls, [{'findings': []}])
+        legacy_bytes = self.rewrite_draft_without_report()
+        self.mark_published(legacy_bytes)
+
+        report2, review_calls2 = self.run_iteration(extract_calls, [{'findings': []}])
+        self.assertEqual(review_calls2, [])
+        counts2 = report2['sources']['test_board']
+        self.assertEqual(counts2['published'], 1)
+        self.assertEqual(counts2.get('review_recovered', 0), 0)
+        self.assertEqual(report2['summary']['drafts']['review_reports_recovered'], 0)
+        state, draft_path = self.saved_state_and_draft()
+        self.assertEqual(draft_path.read_bytes(), legacy_bytes)
+
+    def test_approved_draft_is_never_revised_or_unapproved(self):
+        extract_calls = []
+        self.run_iteration(extract_calls, [{'findings': []}])
+        legacy_bytes = self.rewrite_draft_without_report()
+        self.approve_current_bytes(legacy_bytes)
+
+        report2, review_calls2 = self.run_iteration(extract_calls, [{'findings': []}])
+        self.assertEqual(review_calls2, [])
+        counts2 = report2['sources']['test_board']
+        self.assertEqual(counts2.get('review_recovered', 0), 0)
+        self.assertEqual(counts2['reused'], 1)
+        state, draft_path = self.saved_state_and_draft()
+        self.assertEqual(draft_path.read_bytes(), legacy_bytes)
+        digest = hashlib.sha256(legacy_bytes).hexdigest()
+        self.assertTrue((self.root / 'publication' / 'approvals' / f'{digest}.json').is_file())
 
 
 if __name__ == '__main__':

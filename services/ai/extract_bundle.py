@@ -90,6 +90,8 @@ class FactDecodingError(RuntimeError):
 def provider_keys(provider):
     if provider == 'openai':
         names = ['OPENAI_API_KEY']
+    elif provider == 'xai':
+        names = ['XAI_API_KEY']
     elif provider == 'deepseek':
         names = ['DEEPSEEK_API_KEY']
     else:
@@ -118,11 +120,13 @@ def invalid_gemini_key(response):
 def request_structured(source, schema, instructions, *, provider=None, model=None, client=None):
     """One bounded provider request; shared by single-pass and staged extraction."""
     provider = provider or os.getenv('LLM_PROVIDER', 'gemini')
-    if provider not in {'openai', 'gemini', 'deepseek'}:
-        raise ValueError('Use openai, gemini or deepseek')
+    if provider not in {'openai', 'gemini', 'deepseek', 'xai'}:
+        raise ValueError('Use openai, gemini, deepseek or xai')
     delay = provider_off_peak_delay(provider)
     if delay:
         raise ProviderDeferred(delay)
+    if provider == 'xai' and not (model or os.getenv('LLM_MODEL')):
+        raise ValueError('LLM_MODEL is required for xai')
     model = model or os.getenv('LLM_MODEL') or {
         'openai': 'gpt-4o-mini', 'gemini': 'gemini-3.8-flash', 'deepseek': 'deepseek-flash'}[provider]
     if not re.fullmatch(r'[A-Za-z0-9._-]{1,100}', model):
@@ -135,8 +139,9 @@ def request_structured(source, schema, instructions, *, provider=None, model=Non
                       ensure_ascii=False)) > 120_000:
         raise ValueError('Inline extraction input exceeds character budget')
     prompt = json.dumps(source, ensure_ascii=False)
-    if provider == 'openai':
-        url = 'https://api.openai.com/v1/chat/completions'
+    if provider in {'openai', 'xai'}:
+        url = ('https://api.x.ai/v1/chat/completions' if provider == 'xai'
+               else 'https://api.openai.com/v1/chat/completions')
         headers = {}
         payload = {'model': model, 'messages': [{'role': 'system', 'content': system},
             {'role': 'user', 'content': prompt}], 'response_format': {'type': 'json_schema',
@@ -160,7 +165,7 @@ def request_structured(source, schema, instructions, *, provider=None, model=Non
     # Only explicitly rejected keys fail over. Never repeat a timeout/quota request.
     try:
         for attempt, key in enumerate(keys, 1):
-            headers = ({'Authorization': f'Bearer {key}'} if provider in {'openai', 'deepseek'}
+            headers = ({'Authorization': f'Bearer {key}'} if provider in {'openai', 'deepseek', 'xai'}
                        else {'x-goog-api-key': key})
             response = provider_post(client or httpx, url, headers=headers, json=payload, timeout=120)
             if provider == 'gemini' and invalid_gemini_key(response):
@@ -174,7 +179,7 @@ def request_structured(source, schema, instructions, *, provider=None, model=Non
                 retryable=response.status_code in {408, 429, 500, 502, 503, 504},
                 retry_after=min(int(delay), 86400) if delay.isdigit() else 0)
         data = response.json()
-        if provider in {'openai', 'deepseek'}:
+        if provider in {'openai', 'deepseek', 'xai'}:
             choice = data['choices'][0]
             if choice.get('finish_reason') != 'stop' or choice['message'].get('refusal'):
                 raise RuntimeError('provider_incomplete_or_refused')

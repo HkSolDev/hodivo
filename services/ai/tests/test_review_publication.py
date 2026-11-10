@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 
-from review_publication import approve, publish
+from review_publication import approve, is_retired, publish
 from store_candidate import prepare_storage
 import test_validate_candidate
 
@@ -18,6 +18,50 @@ def fixture(path):
     draft['source_evidence'] = source['documents']
     path.write_text(json.dumps(draft))
     return draft
+
+
+class RetirementMarkerTests(unittest.TestCase):
+    def test_only_wellformed_matching_markers_retire_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            digest = 'c' * 64
+            self.assertFalse(is_retired(root, digest))
+            self.assertFalse(is_retired(root, None))
+            self.assertFalse(is_retired(root, ''))
+            retirements = root / 'publication' / 'retirements'
+            retirements.mkdir(parents=True)
+            marker_path = retirements / f'{digest}.json'
+            marker_path.write_text('{not json', encoding='utf-8')
+            self.assertFalse(is_retired(root, digest))
+            marker_path.write_text(json.dumps({'reason': 'missing digest field'}), encoding='utf-8')
+            self.assertFalse(is_retired(root, digest))
+            marker_path.write_text(json.dumps({'draft_sha256': 'd' * 64, 'reason': 'foreign digest'}),
+                                   encoding='utf-8')
+            self.assertFalse(is_retired(root, digest))
+            marker_path.write_text(json.dumps({'draft_sha256': digest, 'bundle_id': 'bnd_x',
+                                               'retired_at': '2026-11-10T00:00:00+00:00',
+                                               'reason': 'operator decision'}), encoding='utf-8')
+            self.assertTrue(is_retired(root, digest))
+
+    def test_publish_refuses_retired_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'draft.json'
+            fixture(path)
+            approval = approve(root, path, 'Test reviewer', 'Checked original evidence')
+            digest = approval['draft_sha256']
+            retirements = root / 'publication' / 'retirements'
+            retirements.mkdir(parents=True)
+            (retirements / f'{digest}.json').write_text(
+                json.dumps({'draft_sha256': digest, 'bundle_id': approval['bundle_id'],
+                            'retired_at': '2026-11-10T00:00:00+00:00',
+                            'reason': 'operator retired these bytes'}), encoding='utf-8')
+            calls = []
+            with self.assertRaises(ValueError) as ctx:
+                publish(root, path, send=calls.append)
+            self.assertIn('retired', str(ctx.exception))
+            self.assertEqual(calls, [])
+            self.assertFalse((root / 'publication' / 'receipts').exists())
 
 
 class ReviewedPublicationTests(unittest.TestCase):

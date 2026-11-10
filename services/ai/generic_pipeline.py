@@ -13,14 +13,14 @@ from extract_bundle import extract_bundle
 from notice_state import (EXTRACTION_VERSION, NoticeStateManager,
                           compute_evidence_fingerprint)
 from pipeline import push_to_ts
-from providers.gemini import GeminiProvider, gemini_api_keys
+from providers.tasks import task_provider
 from shared_pipeline import prepare_sources
 from source_registry import DEFAULT_SOURCES_PATH
 from store_candidate import prepare_storage
 from validate_candidate import validate_candidate
 from stage_retry import StageRetries
 from extraction_checkpoint import extract_or_resume
-from review_publication import is_valid_receipt_file
+from review_publication import is_retired, is_valid_receipt_file
 from provider_metrics import track_provider_requests
 from autonomous_pipeline import (
     _map_post_to_ingest_post,
@@ -40,8 +40,8 @@ from vision_recovery import (
 def _resolve_vision_provider(vision_provider, *, allow_default=False):
     if vision_provider is not None:
         return vision_provider
-    if allow_default and gemini_api_keys():
-        return GeminiProvider()
+    if allow_default:
+        return task_provider('vision')
     return None
 
 
@@ -51,6 +51,32 @@ def _resolve_persist(persist, *, allow_default=False):
     if allow_default and (os.getenv('INGEST_TOKEN') or os.getenv('INGEST_TOKEN_FILE')):
         return push_to_ts
     return None
+
+
+def _persist_recovered_review_report(state_manager, envelope, bundle_id, review_report):
+    """Attach a recovered second-review report without losing unknown metadata.
+
+    Rewrites the untouched candidate draft with the report attached, then
+    refreshes the durable state checksum so later reuse runs keep matching.
+    """
+    metadata = envelope.get('metadata')
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata['review_report'] = review_report
+    envelope['metadata'] = metadata
+    state = json.loads(state_manager.state_path(bundle_id).read_text(encoding='utf-8'))
+    if not isinstance(state, dict) or not isinstance(state.get('draft_path'), str):
+        raise ValueError('Notice state is missing draft integrity data')
+    draft_path = Path(state['draft_path'])
+    if not draft_path.is_file():
+        raise FileNotFoundError('Draft file missing')
+    draft_bytes = json.dumps(envelope, ensure_ascii=False, indent=2).encode()
+    atomic_write(draft_path, draft_bytes)
+    # Preserve unknown state keys; only the integrity checksum and timestamp change.
+    state['draft_sha256'] = hashlib.sha256(draft_bytes).hexdigest()
+    state['updated_at'] = now()
+    atomic_write(state_manager.state_path(bundle_id), json.dumps(state, indent=2).encode('utf-8'))
+    return draft_path
 
 
 def _source_name(source_id, prepared):
@@ -104,10 +130,14 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     state_manager = NoticeStateManager(root)
-    if review_fn is None and extract is extract_bundle and gemini_api_keys():
-        reviewer = GeminiProvider()
+    reviewer = task_provider('review') if review_fn is None and extract is extract_bundle else None
+    if reviewer is not None:
         from repair_clients import GeminiRepairSearch, OfficialRepairCapture
-        search_client = search_client or GeminiRepairSearch(reviewer)
+        if search_client is None:
+            # Research discovery gets its own configured provider instance.
+            search_provider = task_provider('search')
+            if search_provider is not None:
+                search_client = GeminiRepairSearch(search_provider)
         capture_client = capture_client or OfficialRepairCapture(root / 'repair_capture')
         def review_fn(candidate, evidence):
             return reviewer.request_json(
@@ -287,6 +317,25 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                 with state_manager.notice_lock(bundle_id):
                     cached_envelope = state_manager.get_reusable_draft(
                         bundle_id, fingerprint, extraction_version, source_input=source_input)
+                    draft_sha = None
+                    if cached_envelope is not None:
+                        state_path = state_manager.state_path(bundle_id)
+                        if state_path.is_file():
+                            try:
+                                draft_sha = json.loads(state_path.read_text(encoding='utf-8')).get('draft_sha256')
+                            except (OSError, ValueError):
+                                pass
+                    # Operator retirement of these exact bytes outranks every
+                    # reuse action: no repair-resume, no recovery, no
+                    # persistence, no AI call; draft and state stay untouched.
+                    if draft_sha and is_retired(root, draft_sha):
+                        counts['retired'] = counts.get('retired', 0) + 1
+                        counts['bundle_outcomes'].append({
+                            'bundle_id': bundle_id,
+                            'outcome': 'retired',
+                            'reasons': ['operator_retired_exact_version'],
+                        })
+                        continue
                     repair_resume = None
                     repair_state = (cached_envelope or {}).get('metadata', {})
                     if cached_envelope is not None and repair_state.get('repair_pending'):
@@ -297,13 +346,6 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     if cached_envelope is not None:
                         counts['reused'] += 1
                         disposition = cached_envelope.get('disposition', 'valid_recruitment_review_draft')
-                        state_path = state_manager.state_path(bundle_id)
-                        draft_sha = None
-                        if state_path.is_file():
-                            try:
-                                draft_sha = json.loads(state_path.read_text(encoding='utf-8')).get('draft_sha256')
-                            except (OSError, ValueError):
-                                pass
                         is_published = False
                         if draft_sha:
                             receipt_file = root / 'publication' / 'receipts' / f'{draft_sha}.json'
@@ -317,12 +359,49 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                             counts['published'] = counts.get('published', 0) + 1
                         elif disposition in {'valid_recruitment_review_draft', 'amendment_pending_review', 'unclear_purpose_review'}:
                             counts['reused_awaiting_review'] = counts.get('reused_awaiting_review', 0) + 1
+                        recovery_reasons = []
+                        recovered_metadata = cached_envelope.get('metadata')
+                        # Recovery never touches published or already-approved drafts:
+                        # approvals and receipts are keyed to these exact draft bytes.
+                        if (not is_published
+                                and disposition == 'valid_recruitment_review_draft'
+                                and review_fn is not None and draft_sha
+                                and not (isinstance(recovered_metadata, dict)
+                                         and isinstance(recovered_metadata.get('review_report'), dict))
+                                and not (root / 'publication' / 'approvals' / f'{draft_sha}.json').is_file()):
+                            if not retries.begin('review_recovery', draft_sha):
+                                recovery_reasons.append('review_report_recovery_waiting')
+                            else:
+                                try:
+                                    recovery_report = review_extracted_candidate(
+                                        cached_envelope,
+                                        {'documents': cached_envelope.get('source_evidence') or []},
+                                        review_fn=review_fn,
+                                    )
+                                    finding_reasons = [reason for reason in
+                                                       (recovery_report.get('blocking_reasons') or []) +
+                                                       (recovery_report.get('retryable_reasons') or [])
+                                                       if str(reason).startswith('review_finding:')]
+                                    if recovery_report.get('status') == 'supported' or finding_reasons:
+                                        _persist_recovered_review_report(
+                                            state_manager, cached_envelope, bundle_id, recovery_report)
+                                        retries.success('review_recovery', draft_sha)
+                                        counts['review_recovered'] = counts.get('review_recovered', 0) + 1
+                                        recovery_reasons.append('review_report_recovered')
+                                    else:
+                                        # An unavailable reviewer keeps the draft untouched;
+                                        # the report is retried on a later reuse run.
+                                        retries.failure('review_recovery', draft_sha, 'review_recovery_unavailable', retryable=bool(recovery_report.get('retryable')))
+                                        recovery_reasons.append('review_report_recovery_deferred')
+                                except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+                                    retries.failure('review_recovery', draft_sha, 'review_recovery_failed', retryable=True)
+                                    recovery_reasons.append('review_report_recovery_deferred')
 
                         counts['bundle_outcomes'].append({
                             'bundle_id': bundle_id,
                             'outcome': 'reused',
                             'disposition': disposition,
-                            'reasons': ['unchanged_evidence_fingerprint'],
+                            'reasons': sorted(set(['unchanged_evidence_fingerprint'] + recovery_reasons)),
                         })
                         # Unchanged completed drafts need no additional extraction.
                         continue
@@ -674,6 +753,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
 
     total_drafts_created = sum(report['sources'][s['source']].get('drafts', 0) for s in enabled_sources)
     total_reused_awaiting_review = sum(report['sources'][s['source']].get('reused_awaiting_review', 0) for s in enabled_sources)
+    total_review_recovered = sum(report['sources'][s['source']].get('review_recovered', 0) for s in enabled_sources)
+    total_retired = sum(report['sources'][s['source']].get('retired', 0) for s in enabled_sources)
     total_published_seen = sum(report['sources'][s['source']].get('published', 0) for s in enabled_sources)
     total_amendments = sum(report['sources'][s['source']].get('amendments', 0) for s in enabled_sources)
     total_unclear = sum(report['sources'][s['source']].get('unclear', 0) for s in enabled_sources)
@@ -688,6 +769,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
             try:
                 raw_draft = f.read_bytes()
                 d_hash = hashlib.sha256(raw_draft).hexdigest()
+                if is_retired(root, d_hash):
+                    continue
                 post_count = None
                 try:
                     draft_obj = json.loads(raw_draft)
@@ -703,8 +786,18 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     backlog_drafts += 1
             except OSError:
                 pass
-    backlog_amendments = len(list((root / 'amendments').glob('*.json'))) if (root / 'amendments').is_dir() else 0
-    backlog_unclear = len(list((root / 'unclear').glob('*.json'))) if (root / 'unclear').is_dir() else 0
+    def active_review_count(folder):
+        count = 0
+        for path in (root / folder).glob('*.json'):
+            try:
+                if not is_retired(root, hashlib.sha256(path.read_bytes()).hexdigest()):
+                    count += 1
+            except OSError:
+                continue
+        return count
+
+    backlog_amendments = active_review_count('amendments')
+    backlog_unclear = active_review_count('unclear')
     total_backlog_awaiting_review = backlog_drafts + backlog_amendments + backlog_unclear
 
     for s in enabled_sources:
@@ -784,6 +877,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
         'drafts': {
             'created': total_drafts_created,
             'reused_awaiting_review': total_reused_awaiting_review,
+            'review_reports_recovered': total_review_recovered,
+            'retired': total_retired,
             'awaiting_review': run_awaiting_review,
             'published': total_published_seen,
             'total_backlog_awaiting_review': total_backlog_awaiting_review,

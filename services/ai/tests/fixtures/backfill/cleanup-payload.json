@@ -1,0 +1,22 @@
+{
+  "retire": [
+    {
+      "folder": "drafts",
+      "id": "draft_one",
+      "sha256": "e9bf7adedf1b4db677c33b87145a66bf021b0f3ca7c1b5c0cc0f961a129210fd",
+      "reason": "recorded_deadline_elapsed"
+    },
+    {
+      "folder": "drafts",
+      "id": "draft_two",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "reason": "listing_page_without_job_critical_evidence"
+    },
+    {
+      "folder": "drafts",
+      "id": "draft_missing",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "reason": "recorded_deadline_elapsed"
+    }
+  ]
+}

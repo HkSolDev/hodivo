@@ -31,6 +31,28 @@ def validate_review(reviewer, note):
         raise ValueError('Identified review and note required')
 
 
+def retirement_path(root, digest):
+    return Path(root) / 'publication' / 'retirements' / f'{digest}.json'
+
+
+def is_retired(root, digest):
+    """True only when a well-formed retirement marker keys to exactly these bytes.
+
+    A malformed or foreign marker retires nothing: the marker's draft_sha256
+    must match the digest its filename is keyed to.
+    """
+    if not isinstance(digest, str) or not digest:
+        return False
+    path = retirement_path(root, digest)
+    if not path.is_file():
+        return False
+    try:
+        marker = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return False
+    return isinstance(marker, dict) and marker.get('draft_sha256') == digest
+
+
 def approve(root, path, reviewer, note):
     validate_review(reviewer, note)
     _, digest, draft = reviewed_draft(path)
@@ -45,6 +67,10 @@ def approve(root, path, reviewer, note):
 def publish(root, path, *, send=None, clock=None):
     raw, digest, draft = reviewed_draft(path)
     root = Path(root)
+    # Retirement is an operator decision about these exact bytes and is
+    # checked before any publication step.
+    if is_retired(root, digest):
+        raise ValueError('Draft bytes are retired from publication')
     approval = json.loads((root / 'publication' / 'approvals' / f'{digest}.json').read_text())
     if (not isinstance(approval, dict) or approval.get('draft_sha256') != digest
             or approval.get('bundle_id') != draft['bundle_id']):

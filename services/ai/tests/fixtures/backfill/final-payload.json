@@ -1,0 +1,16 @@
+{
+  "retire": [
+    {
+      "folder": "drafts",
+      "id": "draft_one",
+      "sha256": "e9bf7adedf1b4db677c33b87145a66bf021b0f3ca7c1b5c0cc0f961a129210fd",
+      "reason": "duplicate_entry_same_bytes"
+    },
+    {
+      "folder": "drafts",
+      "id": "draft_two",
+      "sha256": "cbfbd50eb94fa957bcb464ca96a86ebf6e406e967c965f687e26c0ea6d4e460c",
+      "reason": "scanned_mirrored_notice_no_verified_readable_issuer_copy"
+    }
+  ]
+}

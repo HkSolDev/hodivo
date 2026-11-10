@@ -6,7 +6,12 @@ from unittest.mock import Mock, patch
 import httpx
 
 from extract_bundle import provider_keys
-from providers.gemini import GeminiProvider, gemini_api_key, gemini_api_keys
+from providers.gemini import (
+    GeminiProvider,
+    gemini_api_key,
+    gemini_api_keys,
+    gemini_purpose_model,
+)
 
 
 class GeminiProviderTests(unittest.TestCase):
@@ -29,6 +34,13 @@ class GeminiProviderTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             self.assertEqual(gemini_api_keys(), ['key-a', 'key-b', 'key-c', 'key-d', 'key-e'])
             self.assertEqual(provider_keys('gemini'), ['key-a', 'key-b', 'key-c', 'key-d', 'key-e'])
+
+    def test_seven_comma_separated_pool_trims_deduplicates_and_selects_first(self):
+        env = {'GEMINI_API_KEYS': (
+            ' key-1 , key-2 , , key-3 , key-2 ,   , key-4 , key-1 , key-5 ')}
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(gemini_api_keys(), ['key-1', 'key-2', 'key-3', 'key-4', 'key-5'])
+            self.assertEqual(gemini_api_key(), 'key-1')
 
     def test_429_resource_exhausted_rotates_once_per_key_without_logging_keys(self):
         r429 = httpx.Response(429, json={'error': {'status': 'RESOURCE_EXHAUSTED'}})
@@ -99,6 +111,39 @@ class GeminiProviderTests(unittest.TestCase):
         self.assertIsNone(result['data'])
         self.assertEqual(result['attempt_count'], 3)
         self.assertEqual(client.post.call_count, 3)
+
+    def test_purpose_models_never_inherit_shared_llm_model(self):
+        with patch.dict(os.environ, {'LLM_MODEL': 'deepseek-flash'}, clear=True):
+            for purpose, override_env in (
+                    ('search', 'GEMINI_SEARCH_MODEL'), ('review', 'GEMINI_REVIEW_MODEL'),
+                    ('vision', 'GEMINI_VISION_MODEL')):
+                self.assertEqual(gemini_purpose_model(purpose), 'gemini-3.8-flash')
+                with patch.dict(os.environ, {override_env: f'gemini-special-{purpose}'}):
+                    self.assertEqual(gemini_purpose_model(purpose), f'gemini-special-{purpose}')
+                self.assertEqual(gemini_purpose_model(purpose), 'gemini-3.8-flash')
+
+    def test_request_json_uses_the_configured_purpose_model(self):
+        client = Mock()
+        client.post.return_value = httpx.Response(200, json={
+            'candidates': [{'finishReason': 'STOP', 'content': {'parts': [{'text': '{"ok": true}'}]}}],
+        })
+        with patch.dict(os.environ, {'GEMINI_REVIEW_MODEL': 'configured-review-model'}, clear=True):
+            provider = GeminiProvider(
+                keys=['secret-key-1'], model=gemini_purpose_model('review'), client=client)
+        provider.request_json(system_prompt='Return JSON', parts=[{'text': 'hello'}])
+        url = client.post.call_args.args[0]
+        self.assertIn('/models/configured-review-model:generateContent', url)
+        self.assertNotIn('gemini-2.5-flash-lite', url)
+
+    def test_invalid_purpose_model_name_fails_loudly(self):
+        with patch.dict(os.environ, {
+            'GEMINI_SEARCH_MODEL': 'bad model/name',
+            'LLM_MODEL': 'deepseek-flash',
+        }, clear=True):
+            with self.assertRaisesRegex(ValueError, 'Invalid Gemini model name'):
+                gemini_purpose_model('search')
+            with self.assertRaisesRegex(ValueError, 'Unknown Gemini model purpose'):
+                gemini_purpose_model('extraction')
 
 
 if __name__ == '__main__':
