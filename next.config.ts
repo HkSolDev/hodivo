@@ -73,6 +73,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // NodeNext imports keep the .js suffix. Webpack must map those specifiers
+  // back to the TypeScript sources. https://webpack.js.org/configuration/resolve/#resolveextensionalias
+  webpack(config) {
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.js', '.ts', '.tsx'],
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

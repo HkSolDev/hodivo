@@ -72,6 +72,11 @@ input::placeholder {
     color var(--transition-fast),
     box-shadow var(--transition-fast);
 }
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+}
 .button-primary {
   width: 100%;
   background: var(--accent);
