@@ -14,7 +14,7 @@ COPY public/css ./public/css
 # Next serializes API rewrites at build time; use the stable private API alias.
 ARG BACKEND_INTERNAL_URL=http://aptus-api:8080
 ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL NEXT_TELEMETRY_DISABLED=1
-RUN pnpm next:build --webpack
+RUN pnpm next:build
 
 FROM node:24-alpine AS runtime
 WORKDIR /app
