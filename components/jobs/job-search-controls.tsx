@@ -76,11 +76,23 @@ export function JobSearchRegion({
   feedbackRef.current = feedback;
 
   useEffect(() => {
+    // Sort, layout, and page can change while the committed query stays the
+    // same. Those navigations must still replace an unsubmitted draft.
     if (pending && !restoreDraft.current) return;
     if (restoreDraft.current || !dirtyDraft.current) setDraft(filters.q);
     dirtyDraft.current = false;
     restoreDraft.current = false;
-  }, [filters.q, pending]);
+  }, [
+    filters.q,
+    filters.qualification,
+    filters.sort,
+    view.layout,
+    view.recLayout,
+    view.recSort,
+    view.reviewProfile,
+    page,
+    pending,
+  ]);
 
   useEffect(() => {
     setFeedback((current) =>

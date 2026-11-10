@@ -516,6 +516,97 @@ test('search shows immediate pending feedback without hiding current results', a
     },
   );
 
+  await t.test(
+    'Back and Forward restore the committed query when only sort or page changes',
+    async () => {
+      jobsDelay = 0;
+      await page.setViewportSize({ width: 1100, height: 900 });
+      await page.goto(`${origin}/?q=technical`);
+      await expect(page.getByRole('searchbox')).toHaveValue('technical');
+      await page
+        .getByRole('combobox', { name: 'Sort all jobs' })
+        .selectOption('soonest');
+      await expect(page).toHaveURL(/sort=soonest/);
+      assert.equal(new URL(page.url()).searchParams.get('q'), 'technical');
+      await page.getByRole('searchbox').fill('unsent sort draft');
+      await page.goBack();
+      await expect(page).not.toHaveURL(/sort=soonest/);
+      await expect(page.getByRole('searchbox')).toHaveValue('technical');
+      await page.goForward();
+      await expect(page).toHaveURL(/sort=soonest/);
+      await expect(page.getByRole('searchbox')).toHaveValue('technical');
+
+      showNextPage = true;
+      await page.goto(`${origin}/?q=technical`);
+      await page.getByRole('link', { name: /Next page/ }).click();
+      await expect(page).toHaveURL(/page=2/);
+      assert.equal(new URL(page.url()).searchParams.get('q'), 'technical');
+      await page.getByRole('searchbox').fill('unsent page draft');
+      await page.goBack();
+      await expect(page).not.toHaveURL(/page=2/);
+      await expect(page.getByRole('searchbox')).toHaveValue('technical');
+      await page.goForward();
+      await expect(page).toHaveURL(/page=2/);
+      await expect(page.getByRole('searchbox')).toHaveValue('technical');
+      showNextPage = false;
+    },
+  );
+
+  await t.test(
+    'a failed client search reloads instead of staying on Searching',
+    async () => {
+      jobsDelay = 0;
+      const failed = await browser.newPage();
+      try {
+        await failed.route('**/api/auth/**', (route) =>
+          route.fulfill({ json: { user: null, enabled: false } }),
+        );
+        await failed.route('**/*', async (route) => {
+          const request = route.request();
+          const url = request.url();
+          const isFlight =
+            url.includes('_rsc=') || request.headers().rsc === '1';
+          if (isFlight && url.includes('abort-search')) {
+            await route.abort('failed');
+            return;
+          }
+          if (isFlight && url.includes('status-search')) {
+            await route.fulfill({
+              status: 500,
+              contentType: 'text/plain',
+              body: 'unavailable',
+            });
+            return;
+          }
+          await route.continue();
+        });
+        for (const query of ['abort-search', 'status-search']) {
+          await failed.goto(origin);
+          await failed.evaluate(() => {
+            window.__searchDocument = 'spa';
+          });
+          await failed.getByRole('searchbox').fill(query);
+          await failed
+            .getByRole('button', { name: 'Search', exact: true })
+            .click();
+          await expect(failed).toHaveURL(new RegExp(`q=${query}`));
+          assert.equal(
+            await failed.evaluate(() => window.__searchDocument ?? null),
+            null,
+          );
+          await expect(
+            failed.getByRole('button', { name: 'Searching…' }),
+          ).toHaveCount(0);
+          await expect(
+            failed.locator('[data-search-pending="false"]'),
+          ).toHaveCount(1);
+        }
+      } finally {
+        await failed.close();
+      }
+    },
+  );
+
   await t.test('no-JavaScript GET search still works', async () => {
     jobsDelay = 0;
     const plain = await browser.newContext({ javaScriptEnabled: false });
