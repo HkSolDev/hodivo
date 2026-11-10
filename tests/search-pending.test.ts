@@ -501,12 +501,16 @@ test('search shows immediate pending feedback without hiding current results', a
             .trim(),
         }));
       await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+      await expect(searching).toHaveCSS(
+        'background-color',
+        'rgb(245, 245, 247)',
+      );
       const dark = await readButton();
       await page.getByRole('button', { name: 'Switch to light mode' }).click();
+      await expect(searching).toHaveCSS('background-color', 'rgb(29, 29, 31)');
       const light = await readButton();
       assert.equal(dark.theme, 'dark');
       assert.equal(light.theme, 'light');
-      assert.notEqual(dark.background, light.background);
       assert.equal(dark.accent, '#f5f5f7');
       assert.equal(light.accent, '#1d1d1f');
       await expect(page.locator('[data-job-card]')).toHaveCount(0);
