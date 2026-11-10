@@ -1,1 +1,16 @@
-{"retire": [{"folder": "drafts", "id": "draft_one", "sha256": "f43a28366e807177b92a44eef70c9df31b4f5576632ac7038c6d90b2d266a40b", "reason": "duplicate_entry_same_bytes"}, {"folder": "drafts", "id": "draft_two", "sha256": "9b23b0c72f518cada68ecea26937107a85edb525e69070fae7649ba8cc163dc8", "reason": "scanned_mirrored_notice_no_verified_readable_issuer_copy"}]}
+{
+  "retire": [
+    {
+      "folder": "drafts",
+      "id": "draft_one",
+      "sha256": "e9bf7adedf1b4db677c33b87145a66bf021b0f3ca7c1b5c0cc0f961a129210fd",
+      "reason": "duplicate_entry_same_bytes"
+    },
+    {
+      "folder": "drafts",
+      "id": "draft_two",
+      "sha256": "cbfbd50eb94fa957bcb464ca96a86ebf6e406e967c965f687e26c0ea6d4e460c",
+      "reason": "scanned_mirrored_notice_no_verified_readable_issuer_copy"
+    }
+  ]
+}

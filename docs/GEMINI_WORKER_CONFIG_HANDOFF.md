@@ -25,11 +25,11 @@ record is [docs/AGENT_COORDINATION_2026-11-10-gemini-worker-config.md]
 
 ## Commits (in order)
 
-| Commit | Contents |
-| --- | --- |
+| Commit    | Contents                                                                                                                                                                          |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `8d1f2d4` | Slice 1: per-purpose Gemini model wiring (`gemini_purpose_model` in `services/ai/providers/gemini.py`; review/research/vision wiring in `services/ai/generic_pipeline.py`; tests) |
-| `06d0935` | Slice 2: seven-entry key-pool acceptance test; `.env.example` documents the three auxiliary model settings |
-| `7e053d4` | Slice 3: missing-review recovery in `services/ai/generic_pipeline.py` reuse path; recovery tests |
+| `06d0935` | Slice 2: seven-entry key-pool acceptance test; `.env.example` documents the three auxiliary model settings                                                                        |
+| `7e053d4` | Slice 3: missing-review recovery in `services/ai/generic_pipeline.py` reuse path; recovery tests                                                                                  |
 
 Changed files (all inside owned paths; nothing else touched):
 
@@ -112,8 +112,8 @@ Changed files (all inside owned paths; nothing else touched):
 ## Verification performed (offline only)
 
 - Focused suite: `PYTHONPATH=services/ai:services/ai/tests services/ai/.venv/
-  bin/python -m unittest tests.test_gemini_provider tests.test_generic_pipeline
-  tests.test_repair_clients tests.test_vision_recovery -q` → 27 tests, OK.
+bin/python -m unittest tests.test_gemini_provider tests.test_generic_pipeline
+tests.test_repair_clients tests.test_vision_recovery -q` → 27 tests, OK.
 - Full Python suite: `… -m unittest discover -s services/ai/tests -q` →
   470 tests, OK.
 - Baseline (pre-change) focused run: 18 tests OK; baseline full suite: 461 OK.
@@ -122,18 +122,18 @@ Changed files (all inside owned paths; nothing else touched):
 
 - The **exact** batch-record focused command
   `PYTHONPATH=services/ai services/ai/.venv/bin/python -m unittest
-  tests.test_gemini_provider tests.test_generic_pipeline
-  tests.test_repair_clients tests.test_vision_recovery -q` errors under this
+tests.test_gemini_provider tests.test_generic_pipeline
+tests.test_repair_clients tests.test_vision_recovery -q` errors under this
   Python/venv setup: `tests.test_generic_pipeline` imports
   `test_autonomous_pipeline` / `test_extraction_input`, which are modules of
   `services/ai/tests` and are only on `sys.path` when tests/ is on the path.
   It failed identically **before any edit** (error at
   `test_generic_pipeline.py:196` → `from test_autonomous_pipeline import
-  _make_extracted`); under the exact command with this venv it yields 5 errors
+_make_extracted`); under the exact command with this venv it yields 5 errors
   (4 from the new recovery tests + 1 pre-existing) — all
   `ModuleNotFoundError`, no behavioral failures. Running with
   `PYTHONPATH=services/ai:services/ai/tests` (or `unittest discover -s
-  services/ai/tests`, which sets the path itself) passes everything.
+services/ai/tests`, which sets the path itself) passes everything.
   Recommendation: either add `-s services/ai/tests`-style handling in the
   batch record's focused command or keep the extended `PYTHONPATH` variant
   recorded above; the coordinator may set this preference. No production

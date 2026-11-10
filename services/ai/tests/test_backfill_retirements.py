@@ -9,8 +9,8 @@ from pathlib import Path
 from backfill_retirements import main, run_backfill
 
 FIXTURE_ROOT = Path(__file__).parent / 'fixtures' / 'backfill'
-DRAFT_ONE_SHA = 'f43a28366e807177b92a44eef70c9df31b4f5576632ac7038c6d90b2d266a40b'
-DRAFT_TWO_SHA = '9b23b0c72f518cada68ecea26937107a85edb525e69070fae7649ba8cc163dc8'
+DRAFT_ONE_SHA = 'e9bf7adedf1b4db677c33b87145a66bf021b0f3ca7c1b5c0cc0f961a129210fd'
+DRAFT_TWO_SHA = 'cbfbd50eb94fa957bcb464ca96a86ebf6e406e967c965f687e26c0ea6d4e460c'
 
 
 class BackfillRetirementsTests(unittest.TestCase):
