@@ -1,5 +1,5 @@
-import { readHomeView } from './home-view';
-import { readJobFilters } from './public-job-filters';
+import { readHomeView } from './home-view.js';
+import { readJobFilters } from './public-job-filters.js';
 
 // Omitted sort, layout, and page use the same defaults as the server readers.
 // Unknown keys such as Next's `_rsc` cache-buster are ignored.
