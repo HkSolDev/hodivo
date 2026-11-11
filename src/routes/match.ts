@@ -1,3 +1,4 @@
+import { publicJobPresentation } from '../lib/public-job-presentation.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db.js';
 import { sendJson } from '../lib/http.js';
@@ -66,7 +67,7 @@ export async function handleMatch(
     const matches = [];
     const needsManualCheck = [];
 
-    for (const post of matchedPosts) {
+    for (const post of matchedPosts.map(publicJobPresentation)) {
       const {
         userAge,
         effectiveMaxAge,

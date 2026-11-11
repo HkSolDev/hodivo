@@ -385,3 +385,27 @@ test('shows the base age independently of category limits and preserves unknown 
     assert.equal(JSON.stringify(job), before);
   }
 });
+
+test('public projection renders official notice links without discovery-portal redirects', async () => {
+  const { publicJobPresentation } =
+    await import('../src/lib/public-job-presentation.js');
+  const job = publicJobPresentation({
+    id: 'official-only-links',
+    postName: 'JKSSB IES Junior Engineer | Sarkari Result',
+    source: {
+      url: 'https://sarkariresult.com/discovery/je',
+      notificationPdfUrl: 'https://jkssb.nic.in/notices/je.pdf',
+      officialSiteUrl: 'https://jkssb.nic.in/',
+      applyUrl: 'https://freejobalert.com/apply',
+    },
+    reviewedDetails: { apply_url: 'https://mysarkarinaukri.com/apply' },
+  });
+  const markup = renderToStaticMarkup(createElement(JobDetailContent, { job }));
+  assert.match(markup, /JKSSB IES Junior Engineer/);
+  assert.match(markup, /href="https:\/\/jkssb\.nic\.in\/notices\/je\.pdf"/);
+  assert.doesNotMatch(
+    markup,
+    /sarkariresult\.com|freejobalert\.com|mysarkarinaukri\.com/i,
+  );
+  assert.doesNotMatch(markup, /Apply now/);
+});

@@ -700,3 +700,38 @@ populate these fields, or complete the other worker reliability gates.
 - Next: inspect how to ground explicitly-unstated classifications in complete
   captured sources before treating that distinction as verified. Authentic
   scanned-notice comparison remains open; preparation AI/UI remain deferred.
+
+### Official public destinations and portal-title cleanup — 11 November 2026
+
+- Confirmed path: public detail rendering used source.url as a notice fallback
+  and Source listing link; match responses also exposed that collection URL.
+  Aggregator discovery URLs therefore became user destinations. Likelihood 8,
+  impact 4, risk 32 when a published source URL belongs to a discovery portal.
+- Added one shared read-only presentation helper used by catalogue/detail reads,
+  saved jobs and match results. It filters Source URL/link slots and reviewed
+  official_site_url/apply_url before serialization/rendering. Stored Source,
+  ExtractionCandidate, original title and internal review provenance are untouched.
+  No migration or paid worker re-extraction is needed for existing records.
+- Public destinations currently require a government/academic host suffix
+  (.gov.in/.nic.in/.ac.in/.edu.in/.res.in) or IBPS's registered official host,
+  with HTTP(S), no credentials and standard ports. Unknown destinations are
+  hidden, never replaced with invented URLs. source.url remains a string (empty
+  when withheld); nullable link fields become null. Existing renderers reject
+  empty URLs. This is a conservative destination policy, not proof that a URL's
+  content, redirect target or notice identity was independently checked live.
+- Known limitation: legitimate custom application hosts and shortened forms.gle
+  links are withheld too. Allowing all Google Forms would not prove issuer
+  ownership. Supporting those requires exact issuer/notice-bound destination
+  evidence or a reviewed allowlist; no blanket short-link exception was added.
+  An official notice/site link remains available when stored on a recognized host.
+- Title cleanup removes delimited edge branding for Sarkari Result,
+  MySarkariNaukri and FreeJobAlert, preserving authentic names including JKSSB,
+  UPSC, IES and JRF. It does not globally rewrite titles or delete arbitrary words.
+- Verification: 21 focused API/presentation/rendering/match/metadata tests pass,
+  including rendered HTML without aggregator links, unchanged stored objects,
+  lookalike hosts, credentials, unsafe protocols, unverified short links and real
+  organization/exam names. Contract checks/consumer audit, typecheck, lint,
+  formatting and diff checks pass. No live browser/provider/deployment claims.
+- No other worker task advanced. Explicitly-unstated source verification,
+  authentic scanned-notice comparison and custom application-host verification
+  remain open; preparation AI collection and frontend display remain deferred.
