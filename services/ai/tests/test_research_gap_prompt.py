@@ -3,7 +3,7 @@
 import copy
 import unittest
 
-from research_gap_prompt import build_research_gap_prompt
+from research_gap_prompt import build_research_gap_prompt, build_notice_research_prompt
 
 
 OFFICIAL_URL = "https://upessc.example.gov.in/notices/09-2026.pdf"
@@ -221,7 +221,22 @@ class ResearchGapPromptTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "ready")
         self.assertEqual(result["official_urls"], [])
-        self.assertIn("None supplied. Do not fabricate or cite any URL.", result["prompt"])
+        self.assertIn("None supplied. Discover official sources for the exact notice; never fabricate URLs.", result["prompt"])
+
+    def test_colab_template_keeps_preparation_optional_and_notice_specific(self):
+        identity = {'issuer': 'IIIT Pune', 'advertisement_number': 'IIITP/ECE/0002'}
+        core = build_notice_research_prompt(identity, [], ['min_age'], [])
+        self.assertIn('IIITP/ECE/0002', core)
+        self.assertIn('PDF retrieval failure does not end research', core)
+        self.assertIn('additional official issuer sources', core)
+        self.assertNotIn('12. Last three', core)
+        extended = build_notice_research_prompt(identity, [], ['syllabus'], [],
+                                                include_preparation=True)
+        self.assertIn('12. Last three', extended)
+        self.assertIn('category, numeric score', extended)
+        self.assertIn('actual', extended)
+        self.assertIn('video/playlist URLs', extended)
+        self.assertIn('interview-only JRF', extended)
 
     def test_inputs_are_not_mutated_and_output_is_deterministic(self):
         facts = sample_facts()
