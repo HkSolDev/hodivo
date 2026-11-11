@@ -8,8 +8,10 @@ Read [the staged plan](HTML_FIRST_WORKER_PLAN.md) first.
 
 Planning only. No worker behavior, provider settings, database schema or production
 service changed on this branch. Graphify index is local/generated, not committed.
-Hemant has additional extraction requirements to supply; record them before
-freezing implementation contracts or assigning writers.
+Hemant's additional requirements are recorded in plan slice 7: category cutoffs
+for three completed exam cycles, official syllabus, recommended free YouTube
+resources, and compact base age limits. Freeze their additive data contract
+before assigning implementation writers.
 
 ## Start here
 
@@ -46,5 +48,7 @@ checks must not call providers or production. Live provider trials and deploymen
 are separate operations. Preserve retirement markers, immutable draft approvals,
 receipts, retry budgets, source evidence and unknown values.
 
-The plan intentionally excludes syllabus, cutoff and YouTube enrichment until
-the core notice extraction path is measured and accepted.
+Syllabus, category cutoffs and YouTube enrichment are in scope as slice 7 after
+the core evidence path. They need explicit persistence/API/UI lineage and must
+not block valid job publication when unavailable. Compact age presentation must
+preserve the detailed rules used by eligibility matching.

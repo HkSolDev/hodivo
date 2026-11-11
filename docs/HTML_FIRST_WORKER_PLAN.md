@@ -117,7 +117,7 @@ Pass the resulting canonical evidence bundle into existing `extract_bundle.py`
 using the configured DeepSeek extraction provider. DeepSeek structures facts;
 it does not independently establish factual correctness. Reuse existing schema,
 citations, numeric/date checks and `review_and_repair`. Persist the review report.
-Keep preparation advice, cutoffs and YouTube recommendations outside this slice.
+Keep preparation enrichment in its own structured section, implemented in slice 7.
 
 Done when equivalent HTML/PDF evidence produces the same candidate semantics,
 unknowns remain null, unsupported claims fail, and retries reuse checkpoints.
@@ -135,9 +135,58 @@ Done when supported candidates reach existing ingestion, unsupported/conflicting
 ones are held, retired drafts make zero AI calls and retrying delivery creates
 no duplicate job. Deployment and production activation are separate operations.
 
+### 7. Category cutoffs, syllabus, free videos and compact age display
+
+Requested by Hemant on 11 November 2026; included in branch scope. Implement
+after the core evidence path, with explicit producer/storage/API/UI mappings.
+Use Graphify to trace those consumers before assigning paths or changing schemas.
+
+- Historical cutoffs: collect the last three completed exam cycles with published
+  official cutoffs. Store cycle/year, exam identity, stage/paper, post/region where
+  applicable, category, cutoff number, maximum marks/score scale when stated,
+  official source and publication/correction date. Preserve separate SC, ST,
+  OBC, EWS, UR and other officially reported categories. Do not combine different
+  stages or invent unavailable years; distinguish not applicable, not published,
+  not found and a genuine numeric zero. Label results as historical, not a
+  prediction of this year's qualifying score. Prefer corrected official tables.
+- Syllabus: collect the official syllabus for the exact exam cycle and stage,
+  with subjects/topics, paper structure and official evidence. Where an issuer
+  explicitly reuses an older syllabus, preserve that reference. For interview-only
+  project jobs, distinguish officially stated research topics from suggested
+  preparation; do not label inferred topics as an official examination syllabus.
+- Free YouTube resources: search for actual accessible video/playlist URLs mapped
+  to syllabus topics. Store title, channel, language, URL, covered topics and a
+  short recommendation reason. Rank a small useful set by topic coverage,
+  clarity, relevance and free accessibility; identify the recommended starting
+  resource as our recommendation. Never fabricate titles/links or declare a
+  universal 'best'. Verify links and retain checked-at dates; generic search
+  suggestions without actual video URLs do not count as collected resources.
+- Age display: show the source-backed base minimum and maximum compactly, e.g.
+  '18–35 years', with a short note that applicable category relaxations are
+  detailed in the official notice. Do not show the outer envelope across all
+  categories or invent 18 as a missing minimum. Show one-sided limits honestly
+  ('Up to 35 years') and missing limits as 'Not specified'. Keep post-specific
+  limits separate. Preserve age-as-on dates and existing detailed relaxation
+  rules for deterministic eligibility matching. Display simplification does not
+  remove those underlying facts, and the note must not imply every job grants
+  government/category relaxation.
+
+Run research once per exam/cycle and cache shared syllabus/cutoffs/resources
+across its posts. Keep preparation research under a separately bounded budget;
+missing optional enrichment must not prevent publication of an otherwise valid
+job. A failed enrichment request must not repeat paid core extraction.
+
+Done when category/stage/year distinctions survive Python → storage → API → UI,
+unavailable cutoffs remain explicit, syllabus provenance is displayed, recommended
+videos have verified URLs, and age cards show the base range without changing
+matching results. Include fixtures for a multi-stage exam, missing historical
+year, interview-only JRF, category relaxation and a missing minimum age.
+
 ## Contract and scope boundaries
 
-Keep the existing extraction/storage/ingestion schemas. Document and review the
+Preserve existing schema semantics for slices 1–6. Slice 7 requires an additive
+contract design for enrichment across extraction/storage/API/UI; document its
+exact fields and compatibility before implementing changes. Document and review the
 new internal tool request/result contract before slice 3. Any change to shared
 evidence or acceptance semantics requires an explicit contract revision. Use no
 new agent framework or dependencies. Implement one slice at a time and inspect
