@@ -57,6 +57,8 @@ class ValidateDocumentUrlTest(unittest.TestCase):
             'http://ssc.example.gov.in/notices/jer-2026.pdf',
             'https://user:pass@ssc.example.gov.in/notices/jer-2026.pdf',
             'ftp://ssc.example.gov.in/notices/jer-2026.pdf',
+            'https://ssc.example.gov.in:8443/notices/jer-2026.pdf',
+            'https://ssc.example.gov.in:bad/notices/jer-2026.pdf',
             'not a url',
             '',
             None,

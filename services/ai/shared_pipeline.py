@@ -30,7 +30,7 @@ def prepare_source(source, root, **crawl_options):
         crawl_opts.setdefault('source_id', source.get('id'))
         issuer_hosts = crawl_opts.pop('issuer_hosts', None) or source.get('issuer_hosts') or {}
         recovery = RecoveryQueue(root / 'recovery.sqlite3')
-        for _ in range(5):
+        for _ in range(0 if crawl_opts.get('html_first') else 5):
             if recover_one(recovery, root / 'recovery').get('status') == 'no_due_task':
                 break
         crawl = crawl_source(source['url'], root, **crawl_opts)
@@ -56,7 +56,8 @@ def prepare_source(source, root, **crawl_options):
         prepared_count = 0
         prepared_paths = []
         for bundle in verified['bundles']:
-            prepared = prepare_extraction(bundle, crawl=crawl, recovery_queue=recovery)
+            prepared = prepare_extraction(bundle, crawl=crawl,
+                                          recovery_queue=None if crawl_opts.get('html_first') else recovery)
             prepared_count += prepared.get('llm_input') is not None
             path = root / f"{bundle['bundle_id']}.prepared.json"
             prepared_paths.append(str(path.resolve()))

@@ -94,6 +94,30 @@ class SharedPipelineTests(unittest.TestCase):
         self.assertEqual(len(next(edge for edge in crawl['edges']
                                   if edge['url'].endswith('/files/details'))['occurrences']), 2)
 
+    def test_html_first_retains_pdf_links_without_fetching_them(self):
+        report = self.run_source(html_first=True)
+        self.assertEqual(len(self.fetched), 3)
+        crawl = json.loads(Path(report['crawl_path']).read_text())
+        self.assertEqual(len(crawl['deferred_documents']), 1)
+        deferred = crawl['deferred_documents'][0]
+        self.assertEqual(deferred['parent_url'], self.base + '/notice')
+        self.assertEqual(deferred['url'], self.base + '/files/details')
+        self.assertEqual(len(deferred['occurrences']), 2)
+        self.assertTrue(all(doc['format'] == 'html' for doc in crawl['documents']))
+        self.assertNotIn(deferred['url'], [item['url'] for item in crawl['unchecked']])
+
+    def test_html_first_keeps_listing_pdf_children_separate(self):
+        self.pages['/'] = ('xml', '<rss version="2.0"><channel><title>Jobs</title>'
+            '<item><title>Engineer recruitment</title><link>https://example.gov.in/a.pdf</link></item>'
+            '<item><title>Clerk recruitment</title><link>https://example.gov.in/b.pdf</link></item>'
+            '</channel></rss>')
+        report = self.run_source(html_first=True)
+        crawl = json.loads(Path(report['crawl_path']).read_text())
+        self.assertEqual(len(self.fetched), 1)
+        self.assertEqual({edge['url'] for edge in crawl['deferred_documents']},
+                         {self.base + '/a.pdf', self.base + '/b.pdf'})
+        self.assertEqual(crawl['documents'], [])
+
     def test_budget_and_depth_limits_report_unchecked_links(self):
         report = self.run_source(max_fetches=2)
         self.assertEqual(report['status'], 'partial')

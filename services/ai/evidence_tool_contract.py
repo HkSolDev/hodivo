@@ -32,11 +32,12 @@ def parse_official_url(url):
         return None
     try:
         parts = urlsplit(url)
+        port = parts.port
     except ValueError:
         return None
     # Same constraints as targeted_enrichment.is_official_issuer_url and
     # verify_bundle: https only, hostname present, no embedded credentials.
-    if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password:
+    if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password or port not in (None, 443):
         return None
     return parts
 
