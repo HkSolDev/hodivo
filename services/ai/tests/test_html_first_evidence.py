@@ -95,6 +95,60 @@ class HtmlFirstEvidenceTests(unittest.TestCase):
         self.assertEqual(result['bundle'], bundle())
         self.assertNotIn('untrusted exception', json.dumps(result))
 
+    def test_linked_unreadable_pdf_recovers_before_identity_acceptance(self):
+        from vision_recovery import is_bundle_identity_verified_for_vision
+        path = self.root / 'scan.json'
+        path.write_text(json.dumps({'format': 'pdf', 'sections': [],
+                                   'pages': [{'number': 1, 'native_status': 'no_native_text'}]}))
+        self.process.return_value = ({'final_url': BASE + '/notice.pdf',
+            'document_kind': 'pdf', 'content_path': str(path)}, None, False)
+        for advertisement, expected in [('EB/01/2026', 'captured'),
+                                         ('EB/02/2026', 'identity_mismatch')]:
+            with self.subTest(advertisement=advertisement):
+                def vision(source):
+                    document = source['documents'][-1]
+                    self.assertTrue(is_bundle_identity_verified_for_vision(source, document)[0])
+                    document['content']['sections'] = [{'text':
+                        'Recruitment Notice\nIssuer: Example Board\nAdvertisement No: ' + advertisement,
+                        'evidence': [{'page': 1}]}]
+                    return {'bundle': source}
+                recover = Mock(side_effect=vision)
+                assess = Mock(side_effect=[assessment([pdf_call()]), assessment()])
+                result = recover_html_first_evidence(bundle(), self.root, assess=assess,
+                    discover=self.search, process=self.process, issuer_hosts=HOSTS,
+                    recover_vision=recover)
+                self.assertEqual(result['tools'][0]['status'], expected)
+                recover.assert_called_once()
+                self.assertEqual(len(result['bundle']['documents']), 2 if expected == 'captured' else 1)
+                self.assertEqual(result['bundle']['documents'][0], bundle()['documents'][0])
+
+    def test_unreadable_pdf_vision_failure_continues_to_research(self):
+        path = self.root / 'scan.json'
+        path.write_text(json.dumps({'sections': [],
+            'pages': [{'number': 1, 'native_status': 'no_native_text'}]}))
+        self.process.return_value = ({'final_url': BASE + '/notice.pdf',
+            'document_kind': 'pdf', 'content_path': str(path)}, None, False)
+        recover = Mock(side_effect=TimeoutError())
+        self.search.return_value = {'data': {'source_urls': []}}
+        result = recover_html_first_evidence(bundle(), self.root,
+            assess=Mock(side_effect=[assessment([pdf_call()]), assessment(missing=['min_age'])]),
+            discover=self.search, process=self.process, issuer_hosts=HOSTS, recover_vision=recover)
+        self.assertEqual(result['tools'][0]['status'], 'document_vision_failed')
+        self.assertTrue(result['search_called'])
+        self.assertEqual(result['bundle'], bundle())
+
+    def test_saved_legacy_font_mirror_does_not_gain_official_status(self):
+        source = json.loads((Path(__file__).parent / 'fixtures' / 'headmaster-native-pages.json').read_text())
+        self.search.return_value = {'data': {'source_urls': [source['source_url']]}}
+        recover = Mock()
+        result = recover_html_first_evidence(bundle(), self.root,
+            assess=Mock(return_value=assessment(missing=['min_age'])), discover=self.search,
+            process=self.process, issuer_hosts=HOSTS, recover_vision=recover)
+        self.assertEqual(result['research'][0]['status'], 'unofficial_source')
+        self.process.assert_not_called()
+        recover.assert_not_called()
+        self.assertEqual(result['bundle'], bundle())
+
     def test_missing_identity_calls_no_providers(self):
         source = bundle()
         source['identity']['issuer'] = None

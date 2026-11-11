@@ -68,6 +68,19 @@ def recover_html_first_evidence(bundle, root, *, assess, discover, issuer_hosts,
             content = json.loads(Path(result['content_path']).read_text())
             document = {'document_id': hashlib.sha256(final_url.encode()).hexdigest()[:24],
                         'source_url': final_url, 'format': result['document_kind'], 'content': content}
+            vision_attempted = False
+            if document['format'] == 'pdf' and recover_vision is not None:
+                from vision_recovery import is_bundle_identity_verified_for_vision, unusable_pdf_pages
+                provisional = copy.deepcopy(bundle)
+                provisional['documents'].append(document)
+                if unusable_pdf_pages(document) and is_bundle_identity_verified_for_vision(provisional, document)[0]:
+                    vision_attempted = True
+                    try:
+                        recovered = recover_vision(provisional)
+                        document = next(doc for doc in recovered['bundle']['documents']
+                                        if doc['document_id'] == document['document_id'])
+                    except Exception:
+                        return 'document_vision_failed'
             verified = verify_bundles([document], issuer_hosts=issuer_hosts)['bundles']
             if len(verified) != 1:
                 return 'identity_unresolved'
@@ -80,7 +93,7 @@ def recover_html_first_evidence(bundle, root, *, assess, discover, issuer_hosts,
             existing_ids = {doc['document_id'] for doc in bundle['documents']}
             additions = [doc for doc in additions if doc['document_id'] not in existing_ids]
             bundle['documents'].extend(additions)
-            if additions and recover_vision is not None:
+            if additions and recover_vision is not None and not vision_attempted:
                 try:
                     recovered = recover_vision(copy.deepcopy(bundle))
                     bundle['documents'] = recovered['bundle']['documents']
