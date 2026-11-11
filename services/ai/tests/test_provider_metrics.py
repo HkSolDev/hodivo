@@ -60,3 +60,44 @@ class ProviderMetricsTests(unittest.TestCase):
             self.assertEqual(report['summary']['provider_requests'],
                              {'attempted': 0, 'succeeded': 0, 'failed': 0})
             self.assertEqual(report['summary']['extractions']['failed'], 1)
+
+    def test_pipeline_counts_evidence_and_review_requests_including_failures(self):
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from generic_pipeline import run_pipeline
+        from provider_metrics import provider_post
+        from test_worker_recovery_and_reporting import WorkerRecoveryAndReportingTests
+        for stage in ('evidence', 'review'):
+            with self.subTest(stage=stage), TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepared = WorkerRecoveryAndReportingTests()._sample_prepared_bundle()
+                path = root / 'fixture.prepared.json'
+                path.write_text(json.dumps(prepared))
+                source_input = prepared['llm_input']['input']
+                sources = [{'source': 'fixture', 'status': 'prepared_for_review',
+                            'prepared_inputs': 1, 'prepared_paths': [str(path)]}]
+                client = Mock()
+                client.post.return_value = httpx.Response(200)
+                def evidence(*args, **kwargs):
+                    provider_post(client, 'https://provider.invalid')
+                    return {'status': 'waiting', 'reason': 'evidence_provider_retry_wait'}
+                def review(*args, **kwargs):
+                    provider_post(client, 'https://provider.invalid')
+                    client.post.side_effect = httpx.ConnectError('fixture')
+                    try:
+                        provider_post(client, 'https://provider.invalid')
+                    except httpx.ConnectError as error:
+                        raise RuntimeError('provider_network_failed') from error
+                with patch('generic_pipeline._load_bundles_for_source', return_value={
+                        source_input['bundle_id']: source_input}), patch(
+                        'html_first_checkpoint.prepare_html_first', side_effect=evidence), patch(
+                        'generic_pipeline.review_and_repair', side_effect=review):
+                    report = run_pipeline(root, prepare=lambda *args, **kwargs: sources,
+                        extract=lambda _: {'bundle_id': source_input['bundle_id'],
+                                           'facts': {'purpose': 'recruitment'}},
+                        issuer_hosts={'Example Board': ['example.gov.in']}, html_first=(stage == 'evidence'), evidence_assessor=lambda _: {},
+                        evidence_discover=lambda _: {})
+                expected = ({'attempted': 1, 'succeeded': 1, 'failed': 0} if stage == 'evidence'
+                            else {'attempted': 2, 'succeeded': 1, 'failed': 1})
+                self.assertEqual(report['summary']['provider_requests'], expected)

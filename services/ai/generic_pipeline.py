@@ -1,6 +1,7 @@
 """Run the generic crawl path; only ready evidence may reach extraction."""
 
 import copy
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -239,6 +240,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
             review_report = None
             repair_reports = []
             evidence_report = None
+            request_scope = ExitStack()
+            requests = request_scope.enter_context(track_provider_requests())
             try:
                 raw_text = Path(path).read_text(encoding='utf-8')
                 prepared = json.loads(raw_text)
@@ -500,15 +503,11 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                             raise
 
                     try:
-                        with track_provider_requests() as requests:
-                            if repair_resume is not None:
-                                extracted, resumed = repair_resume, True
-                            else:
-                                extracted, resumed = extract_or_resume(retries, fingerprint, prepared, tracked_extractor)
+                        if repair_resume is not None:
+                            extracted, resumed = repair_resume, True
+                        else:
+                            extracted, resumed = extract_or_resume(retries, fingerprint, prepared, tracked_extractor)
                     finally:
-                        for outcome, value in requests.items():
-                            key = f'provider_requests_{outcome}'
-                            counts[key] = counts.get(key, 0) + value
                         counts['extraction_calls_attempted'] = counts.get('extraction_calls_attempted', 0) + extraction_calls['attempted']
                         counts['extraction_calls_succeeded'] = counts.get('extraction_calls_succeeded', 0) + extraction_calls['succeeded']
                         counts['extraction_calls_failed'] = counts.get('extraction_calls_failed', 0) + extraction_calls['failed']
@@ -799,6 +798,11 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                 if stage == 'extraction':
                     retry = retries.read('extraction', fingerprint)
                     counts['bundle_outcomes'][-1]['reasons'] = [retry.get('reason') or 'extraction_failed']
+            finally:
+                request_scope.close()
+                for outcome, value in requests.items():
+                    key = f'provider_requests_{outcome}'
+                    counts[key] = counts.get(key, 0) + value
         counts['blocked_reasons'] = sorted(set(counts['blocked_reasons']))
         counts['failure_stages'] = sorted(set(counts['failure_stages']))
         if 'failure_reasons' in counts:

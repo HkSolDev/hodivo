@@ -469,3 +469,23 @@ Next execution order and stop conditions:
 Syllabus/cutoff/video AI generation and frontend display remain deferred by
 Hemant. Storage readiness does not establish content accuracy, automatically
 populate these fields, or complete the other worker reliability gates.
+
+### Provider accounting increment — 11 November 2026
+
+- Confirmed bug: `track_provider_requests` covered extraction only. Evidence
+  assessment/search/Vision and review/recovery calls made through `provider_post`
+  outside that block were omitted from source and run totals. Likelihood 9,
+  impact 4, risk 36; trigger: any HTTP provider attempt outside extraction.
+- Small fix: retain one request-counter context per prepared notice and aggregate
+  it in `finally`, including early exits and failures. Extraction-call counters
+  remain separate. No retry, publication, provider selection or budget semantics
+  changed. HTTP success still means successful transport/status, not valid facts.
+- Regression: simulated evidence waiting counts one request; review success then
+  transport failure counts two attempted, one succeeded, one failed. Previously
+  review reported zero. Existing preflight checks still report zero HTTP calls.
+- Verification: full offline Python suite 526 tests passed. No paid provider,
+  production database or deployment involved.
+- Next: inspect remaining retry classification and task-model checkpoint identity,
+  then shared per-notice limits. This change measures calls; it does not introduce
+  a new call budget. Five-state assessment and end-to-end publication gates remain
+  later slices. Preparation AI collection and frontend display remain deferred.
