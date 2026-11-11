@@ -30,6 +30,65 @@ class GenericPipelineTests(unittest.TestCase):
     def prepare(self, root, **_options):
         return [self.fixture.run_source()]
 
+    def test_html_first_evidence_reaches_existing_extraction_and_reuses_checkpoint(self):
+        from unittest.mock import Mock
+        import test_html_first_evidence as evidence_fixture
+        from build_extraction_input import prepare_extraction
+        source_bundle = evidence_fixture.bundle()
+        prepared_path = self.root / 'html.prepared.json'
+        prepared_path.write_text(json.dumps(prepare_extraction(source_bundle)))
+        seen_options = []
+        def prepare(_root, **options):
+            seen_options.append(options)
+            return [{'source': 'html_source', 'status': 'scanned', 'prepared_inputs': 1,
+                     'prepared_paths': [str(prepared_path)], 'bundles': [source_bundle]}]
+        assessor = Mock(return_value=evidence_fixture.assessment())
+        extract = Mock(return_value={'bundle_id': source_bundle['bundle_id'], 'facts': {'posts': []}})
+        options = dict(prepare=prepare, extract=extract, html_first=True,
+            issuer_hosts=evidence_fixture.HOSTS, evidence_assessor=assessor,
+            evidence_discover=Mock(),
+            validate=lambda *args: {'status': 'needs_review',
+                                   'disposition': 'valid_recruitment_review_draft'},
+            draft=lambda *args, **kwargs: {'bundle_id': source_bundle['bundle_id']})
+        for _ in range(2):
+            result = run_pipeline(self.root / 'html_pipeline', **options)
+        self.assertEqual(assessor.call_count, 1)
+        self.assertTrue(all(options['html_first'] for options in seen_options))
+        self.assertGreaterEqual(extract.call_count, 1)
+        self.assertEqual(result['sources']['html_source']['published'], 0)
+        self.assertEqual(result['sources']['html_source']['evidence_reused'], 1)
+        docs = extract.call_args.args[0]['llm_input']['input']['documents']
+        self.assertEqual([doc['format'] for doc in docs], ['html'])
+
+    def test_html_first_does_not_plan_an_unchanged_retired_legacy_draft(self):
+        from unittest.mock import Mock
+        import test_html_first_evidence as evidence_fixture
+        from build_extraction_input import prepare_extraction
+        from notice_state import NoticeStateManager, compute_evidence_fingerprint, EXTRACTION_VERSION
+        source_bundle = evidence_fixture.bundle()
+        prepared = prepare_extraction(source_bundle)
+        root = self.root / 'retired_html'
+        draft = root / 'draft.json'
+        root.mkdir()
+        draft.write_text(json.dumps({'bundle_id': source_bundle['bundle_id']}))
+        state = NoticeStateManager(root)
+        state.record_success(source_bundle['bundle_id'],
+            compute_evidence_fingerprint(prepared['llm_input']['input']), EXTRACTION_VERSION, draft)
+        digest = hashlib.sha256(draft.read_bytes()).hexdigest()
+        marker = root / 'publication' / 'retirements' / (digest + '.json')
+        marker.parent.mkdir(parents=True)
+        marker.write_text(json.dumps({'draft_sha256': digest, 'bundle_id': source_bundle['bundle_id'],
+            'retired_at': '2026-11-11T00:00:00+00:00', 'reason': 'operator_cleanup'}))
+        path = self.root / 'retired.prepared.json'
+        path.write_text(json.dumps(prepared))
+        assessor = Mock()
+        report = run_pipeline(root, html_first=True, issuer_hosts=evidence_fixture.HOSTS,
+            prepare=lambda *args, **kwargs: [{'source': 'retired', 'status': 'scanned',
+                'prepared_paths': [str(path)], 'bundles': [source_bundle]}],
+            extract=Mock(), evidence_assessor=assessor, evidence_discover=Mock())
+        assessor.assert_not_called()
+        self.assertEqual(report['sources']['retired']['retired'], 1)
+
     def test_review_search_and_vision_providers_receive_their_own_models(self):
         real_provider = task_providers.GeminiProvider
         constructed = []

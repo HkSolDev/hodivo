@@ -56,7 +56,7 @@ class StageRetries:
         self.jitter = jitter
 
     def path(self, stage, key):
-        if stage not in {'capture', 'extraction', 'publication', 'review_recovery'}:
+        if stage not in {'capture', 'extraction', 'evidence', 'publication', 'review_recovery'}:
             raise ValueError('Unknown retry stage')
         return self.root / stage / (hashlib.sha256(key.encode()).hexdigest() + '.json')
 
@@ -102,7 +102,7 @@ class StageRetries:
             status = None
         if status == 'needs_review' or state.get('next_at', 0) > self.clock():
             return False
-        if stage == 'extraction' and status == 'running':
+        if stage in {'extraction', 'evidence'} and status == 'running':
             # After a crash we cannot know whether the provider billed/completed
             # the request. Do not silently repeat an uncertain generation.
             self.failure(stage, key, 'provider_completion_uncertain')

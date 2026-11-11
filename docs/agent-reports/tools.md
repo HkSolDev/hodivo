@@ -65,7 +65,7 @@ needs coordinator review during slice-3 wiring (see risks).
 ## Verification (actual commands, offline)
 
 - `PYTHONPATH=services/ai services/ai/.venv/bin/python -m unittest
-  services.ai.tests.test_evidence_tool_contract -v` → 14 tests OK.
+services.ai.tests.test_evidence_tool_contract -v` → 14 tests OK.
 - Full offline suite `... -m unittest discover -s services/ai/tests -q` →
   499 tests OK (includes existing suites; the JSON in the output is a test's
   own substituted fixture, not a live run).

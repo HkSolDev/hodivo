@@ -15,6 +15,21 @@ from providers.gemini import (
 
 
 class GeminiProviderTests(unittest.TestCase):
+    def test_evidence_assessment_exposes_function_call_without_json_mode(self):
+        client = Mock()
+        call = {'name': 'read_notice', 'args': {'document_url': 'https://example.gov.in/a.pdf',
+                                               'fields': ['min_age']}}
+        client.post.return_value = httpx.Response(200, json={'candidates': [
+            {'content': {'parts': [{'functionCall': call}]}, 'finishReason': 'STOP'}]})
+        provider = GeminiProvider(keys=['illustrative-key'], client=client)
+        result = provider.assess_notice_evidence({'known_urls': ['https://example.gov.in/a.pdf']})
+        self.assertEqual(result['function_calls'], [call])
+        payload = client.post.call_args.kwargs['json']
+        self.assertNotIn('responseMimeType', payload['generationConfig'])
+        self.assertEqual(payload['tools'][0]['functionDeclarations'][0]['name'], 'read_notice')
+        provider.assess_notice_evidence({'known_urls': []})
+        self.assertNotIn('tools', client.post.call_args.kwargs['json'])
+
     def test_numbered_key_is_supported_without_exposing_it(self):
         with patch.dict(os.environ, {'GEMINI_API_KEY_1': 'illustrative-key'}, clear=True):
             self.assertEqual(gemini_api_key(), 'illustrative-key')

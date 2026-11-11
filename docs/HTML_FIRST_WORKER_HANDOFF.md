@@ -6,8 +6,8 @@ Read [the staged plan](HTML_FIRST_WORKER_PLAN.md) first.
 
 ## Current state
 
-Planning only. No worker behavior, provider settings, database schema or production
-service changed on this branch. Graphify index is local/generated, not committed.
+Implementation in progress. The opt-in worker path has local changes; default
+provider settings, database schemas and production services are unchanged. Graphify index is local/generated, not committed.
 Hemant's additional requirements are recorded in plan slice 7: category cutoffs
 for three completed exam cycles, official syllabus, recommended free YouTube
 resources, and compact base age limits. Freeze their additive data contract
@@ -61,3 +61,20 @@ Syllabus, category cutoffs and YouTube enrichment are in scope as slice 7 after
 the core evidence path. They need explicit persistence/API/UI lineage and must
 not block valid job publication when unavailable. Compact age presentation must
 preserve the detailed rules used by eligibility matching.
+
+## Coordinator implementation in progress
+
+Use the stable worktree `/Users/mrblackghost/Work/Projects/aptus-html-first-worker`
+and branch `codex/html-first-worker-plan`. The shared Colab-inspired prompt lives
+in `services/ai/research_gap_prompt.py`; the preparation extension is opt-in and
+has no new storage/API fields yet. `html_first_evidence.py` performs bounded,
+best-effort recovery and `html_first_checkpoint.py` saves it before extraction.
+The worker exposes `--html-first --issuer-hosts /path/to/issuer-hosts.json` for
+explicit trials; ordinary runs retain existing behavior. The hosts JSON maps
+exact issuer names to allowed public hostnames, e.g. illustrative test data:
+`{"Example Board": ["example.gov.in"]}`. Do not infer issuer authority from a
+third-party discovery host. Search task settings remain the existing
+`SEARCH_PROVIDER` / `SEARCH_MODEL` (or Gemini-specific model setting).
+
+No live trial, deployment, database mutation or rollout is claimed. See the
+coordination record for open slices and verification results.

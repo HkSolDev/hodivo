@@ -147,13 +147,13 @@ Focused coverage:
 
 ## Confirmed risks
 
-| Risk | Likelihood | Impact | Evidence |
-| --- | --- | --- | --- |
-| Prompt size grows with every gap/post because supported facts, gaps and conflicts are uncapped | 3 | 2 | `_build_prompt` iterates all items; `ALLOWED_ENRICHMENT_FIELDS` is 13 fields but post count is source-dependent. Coordinator should cap or batch before a provider call. |
-| `official_host_candidate` is trusted when `issuer_hosts` is not supplied | 3 | 6 | `verify_bundle.py` sets that marker using the configured issuer hosts; the helper revalidates only when `issuer_hosts` is passed. Integration should pass the same map. |
-| Empty `official_urls` still yields a ready prompt | 4 | 5 | Test 6 shows `status="ready"` with an explicit "None supplied" instruction. Acceptable only if the downstream search/capture path enforces official-host evidence; otherwise the coordinator should block. |
-| Gaps are limited to supplied missing/review/requested fields; a null post field with no explanation is not auto-added | 5 | 3 | `_add_gap` call sites. By design: the caller/extraction contract owns null explanation, and guessed gaps would risk inventing research targets. |
-| Conflicts are preserved but not resolved by this helper | 1 | 2 | Conflict entries are copied into the prompt; resolution still requires captured official evidence and review. No unsafe fallback exists in this module. |
+| Risk                                                                                                                  | Likelihood | Impact | Evidence                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------- | ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt size grows with every gap/post because supported facts, gaps and conflicts are uncapped                        | 3          | 2      | `_build_prompt` iterates all items; `ALLOWED_ENRICHMENT_FIELDS` is 13 fields but post count is source-dependent. Coordinator should cap or batch before a provider call.                                   |
+| `official_host_candidate` is trusted when `issuer_hosts` is not supplied                                              | 3          | 6      | `verify_bundle.py` sets that marker using the configured issuer hosts; the helper revalidates only when `issuer_hosts` is passed. Integration should pass the same map.                                    |
+| Empty `official_urls` still yields a ready prompt                                                                     | 4          | 5      | Test 6 shows `status="ready"` with an explicit "None supplied" instruction. Acceptable only if the downstream search/capture path enforces official-host evidence; otherwise the coordinator should block. |
+| Gaps are limited to supplied missing/review/requested fields; a null post field with no explanation is not auto-added | 5          | 3      | `_add_gap` call sites. By design: the caller/extraction contract owns null explanation, and guessed gaps would risk inventing research targets.                                                            |
+| Conflicts are preserved but not resolved by this helper                                                               | 1          | 2      | Conflict entries are copied into the prompt; resolution still requires captured official evidence and review. No unsafe fallback exists in this module.                                                    |
 
 No contract blocker was found. This lane makes no shared semantic change and
 requires no contract revision; it is an additive helper awaiting coordinator

@@ -1,6 +1,7 @@
 # HTML-first worker implementation plan
 
-Status: proposed implementation sequence; no runtime behavior changed.
+Status: implementation in progress on the isolated branch; opt-in path only.
+Production has not changed. The acceptance gates below remain required.
 Baseline: origin/main d49189c7504e5577541c822dc5c5eb91ebf3f30c.
 Branch: codex/html-first-worker-plan.
 
@@ -249,9 +250,51 @@ evidence or acceptance semantics requires an explicit contract revision. Use no
 new agent framework or dependencies. Implement one slice at a time and inspect
 its diff and relevant behavioral checks before starting the next.
 
-## Verification limits
+## Original planning-pass verification limits
 
-This planning pass inspected current-main source and built a local AST graph;
+The original planning pass inspected current-main source and built a local AST graph;
 it did not run provider calls, modify the worker, deploy or publish jobs. Graphify
 reported missing SQL parsing support; Python call-path findings were checked in
 source. No runtime tests are claimed for this documentation-only change.
+
+## Research prompt baseline: approved Colab example
+
+Hemant supplied the working `gemini-2.5-flash` Google Search Colab example as
+our research template. Keep its detailed recruitment coverage, adapted per notice
+rather than hardcoding IIIT Pune. `research_gap_prompt.py` owns the shared prompt;
+`html_first_evidence.py` supplies exact identity, collected evidence, remaining
+fields and known links. Gemini researches unresolved facts; DeepSeek structures
+the resulting independently captured evidence. No SDK/dependency replacement is
+required: the existing provider already uses the v1beta endpoint.
+
+Core coverage: notice/issuer, posts, vacancies, dates, qualifications, examinations,
+base age and separate relaxations, pay, application method/contact/documents,
+selection/exclusions and explicit uncertainties. Known URLs are starting points,
+not an exhaustive source allowlist: discovery may find additional official
+sources; Python verifies issuer, notice identity, safe capture and exact evidence.
+Never claim a failed PDF was read. Snippets alone cannot establish an omission.
+
+Preparation is a separate optional prompt extension: category/stage/cycle cutoffs
+for three completed cycles, official syllabus, labelled preparation advice and
+actual verified free YouTube links with topic mapping and recommendation reasons.
+Interview-only project posts must not gain fabricated exam syllabuses or cutoffs.
+Missing enrichment does not block valid core publication. This prompt change does
+not itself add storage/API fields or prove live provider/worker integration.
+
+## Progress against the original plan — 11 November 2026
+
+| Slice                  | Verified state                                                                               | Remaining acceptance work                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 1. Baseline            | Existing synthetic/native-page/listing tests available                                       | Saved IIIT Pune fixture and four-case comparison measurements not completed |
+| 2. Conditional capture | Opt-in deferred PDF links retain context; extensionless PDF-labelled links supported         | PDF-only listing identity bootstrap and amendment/version comparison        |
+| 3. Assessment/tool     | Gemini adapter, validated reads, two-attempt bound and saved results tested offline          | Independent reviewer and real-notice trial                                  |
+| 4. Recovery/research   | PDF failure reaches research; wrong issuer/advertisement rejected; partial evidence retained | Real scanned-notice OCR/Vision comparison and transient-recovery acceptance |
+| 5. Structure/review    | Opt-in evidence stage reaches existing extraction; existing gates retained                   | Equivalent HTML/PDF fact comparison against known real notices              |
+| 6. Publication         | Existing publication remains gated; unchanged retired legacy version skips planning          | Full new-path publication/retry acceptance and drafts-only live trial       |
+| 7. Enrichment/age      | Detailed optional research prompt recorded                                                   | Additive contract, persistence/API/UI implementation and tests              |
+| 8. Public identity     | Official-source requirements included in research prompt                                     | Public link/title mapping, consumer tests and backfill preview              |
+
+Do not mark the complete pipeline finished or enable production from these unit
+results. Implementation wiring has started before the full baseline comparison
+was completed; that comparison remains open and required, not waived. Next
+verification returns to slice 1 before broadening this candidate or rollout.
