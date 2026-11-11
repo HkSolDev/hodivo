@@ -169,7 +169,7 @@ class GeminiProvider:
                     json=payload,
                     timeout=timeout,
                 )
-            except (httpx.ConnectError, httpx.ConnectTimeout):
+            except (httpx.NetworkError, httpx.TimeoutException):
                 return {
                     "status": "unresolved",
                     "retryable": True,

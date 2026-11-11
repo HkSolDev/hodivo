@@ -115,12 +115,14 @@ class ProviderMetricsTests(unittest.TestCase):
         self.assertEqual(counts, {'attempted': 2, 'succeeded': 1, 'failed': 1})
         for provider in (gemini, XaiProvider(model='fixture-model', client=client,
                                            env={'XAI_API_KEY': 'fixture'})):
-            with self.subTest(provider=type(provider).__name__):
-                client.post.side_effect = httpx.ConnectError('fixture')
-                with track_provider_requests() as counts:
-                    result = provider.request_json(system_prompt='fixture', parts=[{'text': 'fixture'}])
-                self.assertTrue(result['retryable'])
-                self.assertEqual(counts, {'attempted': 1, 'succeeded': 0, 'failed': 1})
+            for error_type in (httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout,
+                               httpx.WriteTimeout, httpx.PoolTimeout, httpx.LocalProtocolError):
+                with self.subTest(provider=type(provider).__name__, error=error_type.__name__):
+                    client.post.side_effect = error_type('fixture')
+                    with track_provider_requests() as counts:
+                        result = provider.request_json(system_prompt='fixture', parts=[{'text': 'fixture'}])
+                    self.assertEqual(result['retryable'], error_type is not httpx.LocalProtocolError)
+                    self.assertEqual(counts, {'attempted': 1, 'succeeded': 0, 'failed': 1})
         client.post.side_effect = None
         client.post.return_value = httpx.Response(200, json={'choices': [
             {'finish_reason': 'stop', 'message': {'content': '{}'}}]})

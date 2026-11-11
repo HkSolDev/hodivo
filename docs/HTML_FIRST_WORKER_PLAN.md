@@ -531,3 +531,21 @@ populate these fields, or complete the other worker reliability gates.
 - Remaining: retry classification, search-provider checkpoint identity, shared
   per-notice limits and end-to-end publication verification. No live calls or
   deployment performed.
+
+### Task-provider transient transport retries — 11 November 2026
+
+- Confirmed: a fake HTTP ReadTimeout returned retryable=false from both Gemini
+  and xAI task adapters. A slow response could therefore be saved as an unresolved
+  result instead of entering the evidence checkpoint retry path. Likelihood 6,
+  impact 5, risk 30; no production incident frequency is claimed.
+- Both adapters now classify httpx NetworkError and TimeoutException as retryable.
+  Existing checkpoint backoff and attempt limits remain unchanged; no immediate
+  retry or key rotation is added for transport failures. LocalProtocolError stays
+  non-retryable. Authentication, HTTP status and JSON validation handling remain
+  unchanged. Previously saved non-retryable checkpoints are not migrated.
+- Extended the existing adapter regression for connection/read failures,
+  read/write/pool timeouts and permanent protocol errors, including exact HTTP
+  attempt totals. All 528 Python tests pass offline, including evidence backoff
+  and completed-assessment reuse. Typecheck and lint pass. No live calls or deploy.
+- Next: search-provider checkpoint identity and shared per-notice limits, followed
+  by end-to-end publication verification. Preparation AI/UI remain deferred.

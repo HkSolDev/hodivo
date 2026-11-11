@@ -31,7 +31,7 @@ class XaiProvider:
             response = provider_post(self.client, 'https://api.x.ai/v1/' + endpoint,
                 headers={'Authorization': 'Bearer ' + self.api_key},
                 json=payload, timeout=timeout)
-        except (httpx.ConnectError, httpx.ConnectTimeout):
+        except (httpx.NetworkError, httpx.TimeoutException):
             return {**result, 'reason': 'xai_network_failed', 'retryable': True}
         except httpx.HTTPError:
             return {**result, 'reason': 'xai_transport_error'}
