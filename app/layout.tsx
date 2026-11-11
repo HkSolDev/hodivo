@@ -4,6 +4,10 @@ import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { SkipLink } from '@/components/layout/skip-link';
 import { DesignReviewProvider } from '@/components/jobs/design-review-state';
+import {
+  HOME_SEO_DESCRIPTION,
+  HOME_SEO_TITLE,
+} from '@/components/jobs/job-sharing';
 
 import '@/public/css/tokens.css';
 import '@/public/css/base.css';
@@ -21,11 +25,10 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: 'Hodivo — Find your next possibility',
+    default: HOME_SEO_TITLE,
     template: '%s | Hodivo',
   },
-  description:
-    'Compare your education and age with government job notifications, understand the saved requirements, and verify the source.',
+  description: HOME_SEO_DESCRIPTION,
 };
 
 export default function RootLayout({

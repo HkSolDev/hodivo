@@ -1,70 +1,104 @@
+import { cache } from 'react';
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { jobMetadata } from '../../../components/jobs/job-sharing';
+import { notFound } from 'next/navigation';
+import {
+  isSafeJobId,
+  jobMetadata,
+  trustedPublicOrigin,
+} from '../../../components/jobs/job-sharing';
 import {
   JobDetailContent,
   type JobDetailData,
 } from '../../../components/jobs/job-detail-content';
 
-async function fetchJobDetail(id: string): Promise<JobDetailData | null> {
+type JobDetailFetchResult =
+  | { status: 'ok'; job: JobDetailData }
+  | { status: 'not_found' }
+  | { status: 'unavailable' };
+
+const fetchJobDetail = cache(async function fetchJobDetail(
+  id: string,
+): Promise<JobDetailFetchResult> {
+  if (!isSafeJobId(id)) {
+    return { status: 'not_found' };
+  }
   const backendUrl =
     process.env.BACKEND_INTERNAL_URL || 'http://127.0.0.1:8081';
   try {
     const res = await fetch(
-      `${backendUrl}/api/jobs/${encodeURIComponent(id)}`,
+      `${backendUrl}/api/jobs/${encodeURIComponent(id.trim())}`,
       {
         next: { revalidate: 60 },
       },
     );
-    if (!res.ok) return null;
-    return (await res.json()) as JobDetailData;
+    if (res.status === 404 || res.status === 400) {
+      return { status: 'not_found' };
+    }
+    if (!res.ok) {
+      return { status: 'unavailable' };
+    }
+    const job = (await res.json()) as JobDetailData;
+    if (
+      !job ||
+      typeof job.id !== 'string' ||
+      typeof job.postName !== 'string'
+    ) {
+      return { status: 'unavailable' };
+    }
+    return { status: 'ok', job };
   } catch {
-    return null;
+    return { status: 'unavailable' };
   }
-}
+});
 
 export async function generateMetadata(props: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const params = await props.params;
-  const job = await fetchJobDetail(params.id);
-  if (!job) {
+  const result = await fetchJobDetail(params.id);
+  if (result.status === 'not_found') {
     return {
-      title: 'Job Details | Hodivo',
-      description: 'View government job eligibility details on Hodivo.',
+      title: 'Job Not Found',
+      description:
+        'The requested government job notification could not be found on Hodivo.',
+      robots: {
+        index: false,
+        follow: false,
+      },
     };
   }
-  return jobMetadata(job, process.env.SITE_URL);
+  if (result.status === 'unavailable') {
+    throw new Error('Job details temporarily unavailable');
+  }
+  const metadata = jobMetadata(
+    result.job,
+    trustedPublicOrigin(process.env.SITE_URL),
+  );
+  if (result.job.designReview) {
+    return {
+      ...metadata,
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
+  return metadata;
 }
 
 export default async function JobDetailPage(props: {
   params: Promise<{ id: string }>;
 }) {
   const params = await props.params;
-  const job = await fetchJobDetail(params.id);
+  const result = await fetchJobDetail(params.id);
 
-  if (!job) {
-    return (
-      <section className="job-detail">
-        <nav aria-label="Breadcrumb">
-          <Link href="/#jobs" className="button button-secondary">
-            ← Back to all jobs
-          </Link>
-        </nav>
-        <h1>Job details</h1>
-        <div className="notice">
-          <p>
-            Detailed job facts are being connected via the backend JSON API (
-            <code>GET /api/jobs/:id</code>).
-          </p>
-          <p>
-            You can browse all current notifications on the{' '}
-            <Link href="/#jobs">all jobs page</Link>.
-          </p>
-        </div>
-      </section>
-    );
+  if (result.status === 'not_found') {
+    notFound();
   }
 
-  return <JobDetailContent job={job} />;
+  if (result.status === 'unavailable') {
+    throw new Error('Job details temporarily unavailable');
+  }
+
+  return <JobDetailContent job={result.job} />;
 }
