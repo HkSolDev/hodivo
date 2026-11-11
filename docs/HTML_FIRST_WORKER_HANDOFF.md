@@ -13,6 +13,11 @@ for three completed exam cycles, official syllabus, recommended free YouTube
 resources, and compact base age limits. Freeze their additive data contract
 before assigning implementation writers.
 
+Plan slice 8 adds official-only public notice/application destinations and job
+titles without discovery-site branding. Retain third-party discovery provenance
+internally and preserve real recruiting-body/exam acronyms. Include existing
+published records in the audit; production backfill is a separate previewed step.
+
 ## Start here
 
 1. Verify branch, HEAD and working changes. Read project instructions,

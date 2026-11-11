@@ -182,10 +182,45 @@ videos have verified URLs, and age cards show the base range without changing
 matching results. Include fixtures for a multi-stage exam, missing historical
 year, interview-only JRF, category relaxation and a missing minimum age.
 
+### 8. Official public links and clean job titles
+
+Requested by Hemant: discovery may start on Sarkari Result, FreeJobAlert or other
+third-party pages, but public source/notice and apply actions must lead to verified
+official destinations. Preserve discovery URLs internally for provenance only.
+
+- Model the discovery page, official notice, official organisation website and
+  application destination separately. Never silently use the discovery URL when
+  an official notice or apply URL is unavailable; show that action as unavailable.
+- Verify that the notice belongs to the exact issuer, advertisement and cycle.
+  Prefer the official PDF or complete official notice HTML as the visible source.
+  A third-party mirror is not an official notice destination.
+- An application destination may be an external recruitment platform or Google
+  Form explicitly linked by the issuer. Verify that association from official
+  evidence; a government-domain suffix is not the only acceptance criterion.
+- Resolve/validate destinations through existing safe capture behavior; reject
+  unrelated links and unsafe URLs. Retain verification evidence and checked dates.
+- Job titles contain the real post/exam identity, without discovery-portal
+  branding, SEO suffixes, promotional text or scraped navigation. Do not blindly
+  remove acronyms: JKSSB/other recruiting bodies and IES/other exam names remain
+  when they are genuine official identity. Portal names are removed when used as
+  branding rather than being part of the official role or organisation.
+- Audit both source/action links and title consumers across candidate mapping,
+  ingestion, public list/detail API, cards, detail pages and saved jobs. Check
+  legacy published records as well as new extraction. Plan a previewable backfill
+  with evidence and counts before any production update; do not rewrite existing
+  rows automatically as part of this documentation task.
+
+Done when a job discovered on a third-party page displays only the verified
+official notice and issuer-authorised application link, missing official links
+never fall back to the portal, and title cleanup removes portal branding while
+preserving genuine exam/recruiter identity. Extend existing source-link, job-card,
+detail and publication tests for these cases.
+
 ## Contract and scope boundaries
 
 Preserve existing schema semantics for slices 1–6. Slice 7 requires an additive
-contract design for enrichment across extraction/storage/API/UI; document its
+contract design for enrichment across extraction/storage/API/UI; slice 8 needs
+explicit discovery-versus-public-link mappings. Document their
 exact fields and compatibility before implementing changes. Document and review the
 new internal tool request/result contract before slice 3. Any change to shared
 evidence or acceptance semantics requires an explicit contract revision. Use no
