@@ -34,9 +34,9 @@ await test('anonymous public job detail contract', async (t) => {
     },
     source: {
       name: 'Fictional notification source',
-      url: 'https://example.org/notice',
-      notificationPdfUrl: 'https://example.org/notice.pdf',
-      applyUrl: 'https://example.org/apply',
+      url: 'https://fixture.gov.in/notice',
+      notificationPdfUrl: 'https://fixture.gov.in/notice.pdf',
+      applyUrl: 'https://fixture.gov.in/apply',
       officialSiteUrl: null,
       fetchedAt: '2026-10-01T00:00:00.000Z',
     },
