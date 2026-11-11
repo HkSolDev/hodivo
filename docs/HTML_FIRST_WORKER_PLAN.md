@@ -636,3 +636,21 @@ populate these fields, or complete the other worker reliability gates.
 - Next: end-to-end review, retirement and publication/delivery retry verification.
   Five-state assessment and authentic scanned-notice quality comparison remain
   open. Preparation AI collection and frontend display remain deferred.
+
+### Retirement during delivery retry — 11 November 2026
+
+- Small verification slice: existing recovery and publication tests already cover
+  missing-review recovery/backoff, immutable approvals, exact-byte retirement,
+  delivery backoff and receipt reuse. No production bug was established here.
+- Extended the existing publication tests: a connection failure schedules delivery
+  retry, then an operator retires those exact bytes before retry becomes due.
+  Publication refuses the retry, makes no second send, preserves draft bytes and
+  approval, and creates no receipt. Existing guards pass without code changes.
+- All 533 Python tests, typecheck and lint pass. This is offline Python pipeline
+  and publication-boundary evidence using fake delivery, not a live database,
+  provider or deployment test. It does not prove server-side ingestion deduplication
+  after an actual database commit followed by a lost response.
+- Next small slice: inspect existing ingestion integration coverage for that
+  committed-but-response-lost scenario before adding any duplicate tests.
+  Five-state assessment and authentic scanned-notice comparison remain open;
+  preparation AI collection and frontend display remain deferred.

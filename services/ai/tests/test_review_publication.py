@@ -95,6 +95,35 @@ class ReviewedPublicationTests(unittest.TestCase):
                 publish(root, path, send=calls.append)
             self.assertEqual(calls, [])
 
+    def test_retirement_during_delivery_backoff_prevents_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'draft.json'
+            fixture(path)
+            approval = approve(root, path, 'Test reviewer', 'Checked original evidence')
+            original = path.read_bytes()
+            calls = []
+
+            def send(body):
+                calls.append(body)
+                raise httpx.ConnectError('Illustrative connection failure')
+
+            with self.assertRaisesRegex(RuntimeError, 'publication_failed'):
+                publish(root, path, send=send, clock=lambda: 1000)
+            digest = approval['draft_sha256']
+            marker = root / 'publication' / 'retirements' / f'{digest}.json'
+            marker.parent.mkdir(parents=True)
+            marker.write_text(json.dumps({'draft_sha256': digest,
+                                         'bundle_id': approval['bundle_id'],
+                                         'reason': 'Operator retired before delivery retry'}))
+            with self.assertRaisesRegex(ValueError, 'retired'):
+                publish(root, path, send=send, clock=lambda: 2000)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertFalse((root / 'publication' / 'receipts').exists())
+            saved_approval = root / 'publication' / 'approvals' / f'{digest}.json'
+            self.assertEqual(json.loads(saved_approval.read_text()), approval)
+
     def test_network_failure_retries_only_delivery_then_reuses_receipt(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
