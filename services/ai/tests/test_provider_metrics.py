@@ -79,7 +79,9 @@ class ProviderMetricsTests(unittest.TestCase):
                             'prepared_inputs': 1, 'prepared_paths': [str(path)]}]
                 client = Mock()
                 client.post.return_value = httpx.Response(200)
+                prepare_identity = []
                 def evidence(*args, **kwargs):
+                    prepare_identity.append(kwargs['model_identity'])
                     provider_post(client, 'https://provider.invalid')
                     return {'status': 'waiting', 'reason': 'evidence_provider_retry_wait'}
                 def review(*args, **kwargs):
@@ -92,12 +94,17 @@ class ProviderMetricsTests(unittest.TestCase):
                 with patch('generic_pipeline._load_bundles_for_source', return_value={
                         source_input['bundle_id']: source_input}), patch(
                         'html_first_checkpoint.prepare_html_first', side_effect=evidence), patch(
-                        'generic_pipeline.review_and_repair', side_effect=review):
+                        'generic_pipeline.review_and_repair', side_effect=review), patch(
+                        'generic_pipeline.task_provider', return_value=type('FixtureSearchProvider', (), {
+                            'model': 'fixture-model', 'assess_notice_evidence': lambda self, value: {}})()):
                     report = run_pipeline(root, prepare=lambda *args, **kwargs: sources,
                         extract=lambda _: {'bundle_id': source_input['bundle_id'],
                                            'facts': {'purpose': 'recruitment'}},
-                        issuer_hosts={'Example Board': ['example.gov.in']}, html_first=(stage == 'evidence'), evidence_assessor=lambda _: {},
+                        issuer_hosts={'Example Board': ['example.gov.in']}, html_first=(stage == 'evidence'), evidence_assessor=None,
                         evidence_discover=lambda _: {})
+                if stage == 'evidence':
+                    self.assertEqual(prepare_identity[0],
+                        {'provider': 'FixtureSearchProvider', 'model': 'fixture-model'})
                 expected = ({'attempted': 1, 'succeeded': 1, 'failed': 0} if stage == 'evidence'
                             else {'attempted': 2, 'succeeded': 1, 'failed': 1})
                 self.assertEqual(report['summary']['provider_requests'], expected)

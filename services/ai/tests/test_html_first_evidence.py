@@ -228,3 +228,17 @@ class HtmlFirstCheckpointTests(unittest.TestCase):
         self.assertFalse(changed['reused'])
         self.assertEqual(assess.call_count, 1)
         self.assertEqual(vision.call_count, 2)
+
+    def test_search_provider_identity_scopes_saved_evidence(self):
+        from html_first_checkpoint import prepare_html_first
+        assess = Mock(return_value=assessment())
+        options = dict(issuer_hosts=HOSTS, assess=assess, discover=self.search)
+        first_identity = {'provider': 'GeminiProvider', 'model': 'same-model'}
+        first = prepare_html_first(bundle(), self.root, model_identity=first_identity, **options)
+        same = prepare_html_first(bundle(), self.root, model_identity=first_identity, **options)
+        changed = prepare_html_first(bundle(), self.root,
+            model_identity={'provider': 'XaiProvider', 'model': 'same-model'}, **options)
+        self.assertFalse(first['reused'])
+        self.assertTrue(same['reused'])
+        self.assertFalse(changed['reused'])
+        self.assertEqual(assess.call_count, 2)

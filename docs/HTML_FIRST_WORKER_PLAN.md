@@ -549,3 +549,24 @@ populate these fields, or complete the other worker reliability gates.
   and completed-assessment reuse. Typecheck and lint pass. No live calls or deploy.
 - Next: search-provider checkpoint identity and shared per-notice limits, followed
   by end-to-end publication verification. Preparation AI/UI remain deferred.
+
+### Search-provider checkpoint identity — 11 November 2026
+
+- Confirmed by pipeline regression: search evidence identity contained only the
+  model string. Switching provider classes while retaining a model identifier
+  could reuse evidence from the previous provider. Likelihood 2, impact 2, risk 4;
+  no production occurrence demonstrated. Flagged and fixed as cache correctness,
+  under the correctness exception to the risk threshold.
+- Minimal change: the pipeline passes provider class plus model, matching the
+  existing Vision identity format. Existing fingerprinting requires no changes.
+  Default task providers are distinguished; custom injected callbacks without a
+  task provider still have no explicit identity and are outside this fix.
+- Migration consequence: legacy model-only checkpoints are not reused by the
+  configured search provider, so evidence work may repeat once. Retirements,
+  validated drafts and publication receipts are unchanged. No credentials enter
+  checkpoint identities; changing keys alone does not invalidate evidence.
+- Tests prove actual pipeline wiring, same-provider reuse and different-provider
+  invalidation with the same model name. All 529 Python tests, typecheck, lint
+  and diff checks pass offline. No live calls, push or deployment performed.
+- Next: shared per-notice limits and end-to-end publication verification.
+  Preparation AI collection and frontend display remain deferred.
