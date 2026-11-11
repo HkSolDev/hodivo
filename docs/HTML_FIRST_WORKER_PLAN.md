@@ -298,3 +298,174 @@ Do not mark the complete pipeline finished or enable production from these unit
 results. Implementation wiring has started before the full baseline comparison
 was completed; that comparison remains open and required, not waived. Next
 verification returns to slice 1 before broadening this candidate or rollout.
+
+## Dependency-ordered continuation — 11 November 2026
+
+Keep each increment independently testable; inspect its diff before the next.
+Do not combine worker changes with the already committed SEO implementation.
+
+1. **Capture baseline (current small increment).** Strengthen the existing four-case
+   comparison to require the exact expected advertisement/issuer set in both modes,
+   without duplicate notice bundles. Check complete HTML retains qualifications,
+   ages and deadline; a failed PDF retains the HTML deadline; reconstructed IIIT
+   PDF retains its JRF title and vacancy text. Touch only the existing baseline
+   test and this plan. These are capture assertions, not extracted JSON accuracy.
+   Next baseline increment needs authentic scanned evidence and page locators;
+   synthetic corruption cannot prove OCR quality. Do not infer the missing IIIT
+   identity year or fabricate facts in its HTML to make the comparison complete.
+2. **Resume and accounting.** Review the saved-call/checkpoint path, extend existing
+   retry tests for assessment and Vision outcomes, then trace provider accounting
+   around planning and review. Reuse StageRetries and existing request tracking;
+   prove completed paid work is reused and waiting retries make zero calls.
+3. **Unreadable linked PDF.** Reproduce the identity-before-Vision rejection with
+   the real scanned fixture. Permit bounded recovery only for a verified parent's
+   direct official document link, then verify recovered notice identity before
+   accepting new facts. Wrong-notice recovery stays rejected; failure proceeds
+   to remaining-gap research while preserving HTML.
+4. **Assessment states.** Review the internal assessment/tool contract and propose
+   the five-state representation before changing provider and consumer together.
+   Explicitly unstated needs source evidence; snippet absence remains missing.
+   Reuse current field-path validation, tool caps and checkpoint behavior.
+5. **End-to-end core proof.** Compare equivalent HTML/PDF facts through structured
+   extraction and review; prove retired bytes make zero AI calls, and delivery
+   retries reuse validated drafts without duplicate publication. All initial
+   checks remain offline and publication-disabled. A drafts-only live trial is
+   a separate authorized operation after these gates pass.
+6. **Public identity and enrichment.** Trace producer/storage/API/UI consumers;
+   define official notice/apply mappings and additive preparation fields through
+   the contract protocol. Implement official links/title behavior first, then
+   age presentation, syllabus, historical category cutoffs and verified videos
+   as separate increments. Optional research must not block core publication.
+7. **Release verification.** Run combined checks on the final source revision.
+   Push, deploy and production activation remain separate operator steps. After
+   deployment verify SEO through public HTTP responses and worker behavior through
+   an observed bounded run; local tests alone do not establish deployed state.
+
+The smallest increment adds no runtime behavior or dependencies. It closes a
+confirmed verification weakness: navigation bundles previously satisfied the
+baseline's nonempty assertion even if an expected notice disappeared. Remaining
+baseline fidelity, runtime recovery and rollout gates are still open.
+
+### Recovery-order increment — 11 November 2026
+
+Confirmed bug: an unreadable linked PDF was rejected for missing standalone
+identity before Vision could recover that identity. Offline regression reproduced
+zero Vision calls on a directly linked official PDF with no native text.
+Likelihood 7/10 for this input class, impact 6/10 (missing evidence), risk 42.
+
+`html_first_evidence.py` now uses the existing Vision identity/link guard on a
+provisional bundle before standalone verification for unreadable PDFs. Only
+recovered PDF evidence is considered for addition; it must independently match
+issuer, advertisement and year. Parent evidence is not rewritten. Recovery errors
+remain best-effort tool outcomes and allow remaining-gap research. No acceptance,
+provider, storage or publication contract changed.
+
+Regression checks cover matching identity, wrong-notice rejection and Vision
+failure continuing to research. Saved UPESSC legacy-font material remains a
+third-party mirror and is rejected by the official-source gate; it was not
+relabeled as official. The positive recovery test uses synthetic unreadable
+content and a fake Vision response. Authentic scanned-page/image and live model
+accuracy remain unverified; the full baseline gate is still open.
+
+### Enrichment audit and smallest age increment — 11 November 2026
+
+Existing paths: `targeted_enrichment.py` researches official syllabus and optional
+historical cutoffs; `store_candidate.py` retains those candidates separately from
+eligibility. The research prompt also requests free verified video resources.
+These worker capabilities do not establish a complete public API/UI path:
+`JobDetailContent` currently has no syllabus/cutoff/video presentation fields.
+Audit the exact candidate-to-publication mapping before proposing additive shared
+contracts; do not reimplement the existing research helpers.
+
+Age details already display the stored base min/max separately from category age
+rules and retain the age-as-on date. This increment changes one-sided labels to
+“Up to 35 years” and “At least 18 years”, without filling missing bounds or widening
+the base range to the category maximum. Existing unavailable-bound notices and
+category details remain. A regression covers both bounds, each one-sided bound,
+both unknown, the separate SC range and unchanged input data. No schema, matching
+or ingestion semantics changed. Legacy records with incorrect stored base ages
+still need evidence-backed review; display wording cannot correct source data.
+
+Next preparation increment: trace syllabus candidate approval through publication,
+storage and public API, and propose the smallest compatible mapping. Then implement
+source-backed syllabus display, followed by category/cycle/stage cutoff display,
+then verified video resources with actual URLs and checked dates. Preserve unknown,
+not-applicable and numeric-zero distinctions; optional preparation cannot block
+core publication. These are separate increments, not final release readiness.
+
+### Storage-only preparation increment — 11 November 2026
+
+Hemant requested database storage first, with AI collection and UI deferred.
+This is the additive storage design for that scope; protected candidate schema
+and extraction/eligibility/publication semantics remain unchanged.
+
+- Existing `AutomatedNoticeRecord.officialSyllabus` and `.historicalCutoffs`
+  already persist notice-level candidate JSON through autonomous ingestion.
+  Historical scores remain reference-only, not eligibility marks. This increment
+  verifies their existing persistence alongside resources; it does not replace
+  those existing formats or complete category/cycle enrichment collection.
+- Add nullable `AutomatedNoticeRecord.youtubeResources` JSONB, with an additive
+  migration. No existing rows are rewritten. Existing callers may omit it.
+- The authenticated autonomous-ingest envelope accepts optional `youtubeResources`:
+  at most 20 entries, each containing `url`, `title`, `channel`, `language`
+  (string or null), `topics` (up to 50 strings), `checkedAt` (ISO timestamp),
+  and `recommendationReason` (string or null). Unknown keys and invalid values
+  are rejected before persistence. Only HTTPS YouTube video/playlist destinations
+  are accepted. URL syntax validation does not prove availability, educational
+  quality, or that the caller actually checked the URL; collection must verify
+  those later. Nothing is marked verified by this ingestion code.
+- Omission preserves saved YouTube resources on notice-record updates, null clears
+  them, and an empty array records no resources. Accepted identical-version replays
+  retain existing idempotent behavior; this is not a new enrichment-update endpoint.
+- Resources remain private notice metadata, not public reviewed facts or matching
+  inputs. No Python AI producer or frontend consumer is added in this increment.
+- Apply the database migration before deploying code that selects/writes this new
+  Prisma field. Rollback code first; leave the nullable column in place to retain
+  stored resources. Dropping it would lose resources and is not automatic rollback.
+
+Checks: Prisma client generation, TypeScript typecheck, ESLint and all five existing
+plus extended autonomous-ingest tests pass. Tests use a Python-produced envelope
+and in-memory database; no actual PostgreSQL migration/write, production mutation,
+provider call or URL availability check was performed. The local test worktree uses
+an ignored symlink to the existing Python environment; no dependencies installed.
+
+### PostgreSQL proof and next-stage gates — 11 November 2026
+
+Local PostgreSQL 14 cluster, loopback-only port 55439, disposable database
+`aptus_preparation_test`: all 20 migrations applied successfully, including the
+nullable YouTube resources column. All six autonomous-ingest tests passed with
+one actual PostgreSQL round-trip. The integration test guards the loopback host,
+exact disposable database name and matching DATABASE_URL/TEST_DATABASE_URL before
+writing. It removes its own notice record and checks Post count is unchanged.
+
+Observed: syllabus JSON, category cutoff numeric zero and resource JSON survive
+storage/read-back; omitted resources survive retry; [] and null clear explicitly;
+invalid resource URLs are rejected without a new notice record. This supersedes
+the previous storage increment's unrun PostgreSQL check, not its production limits.
+No production migration, content collection, AI call or frontend work occurred.
+The test cluster is stopped after verification; its files remain under temporary
+storage for diagnosis, not as a project database.
+
+Next execution order and stop conditions:
+
+1. Save the reviewed capture baseline, recovery-order, age wording and storage
+   changes as separate local commits; keep generated graph files excluded.
+2. Trace retries and provider accounting around evidence planning, extraction,
+   review and repair. Extend existing tests before modifying shared tracking.
+   Done when a failed request is counted, waiting retries make zero calls, and
+   successful saved work is reused. Do not replace the existing retry ledger.
+3. Define and review the five-state assessment contract with actual examples,
+   then change provider and consumer together. Explicitly unstated requires
+   affirmative evidence; malformed output must not invent supported facts.
+4. Prove extraction/review/publication end-to-end offline: held conflicts cannot
+   publish, retired bytes make zero paid calls, delivery retries create one job.
+   Reuse existing publication and retirement checks. Investigate failures before
+   adding new abstractions or changing acceptance semantics.
+5. Report the offline gates and propose a bounded drafts-only live trial with
+   explicit call/output limits before making paid provider requests. Push/PR and
+   deployment are separate operations. Apply storage migration before new API
+   code; verify deployed revision and observed worker results afterward.
+
+Syllabus/cutoff/video AI generation and frontend display remain deferred by
+Hemant. Storage readiness does not establish content accuracy, automatically
+populate these fields, or complete the other worker reliability gates.
