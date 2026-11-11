@@ -652,3 +652,70 @@ await test(
     assert.equal(await prisma.post.count(), countBefore);
   },
 );
+
+await test(
+  'committed autonomous notice replays without duplicate PostgreSQL rows after response loss',
+  { skip: !process.env.TEST_DATABASE_URL },
+  async (t) => {
+    const url = new URL(process.env.TEST_DATABASE_URL!);
+    assert.equal(url.hostname, '127.0.0.1');
+    assert.equal(url.pathname, '/aptus_preparation_test');
+    assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
+    const { prisma } = await import('../src/db.js');
+    const payload = generateAutonomousPayloadFromPython({
+      decision: 'accepted',
+    });
+    const bundleId = String(payload.bundleId);
+    const envelope = payload.draftEnvelope as Record<string, unknown>;
+    const sourceUrl = String(envelope.source_url);
+    assert.equal(await prisma.source.count({ where: { url: sourceUrl } }), 0);
+    assert.equal(
+      await prisma.extractionCandidate.count({ where: { bundleId } }),
+      0,
+    );
+    assert.equal(
+      await prisma.automatedNoticeRecord.count({ where: { bundleId } }),
+      0,
+    );
+    t.after(async () => {
+      const source = await prisma.source.findUnique({
+        where: { url: sourceUrl },
+      });
+      if (source)
+        await prisma.post.deleteMany({ where: { sourceId: source.id } });
+      await prisma.automatedNoticeRecord.deleteMany({ where: { bundleId } });
+      await prisma.extractionCandidate.deleteMany({ where: { bundleId } });
+      if (source) await prisma.source.delete({ where: { id: source.id } });
+      await prisma.$disconnect();
+    });
+    // Discard the successful response, as if transport lost it after commit.
+    await ingestAutonomousNotice(payload, prisma);
+    const record = await prisma.automatedNoticeRecord.findFirstOrThrow({
+      where: { bundleId },
+    });
+    const posts = await prisma.post.findMany({
+      where: { sourceId: record.sourceId! },
+    });
+    assert.equal(posts.length, 1);
+    const replay = await ingestAutonomousNotice(payload, prisma);
+    assert.equal(replay.reused_existing, true);
+    assert.equal(replay.record_id, record.id);
+    assert.deepEqual(
+      replay.post_ids,
+      posts.map((post) => post.id),
+    );
+    assert.deepEqual(
+      await prisma.post.findMany({ where: { sourceId: record.sourceId! } }),
+      posts,
+    );
+    assert.equal(await prisma.source.count({ where: { url: sourceUrl } }), 1);
+    assert.equal(
+      await prisma.extractionCandidate.count({ where: { bundleId } }),
+      1,
+    );
+    assert.equal(
+      await prisma.automatedNoticeRecord.count({ where: { bundleId } }),
+      1,
+    );
+  },
+);

@@ -654,3 +654,22 @@ populate these fields, or complete the other worker reliability gates.
   committed-but-response-lost scenario before adding any duplicate tests.
   Five-state assessment and authentic scanned-notice comparison remain open;
   preparation AI collection and frontend display remain deferred.
+
+### PostgreSQL committed-delivery replay — 11 November 2026
+
+- Analysis found existing accepted-notice replay coverage used an in-memory DB.
+  Added one case to the existing ingestion test file, using the guarded disposable
+  loopback PostgreSQL database. No production bug was demonstrated or code changed.
+- The test commits an accepted payload, discards its response, then submits the
+  identical payload again. It verifies the same record/job IDs, unchanged job
+  rows and exactly one Source, ExtractionCandidate and AutomatedNoticeRecord.
+  Cleanup removes only the fixture's records. Existing fixture records cause an
+  assertion failure before writes rather than being reused or deleted.
+- All seven ingestion tests pass with no skips, including two real PostgreSQL
+  cases. Typecheck, lint and diff checks pass. The disposable cluster was stopped.
+  This proves sequential replay at the ingestion function/DB boundary; it does
+  not simulate a dropped HTTP connection or simultaneous deliveries. Python
+  delivery backoff and receipt reuse remain covered separately.
+- Next: five-state HTML-first evidence assessment, starting with inspection of
+  existing assessment validation/tests. Authentic scanned-notice quality remains
+  open. Preparation AI collection and frontend display remain deferred.
