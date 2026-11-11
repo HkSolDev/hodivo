@@ -478,3 +478,177 @@ await test('accepted autonomous notice publishes Post, is idempotent on repeat, 
     /reference_only=true/,
   );
 });
+
+await test('stores preparation resources without publishing them or erasing them on omitted retries', async () => {
+  for (const decision of ['retryable', 'accepted'] as const) {
+    const db = createInMemoryDb();
+    const payload = generateAutonomousPayloadFromPython({
+      decision,
+      ...(decision === 'retryable' ? { applicationLastDate: null } : {}),
+    });
+    const youtubeResources = [
+      {
+        url: 'https://www.youtube.com/watch?v=abcdefghijk',
+        title: 'Illustrative algebra lesson',
+        channel: 'Example teaching channel',
+        language: 'English',
+        topics: ['Algebra'],
+        checkedAt: '2026-11-11T10:00:00Z',
+        recommendationReason: null,
+      },
+    ];
+    const officialSyllabus = [
+      { exam_name: 'Example exam', topics: ['Algebra'] },
+    ];
+    const historicalCutoffs = [
+      {
+        recruitment_year: 2025,
+        category: 'SC',
+        score: 0,
+        reference_only: true,
+      },
+    ];
+    await ingestAutonomousNotice(
+      { ...payload, youtubeResources, officialSyllabus, historicalCutoffs },
+      db as never,
+    );
+    let record = [...db._state.automatedRecords.values()][0];
+    assert.deepEqual(record.youtubeResources, youtubeResources);
+    assert.deepEqual(record.officialSyllabus, officialSyllabus);
+    assert.deepEqual(record.historicalCutoffs, historicalCutoffs);
+    await ingestAutonomousNotice(payload, db as never);
+    record = [...db._state.automatedRecords.values()][0];
+    assert.deepEqual(record.youtubeResources, youtubeResources);
+    assert.equal(db._state.automatedRecords.size, 1);
+    assert.equal(await db.post.count(), decision === 'accepted' ? 1 : 0);
+    for (const post of db._state.posts.values()) {
+      assert.equal(post.minMarksPercent, null);
+      assert.equal(
+        'youtubeResources' in (post.reviewedDetails as object),
+        false,
+      );
+    }
+  }
+});
+
+await test('rejects invalid preparation resource URLs before persistence', async () => {
+  const payload = generateAutonomousPayloadFromPython({
+    decision: 'retryable',
+  });
+  const resource = {
+    title: 'Example',
+    channel: 'Example',
+    language: null,
+    topics: [],
+    checkedAt: '2026-11-11T10:00:00Z',
+    recommendationReason: null,
+  };
+  for (const url of [
+    'javascript:alert(1)',
+    'https://youtube.com.evil.example/watch?v=abcdefghijk',
+    'https://youtube.com/redirect?q=example',
+    'http://youtu.be/abcdefghijk',
+  ]) {
+    const db = createInMemoryDb();
+    await assert.rejects(
+      ingestAutonomousNotice(
+        { ...payload, youtubeResources: [{ ...resource, url }] },
+        db as never,
+      ),
+      AutonomousIngestError,
+    );
+    assert.equal(db._state.automatedRecords.size, 0);
+    assert.equal(await db.post.count(), 0);
+  }
+});
+
+await test(
+  'preparation metadata round-trips through PostgreSQL without publishing jobs',
+  { skip: !process.env.TEST_DATABASE_URL },
+  async (t) => {
+    const url = new URL(process.env.TEST_DATABASE_URL!);
+    assert.equal(url.hostname, '127.0.0.1');
+    assert.equal(url.pathname, '/aptus_preparation_test');
+    assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
+    const { prisma } = await import('../src/db.js');
+    const bundleId = `preparation-storage-${crypto.randomUUID()}`;
+    t.after(async () => {
+      await prisma.automatedNoticeRecord.deleteMany({ where: { bundleId } });
+      await prisma.$disconnect();
+    });
+    const payload = {
+      kind: 'autonomous_notice',
+      bundleId,
+      sourceName: 'Illustrative storage test',
+      sourceUrl: 'https://example.invalid/preparation',
+      evidenceFingerprint: 'storage-test-v1',
+      extractionVersion: 'test-only',
+      decision: 'blocked',
+      publicationStatus: 'blocked',
+      persistenceAllowed: false,
+      reasonCodes: ['test_only'],
+      noticeIdentity: {},
+      auditLineage: [],
+      officialSyllabus: [{ exam_name: 'Example exam', topics: ['Algebra'] }],
+      historicalCutoffs: [
+        {
+          recruitment_year: 2025,
+          category: 'SC',
+          score: 0,
+          reference_only: true,
+        },
+      ],
+    };
+    const resources = [
+      {
+        url: 'https://youtu.be/abcdefghijk',
+        title: 'Illustrative lesson',
+        channel: 'Example channel',
+        language: null,
+        topics: ['Algebra'],
+        checkedAt: '2026-11-11T10:00:00Z',
+        recommendationReason: null,
+      },
+    ];
+    const countBefore = await prisma.post.count();
+    const result = await ingestAutonomousNotice(
+      { ...payload, youtubeResources: resources },
+      prisma,
+    );
+    const read = () =>
+      prisma.automatedNoticeRecord.findUniqueOrThrow({
+        where: { id: result.record_id },
+      });
+    const stored = await read();
+    assert.deepEqual(stored.officialSyllabus, payload.officialSyllabus);
+    assert.deepEqual(stored.historicalCutoffs, payload.historicalCutoffs);
+    assert.deepEqual(stored.youtubeResources, resources);
+    await ingestAutonomousNotice(payload, prisma);
+    assert.deepEqual((await read()).youtubeResources, resources);
+    await ingestAutonomousNotice({ ...payload, youtubeResources: [] }, prisma);
+    assert.deepEqual((await read()).youtubeResources, []);
+    await ingestAutonomousNotice(
+      { ...payload, youtubeResources: null },
+      prisma,
+    );
+    assert.equal((await read()).youtubeResources, null);
+    await assert.rejects(
+      ingestAutonomousNotice(
+        {
+          ...payload,
+          evidenceFingerprint: 'invalid-url',
+          youtubeResources: [
+            { ...resources[0], url: 'https://example.invalid/video' },
+          ],
+        },
+        prisma,
+      ),
+      AutonomousIngestError,
+    );
+    assert.equal(
+      await prisma.automatedNoticeRecord.count({ where: { bundleId } }),
+      1,
+    );
+    assert.equal(await prisma.post.count(), countBefore);
+  },
+);
