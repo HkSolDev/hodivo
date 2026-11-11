@@ -32,6 +32,49 @@ class ProviderMetricsTests(unittest.TestCase):
                 with track_provider_requests(max_attempts=invalid):
                     pass
 
+    def test_durable_allowance_survives_new_scopes_and_transport_failure(self):
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from provider_metrics import bind_provider_budget, provider_post, ProviderRequestLimit
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / 'notice.json'
+            client = Mock()
+            client.post.side_effect = httpx.ReadTimeout('fixture')
+            with track_provider_requests(max_attempts=2):
+                bind_provider_budget(path)
+                with self.assertRaises(httpx.ReadTimeout):
+                    provider_post(client, 'https://provider.invalid')
+            client.post.side_effect = None
+            client.post.return_value = httpx.Response(200)
+            with track_provider_requests(max_attempts=2) as counts:
+                bind_provider_budget(path)
+                provider_post(client, 'https://provider.invalid')
+                with self.assertRaises(ProviderRequestLimit) as error:
+                    provider_post(client, 'https://provider.invalid')
+                self.assertFalse(error.exception.retryable)
+            self.assertEqual(client.post.call_count, 2)
+            self.assertEqual(counts['attempted'], 1)
+            self.assertEqual(json.loads(path.read_text()), {'attempted': 2})
+            with track_provider_requests(max_attempts=2):
+                bind_provider_budget(path)
+                with self.assertRaises(ProviderRequestLimit):
+                    provider_post(client, 'https://provider.invalid')
+            # Corruption and failed reservations must never reach transport.
+            for invalid in ('{', '{"attempted": true}', '{"attempted": -1}', '[]'):
+                path.write_text(invalid)
+                with track_provider_requests(max_attempts=2):
+                    bind_provider_budget(path)
+                    with self.assertRaisesRegex(RuntimeError, 'provider_request_budget_invalid'):
+                        provider_post(client, 'https://provider.invalid')
+            path.unlink()
+            with track_provider_requests(max_attempts=2):
+                bind_provider_budget(path)
+                with patch('provider_metrics.atomic_write', side_effect=OSError('fixture')):
+                    with self.assertRaises(OSError):
+                        provider_post(client, 'https://provider.invalid')
+            self.assertEqual(client.post.call_count, 2)
+
     def test_missing_credentials_do_not_count_a_request(self):
         with track_provider_requests() as counts:
             with patch('extract_bundle.provider_keys', return_value=[]), patch('extract_bundle.provider_off_peak_delay', return_value=0):
@@ -116,17 +159,34 @@ class ProviderMetricsTests(unittest.TestCase):
                         provider_post(client, 'https://provider.invalid')
                     except httpx.ConnectError as error:
                         raise RuntimeError('provider_network_failed') from error
+                from test_html_first_evidence import bundle
+                captured_bundle = bundle()
+                captured_bundle['bundle_id'] = source_input['bundle_id']
                 with patch('generic_pipeline._load_bundles_for_source', return_value={
-                        source_input['bundle_id']: source_input}), patch(
+                        source_input['bundle_id']: captured_bundle}), patch(
                         'html_first_checkpoint.prepare_html_first', side_effect=evidence), patch(
                         'generic_pipeline.review_and_repair', side_effect=review), patch(
                         'generic_pipeline.task_provider', return_value=type('FixtureSearchProvider', (), {
                             'model': 'fixture-model', 'assess_notice_evidence': lambda self, value: {}})()):
-                    report = run_pipeline(root, prepare=lambda *args, **kwargs: sources,
+                    def run():
+                        return run_pipeline(root, prepare=lambda *args, **kwargs: sources,
                         extract=lambda _: {'bundle_id': source_input['bundle_id'],
                                            'facts': {'purpose': 'recruitment'}},
                         issuer_hosts={'Example Board': ['example.gov.in']}, html_first=(stage == 'evidence'), evidence_assessor=None,
                         evidence_discover=lambda _: {}, max_provider_requests_per_notice=1)
+                    report = run()
+                    if stage == 'evidence':
+                        captured_bundle['captured_at'] = '2026-11-12T00:00:00Z'
+                        repeated = run()
+                        self.assertEqual(repeated['summary']['provider_requests']['attempted'], 0)
+                        self.assertIn('provider_request_budget_exhausted',
+                            repeated['sources']['fixture']['blocked_reasons'])
+                        self.assertEqual(client.post.call_count, 1)
+                        captured_bundle['documents'][0]['content']['blocks'].append(
+                            {'type': 'paragraph', 'text': 'Updated deadline: 1 December 2026'})
+                        changed = run()
+                        self.assertEqual(changed['summary']['provider_requests']['attempted'], 1)
+                        self.assertEqual(client.post.call_count, 2)
                 if stage == 'evidence':
                     self.assertEqual(prepare_identity[0],
                         {'provider': 'FixtureSearchProvider', 'model': 'fixture-model'})

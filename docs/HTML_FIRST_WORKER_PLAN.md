@@ -601,3 +601,38 @@ populate these fields, or complete the other worker reliability gates.
   calls, production changes, push or deployment performed.
 - Next: persistent per-notice allowance across retries, then end-to-end
   review/retirement/publication verification. Preparation AI/UI remain deferred.
+
+### Durable notice request allowance — 11 November 2026
+
+- Confirmed gap: the prior cap reset every pass, so scheduled retries could
+  multiply HTTP attempts on unchanged evidence. Likelihood 4, impact 4, risk 16;
+  this is a missing planned guard, not an observed production spending incident.
+- HTML-first notices now share the existing 32-attempt allowance across passes.
+  The ledger lives at state/provider_budgets/{fingerprint}.json beneath the
+  worker data root. The fingerprint reuses the existing evidence/version helper
+  on the original bundle's normalized text, locators, identity and document
+  metadata, before enrichment. Capture timestamps, prepared-file rewrites,
+  provider/model/key changes and run dates do not reset it. Changed source text
+  or extraction version gets a fresh allowance. Link-only changes do not renew
+  the allowance unless represented in those fingerprinted evidence fields.
+- Each HTTP slot is reserved atomically under the existing file lock before
+  transport. Successes, HTTP errors, timeouts and uncertain interrupted calls
+  all consume slots. Exhaustion prevents further HTTP calls and is non-retryable
+  at the request boundary; existing checkpoint wrappers may still report waiting,
+  but cannot replenish the ledger. The source report retains the explicit budget
+  exhaustion diagnostic. No automatic expiry/reset or operator reset tool added.
+- Invalid state or failed reservation blocks transport. This does not invalidate
+  saved evidence, bypass review/retirement/publication gates, or charge cached
+  work. Legacy non-HTML-first processing remains unchanged. The ceiling measures
+  HTTP attempts, not tokens, money or provider-side search queries.
+- Migration limit: calls made before this ledger exists cannot be reconstructed
+  reliably; accounting starts with this change. Preserve the worker data volume.
+  Lost/deleted ledger state loses this historical allowance, as with other local
+  worker state. No production migration or deployment was performed.
+- Verification: 532 Python tests pass, including transport failures, repeated
+  scopes, corrupted state, failed writes, repeated pipeline passes, timestamp
+  stability and changed-source renewal. Typecheck and lint pass. All provider
+  transport in these regressions is fake; no live provider claims are made.
+- Next: end-to-end review, retirement and publication/delivery retry verification.
+  Five-state assessment and authentic scanned-notice quality comparison remain
+  open. Preparation AI collection and frontend display remain deferred.

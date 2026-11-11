@@ -22,7 +22,8 @@ from validate_candidate import validate_candidate
 from stage_retry import StageRetries
 from extraction_checkpoint import extract_or_resume
 from review_publication import is_retired, is_valid_receipt_file
-from provider_metrics import track_provider_requests, provider_budget_exhausted
+from provider_metrics import track_provider_requests, provider_budget_exhausted, bind_provider_budget
+from check_coverage import bundle_units
 from autonomous_pipeline import (
     _map_post_to_ingest_post,
     apply_validated_vision_recovery,
@@ -283,6 +284,14 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     bundle = _load_bundles_for_source(source, path).get(bundle_id)
                     if bundle is None:
                         raise ValueError('html_first_bundle_missing')
+                    # Use original captured evidence, not the enriched prepared file
+                    # overwritten below; capture timestamps do not renew the allowance.
+                    units = bundle_units(bundle)
+                    budget_key = compute_evidence_fingerprint({**bundle, 'documents': [
+                        {**document, 'sections': [unit for unit in units
+                            if unit['document_id'] == document['document_id']]}
+                        for document in bundle['documents']]}, extraction_version)
+                    bind_provider_budget(root / 'state' / 'provider_budgets' / f'{budget_key}.json')
                     provider = None
                     if evidence_assessor is None or evidence_discover is None:
                         provider = task_provider('search')
