@@ -25,8 +25,9 @@ def _assessment(bundle, known_urls, assess, fields, outcomes):
     try:
         result = assess(request)
         return result if isinstance(result, dict) else {'status': 'unresolved'}
-    except Exception:
-        return {'status': 'unresolved', 'reason': 'assessment_failed'}
+    except Exception as error:
+        return {'status': 'unresolved', 'reason': 'assessment_failed',
+                'retryable': bool(getattr(error, 'retryable', isinstance(error, (TimeoutError, ConnectionError))))}
 
 
 def recover_html_first_evidence(bundle, root, *, assess, discover, issuer_hosts,
@@ -107,6 +108,9 @@ def recover_html_first_evidence(bundle, root, *, assess, discover, issuer_hosts,
         # A fresh assessment gets collected evidence and failures, with no tools offered.
         assessment = _assessment(bundle, [], assess, fields, report['tools'])
         report['assessment_calls'] += 1
+    if assessment.get('retryable'):
+        report.update(reason='assessment_failed', retryable=True)
+        return report
     data = None
     try:
         data = assessment.get('data')
@@ -141,12 +145,16 @@ def recover_html_first_evidence(bundle, root, *, assess, discover, issuer_hosts,
             return report
         try:
             found = discover(request)
+            if found.get('retryable'):
+                report.update(reason='research_failed', retryable=True)
+                return report
             report['grounding_metadata'] = found.get('grounding_metadata')
             candidates = (found.get('data') or {}).get('source_urls', [])
             if not isinstance(candidates, list):
                 candidates = []
             for url in list(dict.fromkeys(item for item in candidates if isinstance(item, str)))[:3]:
                 report['research'].append({'status': collect(url)})
-        except Exception:
+        except Exception as error:
             report['reason'] = 'research_failed'
+            report['retryable'] = bool(getattr(error, 'retryable', isinstance(error, (TimeoutError, ConnectionError))))
     return report

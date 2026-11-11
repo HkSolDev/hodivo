@@ -87,9 +87,9 @@ def crawl_source(url, root, *, process=capture_and_normalize, source_id=None, ma
                         'occurrences': [{'parent_url': final_url, 'title': dest.get('title'), 'date': dest.get('date')}],
                     }
                     report['edges'].append(edge)
-                    if html_first and _linked_document(edge):
-                        report['deferred_documents'].append(edge)
-                        continue
+                    # A listing has no notice HTML to assess. Capture its direct
+                    # document children within the existing crawl budget so they
+                    # can establish identity instead of disappearing entirely.
 
                     if dest_url in queued or dest_url in visited:
                         continue

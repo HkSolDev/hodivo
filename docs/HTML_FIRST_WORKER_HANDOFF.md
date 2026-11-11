@@ -78,3 +78,36 @@ third-party discovery host. Search task settings remain the existing
 
 No live trial, deployment, database mutation or rollout is claimed. See the
 coordination record for open slices and verification results.
+
+## Combined worker and SEO takeover — 11 November 2026
+
+Hemant assigned both lanes to Codex. Existing uncommitted SEO changes are
+preserved. The two reviewed SEO fixes now normalize default-sort/display query
+parameters for clean pagination metadata and return a server error on job-detail
+backend outages instead of HTTP 200/noindex. Production-build HTTP/browser tests
+verified real-job 200, missing-job 404 and outage 500. No deployment occurred.
+
+Worker regression reproduced PDF-only listing loss (old: two bundles; HTML-first:
+zero). Direct listing document children now use existing bounded capture; linked
+PDFs on notice HTML remain deferred. An offline four-case capture comparison is
+in test_html_first_baseline.py. IIIT uses saved public PDF text with checksums,
+reconstructed into a test PDF; this does not test original layout or OCR. Other
+cases are synthetic complete HTML, a two-notice listing, and corrupt PDF. This is
+only capture comparison, not completion of the real scanned-notice or end-to-end
+baseline. IIIT year resolution remains incomplete in this fixture.
+
+Transient research timeout regression failed before the fix. Evidence now retains
+successful assessment/search/Vision calls in separate checksum-verified stage
+checkpoints; retryable failures use bounded StageRetries backoff. Existing successful evidence fingerprints are preserved. Legacy saved failure
+reports are held for review rather than blindly replaying paid calls. Unknown
+provider completion and corrupt checkpoints remain blocked. This does not yet
+prove partial capture reuse or every provider failure mapping.
+
+Verified before the final legacy-record/Vision wrapper adjustment: 522 Python
+tests, 6 SEO unit tests, production build, 8 frontend integration/browser tests,
+TypeScript checks and lint passed. Rerun relevant tests after further edits.
+Remaining: five assessment states, scanned-PDF identity/Vision ordering, complete
+provider accounting/budgets, full real-notice baseline and publication retry
+acceptance, enrichment contract/storage/API/UI, official-link/title consumers.
+No push, merge, live provider call, DB write or deployment is authorized by this
+record. The HTML-first flag remains opt-in.

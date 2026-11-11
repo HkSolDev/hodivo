@@ -134,3 +134,21 @@ class HtmlFirstCheckpointTests(unittest.TestCase):
         source['documents'][0]['content']['blocks'][0]['text'] += ' Amendment'
         prepare_html_first(source, self.root, **options)
         self.assertEqual(assess.call_count, 2)
+
+    def test_transient_research_retry_preserves_completed_assessment(self):
+        from html_first_checkpoint import prepare_html_first
+        assess = Mock(return_value=assessment(missing=['min_age']))
+        search = Mock(side_effect=[TimeoutError(), {'data': {'source_urls': []}}])
+        clock = [1000.0]
+        options = dict(issuer_hosts=HOSTS, assess=assess, discover=search,
+                       clock=lambda: clock[0])
+        first = prepare_html_first(bundle(), self.root, **options)
+        self.assertEqual(first['status'], 'waiting')
+        second = prepare_html_first(bundle(), self.root, **options)
+        self.assertEqual(second['status'], 'waiting')
+        self.assertEqual(search.call_count, 1)
+        clock[0] += 1000
+        third = prepare_html_first(bundle(), self.root, **options)
+        self.assertEqual(third['status'], 'prepared')
+        self.assertEqual(assess.call_count, 1)
+        self.assertEqual(search.call_count, 2)

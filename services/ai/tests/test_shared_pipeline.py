@@ -111,12 +111,16 @@ class SharedPipelineTests(unittest.TestCase):
             '<item><title>Engineer recruitment</title><link>https://example.gov.in/a.pdf</link></item>'
             '<item><title>Clerk recruitment</title><link>https://example.gov.in/b.pdf</link></item>'
             '</channel></rss>')
+        self.pages['/a.pdf'] = self.pages['/files/details']
+        self.pages['/b.pdf'] = ('pdf', pdf_bytes([
+            line.replace('EB/01/2026', 'EB/02/2026') for line in self.identity]))
         report = self.run_source(html_first=True)
         crawl = json.loads(Path(report['crawl_path']).read_text())
-        self.assertEqual(len(self.fetched), 1)
-        self.assertEqual({edge['url'] for edge in crawl['deferred_documents']},
-                         {self.base + '/a.pdf', self.base + '/b.pdf'})
-        self.assertEqual(crawl['documents'], [])
+        self.assertEqual(len(self.fetched), 3)
+        self.assertEqual(crawl['deferred_documents'], [])
+        bundles = json.loads(Path(report['bundles_path']).read_text())['bundles']
+        self.assertEqual({item['identity']['advertisement_number'] for item in bundles},
+                         {'EB/01/2026', 'EB/02/2026'})
 
     def test_budget_and_depth_limits_report_unchecked_links(self):
         report = self.run_source(max_fetches=2)
