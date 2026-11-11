@@ -91,6 +91,14 @@ Initial budget: at most two distinct linked official documents per notice;
 reuse existing PDF/Vision page caps. Persist tool requests/results for resume.
 Gemini may request a tool, but code validates and executes it.
 
+PDF recovery is best-effort and must not stop the research path. A failed fetch,
+unrecognised format, parsing error, unreadable page or OCR/Vision failure records
+the specific outcome and preserves every usable HTML/PDF evidence unit already
+collected. Continue to the combined-evidence assessment and internet recovery
+instead of aborting the notice or waiting for PDF success. Never represent a
+partial document as completely read. Independent failures such as invalid notice
+identity still retain their own validation rules.
+
 Done when incomplete HTML requests the appropriate PDF once, complete HTML skips
 it, and malformed/repeated requests terminate without bypassing validation.
 
@@ -102,6 +110,14 @@ provider through `GeminiRepairSearch`; improve the existing path so discovery
 selects official documents and quotations are derived from captured content.
 Preserve grounding metadata and resolve source identity before accepting facts.
 
+Gemini reassesses the union of usable HTML, PDF and OCR/Vision evidence, including
+partial PDF results. Build the research prompt from the exact notice identity,
+known official links, supported facts, conflicts and remaining field paths.
+Internet research can supply fields absent from both HTML and PDF; PDF success
+is not a prerequisite. Combine accepted research evidence with the saved evidence
+before DeepSeek extraction. Search answers must retain verifiable sources;
+unsourced prose cannot become a supported fact merely by being structured.
+
 Initial budget: one pre-extraction search recovery round. Existing later repair
 limits share a per-notice budget so retries cannot multiply paid work. Search
 failure preserves progress and records a retryable reason. Unstated optional
@@ -110,6 +126,12 @@ fields remain null; conflicts stay explicit.
 Done when unreadable pages use selective recovery, search adds verifiable source
 evidence, unrelated notices are rejected, and exhausted budgets produce a saved
 review/retry outcome. Extend existing Vision, enrichment and repair tests.
+
+Required regression cases: PDF download fails but official web research completes
+the job; PDF parsing fails but HTML is sufficient; partial PDF/OCR evidence is
+retained and research fills only remaining gaps; all retrieval paths fail and the
+candidate is saved with unresolved reasons rather than published. Verify no PDF
+failure alone prevents reaching research or discards earlier evidence.
 
 ### 5. Structure, validate and review
 

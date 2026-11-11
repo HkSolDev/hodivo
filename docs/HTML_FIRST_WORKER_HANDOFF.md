@@ -18,6 +18,10 @@ titles without discovery-site branding. Retain third-party discovery provenance
 internally and preserve real recruiting-body/exam acronyms. Include existing
 published records in the audit; production backfill is a separate previewed step.
 
+PDF/OCR/Vision is explicitly best-effort: preserve partial evidence and continue
+to internet research on failure. A PDF failure must not abort the notice. The
+combined evidence still needs the existing validation/review gates to publish.
+
 ## Start here
 
 1. Verify branch, HEAD and working changes. Read project instructions,
