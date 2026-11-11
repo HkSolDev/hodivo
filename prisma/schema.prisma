@@ -248,6 +248,7 @@ model AutomatedNoticeRecord {
   readerSummary         Json?
   officialSyllabus      Json?
   historicalCutoffs     Json?
+  youtubeResources      Json?
   visionRecovery        Json?
   enrichmentCandidates  Json?
   auditLineage          Json

@@ -360,6 +360,96 @@ export async function ingestAutonomousNotice(
     throw new AutonomousIngestError('Invalid nextRetryAt timestamp');
   }
 
+  // Omission preserves saved resources on retry; null explicitly clears them.
+  if (input.youtubeResources !== undefined && input.youtubeResources !== null) {
+    if (
+      !Array.isArray(input.youtubeResources) ||
+      input.youtubeResources.length > 20
+    ) {
+      throw new AutonomousIngestError(
+        'youtubeResources must contain at most 20 resources',
+      );
+    }
+    for (const resource of input.youtubeResources) {
+      if (
+        !isRecord(resource) ||
+        Object.keys(resource).some(
+          (key) =>
+            ![
+              'url',
+              'title',
+              'channel',
+              'language',
+              'topics',
+              'checkedAt',
+              'recommendationReason',
+            ].includes(key),
+        ) ||
+        !['title', 'channel'].every(
+          (key) =>
+            typeof resource[key] === 'string' &&
+            resource[key].trim().length > 0 &&
+            resource[key].length <= 500,
+        ) ||
+        !(
+          resource.language === null ||
+          (typeof resource.language === 'string' &&
+            resource.language.trim().length > 0 &&
+            resource.language.length <= 100)
+        ) ||
+        !(
+          resource.recommendationReason === null ||
+          (typeof resource.recommendationReason === 'string' &&
+            resource.recommendationReason.length <= 1000)
+        ) ||
+        !Array.isArray(resource.topics) ||
+        resource.topics.length > 50 ||
+        !resource.topics.every(
+          (topic) =>
+            typeof topic === 'string' &&
+            topic.trim().length > 0 &&
+            topic.length <= 200,
+        ) ||
+        typeof resource.checkedAt !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}T/.test(resource.checkedAt) ||
+        !Number.isFinite(Date.parse(resource.checkedAt)) ||
+        typeof resource.url !== 'string' ||
+        resource.url.length > 2048
+      ) {
+        throw new AutonomousIngestError('Invalid YouTube resource');
+      }
+      let url: URL;
+      try {
+        url = new URL(resource.url);
+      } catch {
+        throw new AutonomousIngestError('Invalid YouTube resource URL');
+      }
+      const videoId = /^[A-Za-z0-9_-]{11}$/;
+      const validDestination =
+        (url.hostname === 'youtu.be' && videoId.test(url.pathname.slice(1))) ||
+        (['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(
+          url.hostname,
+        ) &&
+          ((url.pathname === '/watch' &&
+            videoId.test(url.searchParams.get('v') ?? '')) ||
+            (url.pathname === '/playlist' &&
+              /^[A-Za-z0-9_-]{10,100}$/.test(
+                url.searchParams.get('list') ?? '',
+              ))));
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password ||
+        url.port ||
+        !validDestination
+      ) {
+        throw new AutonomousIngestError(
+          'Expected an HTTPS YouTube video or playlist URL',
+        );
+      }
+    }
+  }
+
   const toOptionalJson = (
     val: unknown,
   ): Prisma.InputJsonValue | typeof Prisma.DbNull => {
@@ -409,6 +499,9 @@ export async function ingestAutonomousNotice(
         readerSummary: toOptionalJson(input.readerSummary),
         officialSyllabus: toOptionalJson(input.officialSyllabus),
         historicalCutoffs: toOptionalJson(input.historicalCutoffs),
+        ...(input.youtubeResources === undefined
+          ? {}
+          : { youtubeResources: toOptionalJson(input.youtubeResources) }),
         visionRecovery: toOptionalJson(input.visionRecovery),
         enrichmentCandidates: toOptionalJson(input.enrichmentCandidates),
         auditLineage,
@@ -428,6 +521,9 @@ export async function ingestAutonomousNotice(
         readerSummary: toOptionalJson(input.readerSummary),
         officialSyllabus: toOptionalJson(input.officialSyllabus),
         historicalCutoffs: toOptionalJson(input.historicalCutoffs),
+        ...(input.youtubeResources === undefined
+          ? {}
+          : { youtubeResources: toOptionalJson(input.youtubeResources) }),
         visionRecovery: toOptionalJson(input.visionRecovery),
         enrichmentCandidates: toOptionalJson(input.enrichmentCandidates),
         auditLineage,
@@ -687,6 +783,9 @@ export async function ingestAutonomousNotice(
         readerSummary: toOptionalJson(input.readerSummary),
         officialSyllabus: toOptionalJson(input.officialSyllabus),
         historicalCutoffs: toOptionalJson(input.historicalCutoffs),
+        ...(input.youtubeResources === undefined
+          ? {}
+          : { youtubeResources: toOptionalJson(input.youtubeResources) }),
         visionRecovery: toOptionalJson(input.visionRecovery),
         enrichmentCandidates: toOptionalJson(input.enrichmentCandidates),
         auditLineage: computedLineage,
@@ -708,6 +807,9 @@ export async function ingestAutonomousNotice(
         readerSummary: toOptionalJson(input.readerSummary),
         officialSyllabus: toOptionalJson(input.officialSyllabus),
         historicalCutoffs: toOptionalJson(input.historicalCutoffs),
+        ...(input.youtubeResources === undefined
+          ? {}
+          : { youtubeResources: toOptionalJson(input.youtubeResources) }),
         visionRecovery: toOptionalJson(input.visionRecovery),
         enrichmentCandidates: toOptionalJson(input.enrichmentCandidates),
         auditLineage: computedLineage,

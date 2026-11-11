@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import {
   CatalogueGrid,
   fetchPublicJobs,
@@ -10,12 +11,20 @@ import { readHomeView } from '@/frontend/home-view';
 import { HomeReviewControls } from '@/components/jobs/home-layout-controls';
 import { HomeReviewState } from '@/components/jobs/home-review-state';
 import { HomeRecommendations } from '@/components/jobs/home-recommendations';
+import { homeCatalogMetadata } from '@/components/jobs/job-sharing';
 import type { SearchOutcome } from '@/frontend/search-pending';
 
 function searchOutcome(result: JobsApiResponse | null): SearchOutcome {
   if (!result || !result.data) return 'unavailable';
   if (result.freshnessUnconfirmed) return 'stale';
   return 'results';
+}
+
+export async function generateMetadata(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const searchParams = (await props.searchParams) ?? {};
+  return homeCatalogMetadata(searchParams, process.env.SITE_URL);
 }
 
 export default async function HomePage(props: {

@@ -1,11 +1,19 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import {
+  HOW_IT_WORKS_SEO_DESCRIPTION,
+  HOW_IT_WORKS_SEO_TITLE,
+  publicPageMetadata,
+} from '@/components/jobs/job-sharing';
 
-export const metadata: Metadata = {
-  title: 'How It Works',
-  description:
-    'Understand how Hodivo matches government job notifications and what to verify before applying.',
-};
+export function generateMetadata(): Metadata {
+  return publicPageMetadata({
+    title: HOW_IT_WORKS_SEO_TITLE,
+    description: HOW_IT_WORKS_SEO_DESCRIPTION,
+    pathname: '/how-it-works',
+    origin: process.env.SITE_URL,
+  });
+}
 
 export default function HowItWorksPage() {
   return (

@@ -1,6 +1,7 @@
 """Run the generic crawl path; only ready evidence may reach extraction."""
 
 import copy
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -21,7 +22,8 @@ from validate_candidate import validate_candidate
 from stage_retry import StageRetries
 from extraction_checkpoint import extract_or_resume
 from review_publication import is_retired, is_valid_receipt_file
-from provider_metrics import track_provider_requests
+from provider_metrics import track_provider_requests, provider_budget_exhausted, bind_provider_budget
+from check_coverage import bundle_units
 from autonomous_pipeline import (
     _map_post_to_ingest_post,
     apply_validated_vision_recovery,
@@ -118,7 +120,9 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                  extraction_version=EXTRACTION_VERSION, retry_clock=None,
                  vision_provider=None, ocr_engine=None, review_fn=None,
                  pdf_bytes_by_doc=None, page_images_by_doc=None,
-                 search_client=None, capture_client=None, issuer_hosts=None):
+                 search_client=None, capture_client=None, issuer_hosts=None,
+                 html_first=False, evidence_assessor=None, evidence_discover=None,
+                 evidence_process=None, max_provider_requests_per_notice=32):
     """Crawl sources and process only coverage-approved evidence.
 
     When a verified PDF page is marked unusable by deterministic native-text
@@ -127,6 +131,15 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
     re-checking ``is_extraction_approved``. Autonomous persistence runs only
     when all deterministic evidence and acceptance gates approve.
     """
+    if type(max_provider_requests_per_notice) is not int or max_provider_requests_per_notice < 1:
+        raise ValueError('max_provider_requests_per_notice must be a positive integer')
+    if type(html_first) is not bool:
+        raise ValueError('html_first must be a boolean')
+    if html_first:
+        from verify_bundle import verify_bundles
+        verify_bundles([], issuer_hosts=issuer_hosts)
+        if not issuer_hosts:
+            raise ValueError('html_first_requires_issuer_hosts')
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     state_manager = NoticeStateManager(root)
@@ -148,8 +161,11 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
             )
     retries = StageRetries(root, retry_clock)
     prepared_root = root / 'shared'
+    prepare_options = {'html_first': True} if html_first else {}
+    if issuer_hosts is not None:
+        prepare_options['issuer_hosts'] = issuer_hosts
     sources = prepare(prepared_root, sources_path=sources_path, source_id=source_id,
-                      max_fetches=max_fetches, max_depth=max_depth)
+                      max_fetches=max_fetches, max_depth=max_depth, **prepare_options)
     report = {'checked_at': now(), 'route': 'generic_shared_crawl',
               'status': 'completed', 'sources': {}}
 
@@ -226,6 +242,10 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
             vision_merge_reasons = []
             review_report = None
             repair_reports = []
+            evidence_report = None
+            request_scope = ExitStack()
+            requests = request_scope.enter_context(track_provider_requests(
+                max_attempts=max_provider_requests_per_notice if html_first else None))
             try:
                 raw_text = Path(path).read_text(encoding='utf-8')
                 prepared = json.loads(raw_text)
@@ -243,10 +263,84 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     bundle_id = stem[:-len('.prepared.json')] if stem.endswith('.prepared.json') else (
                         stem[:-len('.json')] if stem.endswith('.json') else stem)
 
+                if html_first and not prepare_only and is_extraction_approved(prepared):
+                    # A retired exact version predating evidence checkpoints must also
+                    # be skipped before any newly introduced planning/research call.
+                    incoming = prepared['llm_input']['input']
+                    incoming_fingerprint = compute_evidence_fingerprint(incoming, extraction_version)
+                    with state_manager.notice_lock(bundle_id):
+                        saved = state_manager.get_reusable_draft(
+                            bundle_id, incoming_fingerprint, extraction_version)
+                        if saved is not None:
+                            saved_state = json.loads(state_manager.state_path(bundle_id).read_text())
+                            if is_retired(root, saved_state['draft_sha256']):
+                                counts['retired'] = counts.get('retired', 0) + 1
+                                counts['bundle_outcomes'].append({'bundle_id': bundle_id,
+                                    'outcome': 'retired', 'reasons': ['operator_retired_exact_version']})
+                                continue
+
+                if html_first and not prepare_only:
+                    from html_first_checkpoint import prepare_html_first
+                    bundle = _load_bundles_for_source(source, path).get(bundle_id)
+                    if bundle is None:
+                        raise ValueError('html_first_bundle_missing')
+                    # Use original captured evidence, not the enriched prepared file
+                    # overwritten below; capture timestamps do not renew the allowance.
+                    units = bundle_units(bundle)
+                    budget_key = compute_evidence_fingerprint({**bundle, 'documents': [
+                        {**document, 'sections': [unit for unit in units
+                            if unit['document_id'] == document['document_id']]}
+                        for document in bundle['documents']]}, extraction_version)
+                    bind_provider_budget(root / 'state' / 'provider_budgets' / f'{budget_key}.json')
+                    provider = None
+                    if evidence_assessor is None or evidence_discover is None:
+                        provider = task_provider('search')
+                    assessor = evidence_assessor or getattr(provider, 'assess_notice_evidence', None)
+                    if assessor is None:
+                        raise ValueError('html_first_assessment_provider_unavailable')
+                    discover = evidence_discover
+                    if discover is None and provider is not None:
+                        def discover(request):
+                            return provider.discover_sources(
+                                query=request['prompt'],
+                                system_prompt='Research this exact notice using official sources. '
+                                              'Return at most three official source URLs for the remaining gaps.',
+                                response_schema={'type': 'object', 'properties': {
+                                    'source_urls': {'type': 'array', 'items': {'type': 'string'}}},
+                                    'required': ['source_urls']})
+                    active_vision = _resolve_vision_provider(
+                        vision_provider, allow_default=(extract is extract_bundle))
+                    recover_vision = None
+                    if active_vision is not None:
+                        def recover_vision(value):
+                            return recover_unreadable_pdf_pages(value,
+                                gemini_provider=active_vision, ocr_engine=ocr_engine,
+                                pdf_bytes_by_doc=pdf_bytes_by_doc,
+                                page_images_by_doc=page_images_by_doc, storage_dir=root)
+                    stage = 'evidence_recovery'
+                    evidence_result = prepare_html_first(bundle, root / 'html_first',
+                        issuer_hosts=issuer_hosts, assess=assessor, discover=discover,
+                        process=evidence_process, recover_vision=recover_vision,
+                        model_identity=({'provider': type(provider).__name__,
+                            'model': provider.model} if provider is not None else None),
+                        vision_model_identity=({'provider': type(active_vision).__name__,
+                            'model': active_vision.model} if active_vision is not None else None),
+                        clock=retry_clock)
+                    if evidence_result['status'] != 'prepared':
+                        counts['blocked'] += 1
+                        counts['blocked_reasons'].append(evidence_result['reason'])
+                        counts['bundle_outcomes'].append({'bundle_id': bundle_id,
+                            'outcome': 'blocked', 'reasons': [evidence_result['reason']]})
+                        continue
+                    evidence_report = evidence_result['report']
+                    counts['evidence_reused'] = counts.get('evidence_reused', 0) + int(evidence_result['reused'])
+                    prepared = evidence_result['prepared']
+                    atomic_write(Path(path), json.dumps(prepared, ensure_ascii=False, indent=2).encode())
+
                 active_vision_provider = _resolve_vision_provider(
                     vision_provider, allow_default=(extract is extract_bundle)
                 )
-                if not is_extraction_approved(prepared) and not prepare_only:
+                if not is_extraction_approved(prepared) and not prepare_only and not html_first:
                     bundles_by_id = _load_bundles_for_source(source, path)
                     bundle = bundles_by_id.get(bundle_id) or (
                         prepared.get('bundle') if isinstance(prepared.get('bundle'), dict) else None
@@ -425,15 +519,11 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                             raise
 
                     try:
-                        with track_provider_requests() as requests:
-                            if repair_resume is not None:
-                                extracted, resumed = repair_resume, True
-                            else:
-                                extracted, resumed = extract_or_resume(retries, fingerprint, prepared, tracked_extractor)
+                        if repair_resume is not None:
+                            extracted, resumed = repair_resume, True
+                        else:
+                            extracted, resumed = extract_or_resume(retries, fingerprint, prepared, tracked_extractor)
                     finally:
-                        for outcome, value in requests.items():
-                            key = f'provider_requests_{outcome}'
-                            counts[key] = counts.get(key, 0) + value
                         counts['extraction_calls_attempted'] = counts.get('extraction_calls_attempted', 0) + extraction_calls['attempted']
                         counts['extraction_calls_succeeded'] = counts.get('extraction_calls_succeeded', 0) + extraction_calls['succeeded']
                         counts['extraction_calls_failed'] = counts.get('extraction_calls_failed', 0) + extraction_calls['failed']
@@ -473,7 +563,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     if (extracted.get('facts') or {}).get('purpose') == 'recruitment':
                         extracted, source_input, review_report, repair_reports = review_and_repair(
                             extracted, source_input, review_fn=review_fn,
-                            search_client=search_client, capture_client=capture_client,
+                            search_client=None if evidence_report and evidence_report['search_called'] else search_client,
+                            capture_client=capture_client,
                             issuer_hosts=issuer_hosts, storage_dir=root,
                         )
                     validation = validate(extracted, source_input)
@@ -723,6 +814,16 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                 if stage == 'extraction':
                     retry = retries.read('extraction', fingerprint)
                     counts['bundle_outcomes'][-1]['reasons'] = [retry.get('reason') or 'extraction_failed']
+            finally:
+                if provider_budget_exhausted():
+                    counts['provider_budget_exhaustions'] = counts.get('provider_budget_exhaustions', 0) + 1
+                    counts['blocked_reasons'].append('provider_request_budget_exhausted')
+                    counts['bundle_outcomes'].append({'bundle_id': bundle_id,
+                        'outcome': 'blocked', 'reasons': ['provider_request_budget_exhausted']})
+                request_scope.close()
+                for outcome, value in requests.items():
+                    key = f'provider_requests_{outcome}'
+                    counts[key] = counts.get(key, 0) + value
         counts['blocked_reasons'] = sorted(set(counts['blocked_reasons']))
         counts['failure_stages'] = sorted(set(counts['failure_stages']))
         if 'failure_reasons' in counts:

@@ -94,6 +94,34 @@ class SharedPipelineTests(unittest.TestCase):
         self.assertEqual(len(next(edge for edge in crawl['edges']
                                   if edge['url'].endswith('/files/details'))['occurrences']), 2)
 
+    def test_html_first_retains_pdf_links_without_fetching_them(self):
+        report = self.run_source(html_first=True)
+        self.assertEqual(len(self.fetched), 3)
+        crawl = json.loads(Path(report['crawl_path']).read_text())
+        self.assertEqual(len(crawl['deferred_documents']), 1)
+        deferred = crawl['deferred_documents'][0]
+        self.assertEqual(deferred['parent_url'], self.base + '/notice')
+        self.assertEqual(deferred['url'], self.base + '/files/details')
+        self.assertEqual(len(deferred['occurrences']), 2)
+        self.assertTrue(all(doc['format'] == 'html' for doc in crawl['documents']))
+        self.assertNotIn(deferred['url'], [item['url'] for item in crawl['unchecked']])
+
+    def test_html_first_keeps_listing_pdf_children_separate(self):
+        self.pages['/'] = ('xml', '<rss version="2.0"><channel><title>Jobs</title>'
+            '<item><title>Engineer recruitment</title><link>https://example.gov.in/a.pdf</link></item>'
+            '<item><title>Clerk recruitment</title><link>https://example.gov.in/b.pdf</link></item>'
+            '</channel></rss>')
+        self.pages['/a.pdf'] = self.pages['/files/details']
+        self.pages['/b.pdf'] = ('pdf', pdf_bytes([
+            line.replace('EB/01/2026', 'EB/02/2026') for line in self.identity]))
+        report = self.run_source(html_first=True)
+        crawl = json.loads(Path(report['crawl_path']).read_text())
+        self.assertEqual(len(self.fetched), 3)
+        self.assertEqual(crawl['deferred_documents'], [])
+        bundles = json.loads(Path(report['bundles_path']).read_text())['bundles']
+        self.assertEqual({item['identity']['advertisement_number'] for item in bundles},
+                         {'EB/01/2026', 'EB/02/2026'})
+
     def test_budget_and_depth_limits_report_unchecked_links(self):
         report = self.run_source(max_fetches=2)
         self.assertEqual(report['status'], 'partial')

@@ -1,3 +1,4 @@
+import { publicJobPresentation } from './public-job-presentation.js';
 import { prisma } from '../db.js';
 import { publicFields, type PublicJob } from './public-jobs.js';
 
@@ -44,7 +45,7 @@ export async function listSavedJobs(
       });
 
       const data: SavedJobItem[] = rows.map((row) => ({
-        ...row.post,
+        ...publicJobPresentation(row.post),
         savedAt: row.savedAt.toISOString(),
       }));
 

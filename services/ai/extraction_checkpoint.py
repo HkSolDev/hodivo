@@ -7,11 +7,11 @@ from stage_retry import extraction_failure
 from provider_schedule import ProviderDeferred
 
 
-def extract_or_resume(retries, fingerprint, prepared, extract):
+def extract_or_resume(retries, fingerprint, prepared, extract, *, stage='extraction'):
     # The caller's notice lock serializes this checkpoint with draft creation.
-    state = retries.read('extraction', fingerprint)
+    state = retries.read(stage, fingerprint)
     evidence_sha = hashlib.sha256(json.dumps(prepared['llm_input']['input'], sort_keys=True).encode()).hexdigest()
-    path = retries.path('extraction', fingerprint).with_suffix('.response.json')
+    path = retries.path(stage, fingerprint).with_suffix('.response.json')
     if state.get('status') == 'success' and state.get('evidence_sha256') == evidence_sha:
         try:
             payload = path.read_bytes()
@@ -22,31 +22,31 @@ def extract_or_resume(retries, fingerprint, prepared, extract):
                 raise ValueError('Checkpoint identity mismatch')
             return result, True
         except (OSError, ValueError, KeyError, TypeError):
-            retries.failure('extraction', fingerprint, 'corrupt_extraction_checkpoint')
+            retries.failure(stage, fingerprint, 'corrupt_extraction_checkpoint')
             return None, False
-    if not retries.begin('extraction', fingerprint):
+    if not retries.begin(stage, fingerprint):
         return None, False
     try:
         result = extract(prepared)
     except ProviderDeferred as error:
-        state = retries.read('extraction', fingerprint)
-        retries.write('extraction', fingerprint, {
+        state = retries.read(stage, fingerprint)
+        retries.write(stage, fingerprint, {
             **state, 'status': 'retry_wait', 'reason': 'provider_peak_hours',
             'attempts': max(0, state['attempts'] - 1),
             'next_at': retries.clock() + error.retry_after})
         raise
     except (RuntimeError, ValueError, TypeError, OSError) as error:
         reason, retryable, delay = extraction_failure(error)
-        retries.failure('extraction', fingerprint, reason, retryable=retryable, retry_after=delay)
+        retries.failure(stage, fingerprint, reason, retryable=retryable, retry_after=delay)
         raise
     try:
         if not isinstance(result, dict) or result.get('bundle_id') != prepared['llm_input']['input']['bundle_id']:
             raise ValueError('Extracted identity mismatch')
         payload = json.dumps(result, ensure_ascii=False).encode()
         atomic_write(path, payload)
-        retries.success('extraction', fingerprint, response_sha256=hashlib.sha256(payload).hexdigest(),
+        retries.success(stage, fingerprint, response_sha256=hashlib.sha256(payload).hexdigest(),
                         evidence_sha256=evidence_sha)
         return result, False
     except (RuntimeError, ValueError, TypeError, OSError):
-        retries.failure('extraction', fingerprint, 'checkpoint_storage_failed')
+        retries.failure(stage, fingerprint, 'checkpoint_storage_failed')
         raise

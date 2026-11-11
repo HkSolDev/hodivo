@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -11,7 +12,17 @@ from recover_documents import capture_and_normalize
 from capture_retry import capture_with_retry
 
 
-def crawl_source(url, root, *, process=capture_and_normalize, source_id=None, max_fetches=12, max_depth=3):
+def _linked_document(edge):
+    if edge.get('target_kind') == 'document_reference':
+        return True
+    labels = [edge.get('title') or ''] + [item.get('anchor') or ''
+                                           for item in edge.get('occurrences', [])]
+    return any(re.search(r'\bPDF\b', label, re.I) for label in labels)
+
+
+def crawl_source(url, root, *, process=capture_and_normalize, source_id=None, max_fetches=12, max_depth=3, html_first=False):
+    if type(html_first) is not bool:
+        raise ValueError('html_first must be a boolean')
     if (type(max_fetches) is not int or not 1 <= max_fetches <= 30
             or type(max_depth) is not int or not 0 <= max_depth <= 4):
         raise ValueError('Use 1–30 fetches and 0–4 link levels')
@@ -20,7 +31,7 @@ def crawl_source(url, root, *, process=capture_and_normalize, source_id=None, ma
         raise ValueError('Invalid source URL')
     root = Path(root)
     report = {'seed_url': seed, 'status': 'scanning', 'pages': [], 'edges': [],
-              'unchecked': [], 'documents': [], 'seed_status': 'pending'}
+              'unchecked': [], 'deferred_documents': [], 'documents': [], 'seed_status': 'pending'}
     queue = [{'url': seed, 'depth': 0, 'priority': 100}]
     visited = set()
     queued = {seed}
@@ -76,6 +87,9 @@ def crawl_source(url, root, *, process=capture_and_normalize, source_id=None, ma
                         'occurrences': [{'parent_url': final_url, 'title': dest.get('title'), 'date': dest.get('date')}],
                     }
                     report['edges'].append(edge)
+                    # A listing has no notice HTML to assess. Capture its direct
+                    # document children within the existing crawl budget so they
+                    # can establish identity instead of disappearing entirely.
 
                     if dest_url in queued or dest_url in visited:
                         continue
@@ -108,7 +122,11 @@ def crawl_source(url, root, *, process=capture_and_normalize, source_id=None, ma
                 html = Path(result['body_path']).read_bytes()
                 links = discover_links(html.decode('utf-8', errors='replace'), final_url)['destinations']
                 for link in links:
-                    report['edges'].append({'parent_url': final_url, **link})
+                    edge = {'parent_url': final_url, **link}
+                    report['edges'].append(edge)
+                    if html_first and _linked_document(edge):
+                        report['deferred_documents'].append(edge)
+                        continue
                     if link['priority'] <= 0 or link['url'] in queued or link['url'] in visited:
                         continue
                     child = {'url': link['url'], 'depth': item['depth'] + 1,

@@ -8,6 +8,7 @@ import re
 import httpx
 
 from providers.openai import _openai_schema
+from provider_metrics import provider_post
 from schema import PostBatch
 
 
@@ -27,10 +28,10 @@ class XaiProvider:
                   'data': None, 'raw_text': None, 'grounding_metadata': None,
                   'attempt_count': 1}
         try:
-            response = self.client.post('https://api.x.ai/v1/' + endpoint,
+            response = provider_post(self.client, 'https://api.x.ai/v1/' + endpoint,
                 headers={'Authorization': 'Bearer ' + self.api_key},
                 json=payload, timeout=timeout)
-        except (httpx.ConnectError, httpx.ConnectTimeout):
+        except (httpx.NetworkError, httpx.TimeoutException):
             return {**result, 'reason': 'xai_network_failed', 'retryable': True}
         except httpx.HTTPError:
             return {**result, 'reason': 'xai_transport_error'}

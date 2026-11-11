@@ -40,6 +40,11 @@ async function waitForServer(url: string, timeoutMs = 30000): Promise<void> {
 test('Next.js frontend: server-rendered SEO, private caching, in-memory workspace, and auth flow', async (t) => {
   // Isolate database calls
   const originalTransaction = prisma.$transaction;
+  const originalFindUnique = prisma.post.findUnique;
+  const futureDeadline = new Date(Date.now() + 14 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
   Object.defineProperty(prisma, '$transaction', {
     configurable: true,
     value: async () => ({
@@ -48,7 +53,7 @@ test('Next.js frontend: server-rendered SEO, private caching, in-memory workspac
           id: 'job-fixture-1',
           postName: 'Junior Scientific Officer',
           vacancies: 12,
-          applicationLastDate: '2026-11-30T00:00:00.000Z',
+          applicationLastDate: `${futureDeadline}T00:00:00.000Z`,
           educationRequired: 'Master’s Degree in Physics or Chemistry',
           source: {
             name: 'SSC Selection Post Phase XII',
@@ -59,10 +64,79 @@ test('Next.js frontend: server-rendered SEO, private caching, in-memory workspac
     }),
   });
 
+  Object.defineProperty(prisma.post, 'findUnique', {
+    configurable: true,
+    value: async (args: { where?: { id?: string } }) => {
+      const requestedId = args?.where?.id;
+      if (requestedId === 'job-fixture-1') {
+        return {
+          id: 'job-fixture-1',
+          postName: 'Junior Scientific Officer',
+          vacancies: 12,
+          applicationLastDate: new Date(`${futureDeadline}T00:00:00.000Z`),
+          educationRequired: 'Master’s Degree in Physics or Chemistry',
+          minAge: 18,
+          maxAge: 30,
+          categoryRelaxationApplies: true,
+          source: {
+            name: 'SSC Selection Post Phase XII',
+            url: 'https://ssc.gov.in/notice',
+            notificationPdfUrl: 'https://ssc.gov.in/notice.pdf',
+            officialSiteUrl: 'https://ssc.gov.in',
+            applyUrl: 'https://ssc.gov.in/apply',
+            fetchedAt: new Date('2026-11-10T08:00:00.000Z'),
+          },
+          reviewedDetails: {
+            post_name: 'Junior Scientific Officer',
+            recruiting_body: 'Staff Selection Commission',
+            advt_no: 'Phase-XII/2026',
+            vacancies: 12,
+            vacancy_breakdown: null,
+            pay_level: 'Level 6',
+            salary_min: 35400,
+            salary_max: 112400,
+            salary_period: 'MONTH',
+            salary_notes: null,
+            employment_type: 'Permanent',
+            locations: ['New Delhi'],
+            application_start_date: null,
+            application_last_date: futureDeadline,
+            fee_payment_last_date: null,
+            exam_dates: [],
+            fee_rules: [],
+            age_rules: {
+              min_age: 18,
+              max_age: 30,
+              age_as_on_date: null,
+              relaxations: [],
+              notes: null,
+            },
+            qualification_summary: 'Master’s Degree in Physics or Chemistry',
+            qualification_routes: [],
+            experience_required: null,
+            nationality_requirement: 'Indian Citizen',
+            other_eligibility: [],
+            selection_stages: ['Computer Based Examination'],
+            how_to_apply_steps: ['Apply online at ssc.gov.in'],
+            required_documents: [],
+          },
+        };
+      }
+      if (requestedId === 'backend-outage-job') {
+        throw new Error('Simulated database connection failure');
+      }
+      return null;
+    },
+  });
+
   t.after(() => {
     Object.defineProperty(prisma, '$transaction', {
       configurable: true,
       value: originalTransaction,
+    });
+    Object.defineProperty(prisma.post, 'findUnique', {
+      configurable: true,
+      value: originalFindUnique,
     });
   });
 
@@ -88,6 +162,7 @@ test('Next.js frontend: server-rendered SEO, private caching, in-memory workspac
         ...process.env,
         PORT: String(nextPort),
         BACKEND_INTERNAL_URL: fastifyOrigin,
+        SITE_URL: 'https://hodivo.app',
       },
       stdio: 'inherit',
     },
@@ -125,15 +200,18 @@ test('Next.js frontend: server-rendered SEO, private caching, in-memory workspac
       assert.equal(response.status, 200);
       const html = await response.text();
 
-      // Check title and meta
+      // Check title, description, and canonical
       assert.ok(
-        html.includes('<title>Hodivo — Find your next possibility</title>'),
+        html.includes(
+          '<title>Hodivo — Indian Government Jobs, Eligibility &amp; Official Notifications</title>',
+        ),
       );
       assert.ok(
         html.includes(
-          'Compare your education and age with government job notifications',
+          'Discover live Indian government job notifications across central, state, PSU, banking, defence and research roles.',
         ),
       );
+      assert.ok(html.includes('rel="canonical" href="https://hodivo.app/"'));
 
       // Check initial server-rendered job post from backend
       assert.ok(
@@ -144,6 +222,36 @@ test('Next.js frontend: server-rendered SEO, private caching, in-memory workspac
         !html.includes('SSC Selection Post Phase XII'),
         'Cards must not present the scraper source as the recruiting organization',
       );
+    },
+  );
+
+  await t.test(
+    'Discovery routes: /robots.txt and /sitemap.xml return accurate crawler policies and live job URLs',
+    async () => {
+      const robotsRes = await fetch(`${nextOrigin}/robots.txt`);
+      assert.equal(robotsRes.status, 200);
+      const robotsText = await robotsRes.text();
+      assert.match(robotsText, /User-Agent:\s*\*/i);
+      assert.match(robotsText, /Allow:\s*\//i);
+      assert.match(robotsText, /Disallow:\s*\/profile/i);
+      assert.match(robotsText, /Disallow:\s*\/api\//i);
+      assert.match(
+        robotsText,
+        /Sitemap:\s*https:\/\/hodivo\.app\/sitemap\.xml/i,
+      );
+
+      const sitemapRes = await fetch(`${nextOrigin}/sitemap.xml`);
+      assert.equal(sitemapRes.status, 200);
+      const sitemapXml = await sitemapRes.text();
+      assert.ok(sitemapXml.includes('<loc>https://hodivo.app/</loc>'));
+      assert.ok(
+        sitemapXml.includes('<loc>https://hodivo.app/how-it-works</loc>'),
+      );
+      assert.ok(
+        sitemapXml.includes('<loc>https://hodivo.app/jobs/job-fixture-1</loc>'),
+      );
+      assert.ok(!sitemapXml.includes('/profile'));
+      assert.ok(!sitemapXml.includes('/api/'));
     },
   );
 
@@ -180,15 +288,64 @@ test('Next.js frontend: server-rendered SEO, private caching, in-memory workspac
   );
 
   await t.test(
-    'Missing GET /api/jobs/:id API: /jobs/:id displays graceful dependency notice without crashing',
+    'Job detail responses: 200 for real job, 404 for nonexistent job, and HTTP 500 on backend failure',
     async () => {
-      const res = await fetch(`${nextOrigin}/jobs/job-fixture-1`);
-      assert.equal(res.status, 200);
-      const html = await res.text();
+      const okRes = await fetch(`${nextOrigin}/jobs/job-fixture-1`);
+      assert.equal(okRes.status, 200);
+      const okHtml = await okRes.text();
       assert.ok(
-        html.includes('GET /api/jobs/:id') || html.includes('Back to all jobs'),
-        'Gracefully communicates missing backend JSON endpoint to user',
+        okHtml.includes(
+          '<title>Junior Scientific Officer — Staff Selection Commission | Hodivo</title>',
+        ),
       );
+      assert.ok(!okHtml.includes('Hodivo | Hodivo'));
+      assert.ok(
+        okHtml.includes(
+          'rel="canonical" href="https://hodivo.app/jobs/job-fixture-1"',
+        ),
+      );
+
+      const missingRes = await fetch(
+        `${nextOrigin}/jobs/nonexistent-seo-audit-check`,
+      );
+      assert.equal(missingRes.status, 404);
+      const missingHtml = await missingRes.text();
+      assert.ok(!missingHtml.includes('Hodivo | Hodivo'));
+      assert.ok(missingHtml.includes('noindex'));
+
+      const outageRes = await fetch(`${nextOrigin}/jobs/backend-outage-job`);
+      const outageHtml = await outageRes.text();
+      assert.equal(outageRes.status, 500);
+      assert.ok(!outageHtml.includes('Junior Scientific Officer'));
+      assert.ok(!outageHtml.includes('Hodivo | Hodivo'));
+    },
+  );
+
+  await t.test(
+    'No-JavaScript browser check: homepage and job detail page render readable content and crawlable links',
+    async () => {
+      const noJsContext = await browser.newContext({
+        javaScriptEnabled: false,
+        viewport: { width: 1280, height: 900 },
+      });
+      const page = await noJsContext.newPage();
+
+      try {
+        await page.goto(`${nextOrigin}/`);
+        await expect(
+          page.getByRole('link', { name: 'Junior Scientific Officer' }),
+        ).toBeVisible();
+
+        await page.goto(`${nextOrigin}/jobs/job-fixture-1`);
+        await expect(
+          page.getByRole('heading', { name: 'Junior Scientific Officer' }),
+        ).toBeVisible();
+        await expect(
+          page.getByText('Staff Selection Commission'),
+        ).toBeVisible();
+      } finally {
+        await noJsContext.close();
+      }
     },
   );
 

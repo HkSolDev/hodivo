@@ -31,7 +31,19 @@ def main():
     parser.add_argument('--source', help='One registry source ID')
     parser.add_argument('--max-fetches', type=int, default=12)
     parser.add_argument('--max-depth', type=int, default=3)
+    parser.add_argument('--html-first', action='store_true', help='Use bounded evidence tools before extraction')
+    parser.add_argument('--issuer-hosts', type=Path, help='JSON issuer-name to official-hostname-list mapping')
     args = parser.parse_args()
+    evidence_options = {}
+    if args.html_first:
+        if args.issuer_hosts is None:
+            parser.error('--html-first requires --issuer-hosts')
+        from verify_bundle import verify_bundles
+        hosts = json.loads(args.issuer_hosts.read_text())
+        verify_bundles([], issuer_hosts=hosts)
+        if not hosts:
+            parser.error('--issuer-hosts must not be empty')
+        evidence_options = {'html_first': True, 'issuer_hosts': hosts}
     off_peak = off_peak_schedule_enabled()
     while True:
         delay = seconds_until_off_peak() if off_peak and not args.prepare_only else 0
@@ -46,7 +58,8 @@ def main():
         try:
             result = run_pipeline(Path(args.storage_dir), sources_path=args.sources,
                                   source_id=args.source, max_fetches=args.max_fetches,
-                                  max_depth=args.max_depth, prepare_only=args.prepare_only)
+                                  max_depth=args.max_depth, prepare_only=args.prepare_only,
+                                  **evidence_options)
             print(json.dumps(result), flush=True)
             status = result.get('status', 'completed')
         except (OSError, RuntimeError, TypeError, ValueError):

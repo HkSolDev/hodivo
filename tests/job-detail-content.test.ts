@@ -356,3 +356,56 @@ test('uses the stored vacancy count and preserves condition-only requirements wi
   assert.doesNotMatch(markup, /All applicants|₹100|years or above/);
   assert.match(markup, /Maximum age unavailable here/);
 });
+
+test('shows the base age independently of category limits and preserves unknown bounds', () => {
+  for (const [minAge, maxAge, expected] of [
+    [18, 30, '18–30 years'],
+    [null, 35, 'Up to 35 years'],
+    [18, null, 'At least 18 years'],
+    [null, null, null],
+  ] as const) {
+    const job: JobDetailData = {
+      ...completeJob,
+      minAge,
+      maxAge,
+      reviewedDetails: null,
+    };
+    const before = JSON.stringify(job);
+    const markup = renderToStaticMarkup(
+      createElement(JobDetailContent, { job }),
+    );
+    if (expected) {
+      assert.ok(markup.includes(`Base age: <strong>${expected}</strong>`));
+    } else {
+      assert.doesNotMatch(markup, /Base age:/);
+    }
+    assert.doesNotMatch(markup, /Base age: <strong>18–35 years/);
+    assert.match(markup, /18–35 years/); // The separate SC rule is retained.
+    assert.match(markup, /Age calculated as on/);
+    assert.equal(JSON.stringify(job), before);
+  }
+});
+
+test('public projection renders official notice links without discovery-portal redirects', async () => {
+  const { publicJobPresentation } =
+    await import('../src/lib/public-job-presentation.js');
+  const job = publicJobPresentation({
+    id: 'official-only-links',
+    postName: 'JKSSB IES Junior Engineer | Sarkari Result',
+    source: {
+      url: 'https://sarkariresult.com/discovery/je',
+      notificationPdfUrl: 'https://jkssb.nic.in/notices/je.pdf',
+      officialSiteUrl: 'https://jkssb.nic.in/',
+      applyUrl: 'https://freejobalert.com/apply',
+    },
+    reviewedDetails: { apply_url: 'https://mysarkarinaukri.com/apply' },
+  });
+  const markup = renderToStaticMarkup(createElement(JobDetailContent, { job }));
+  assert.match(markup, /JKSSB IES Junior Engineer/);
+  assert.match(markup, /href="https:\/\/jkssb\.nic\.in\/notices\/je\.pdf"/);
+  assert.doesNotMatch(
+    markup,
+    /sarkariresult\.com|freejobalert\.com|mysarkarinaukri\.com/i,
+  );
+  assert.doesNotMatch(markup, /Apply now/);
+});

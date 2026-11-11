@@ -1,3 +1,4 @@
+import { publicJobPresentation } from './public-job-presentation.js';
 import { prisma } from '../db.js';
 import type { Prisma } from '../../generated/prisma/index.js';
 import type { JobFilters } from '../../frontend/public-job-filters.js';
@@ -99,7 +100,7 @@ export function listPublicJobs(
           reviewed.employment_type.trim()
             ? reviewed.employment_type.trim()
             : null;
-        const { reviewedDetails: _, ...item } = post;
+        const { reviewedDetails: _, ...item } = publicJobPresentation(post);
         return {
           ...item,
           appointmentType,
@@ -119,8 +120,11 @@ export function listPublicJobs(
   );
 }
 
-export function getPublicJob(id: string, database: typeof prisma = prisma) {
-  return database.post.findUnique({
+export async function getPublicJob(
+  id: string,
+  database: typeof prisma = prisma,
+) {
+  const job = await database.post.findUnique({
     where: { id },
     select: {
       ...publicFields,
@@ -130,4 +134,5 @@ export function getPublicJob(id: string, database: typeof prisma = prisma) {
       categoryRelaxationRules: true,
     },
   });
+  return job ? publicJobPresentation(job) : null;
 }
