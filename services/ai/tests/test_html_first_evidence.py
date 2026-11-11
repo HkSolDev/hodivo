@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from html_first_evidence import recover_html_first_evidence
 from normalize_html import normalize_html
@@ -206,3 +206,25 @@ class HtmlFirstCheckpointTests(unittest.TestCase):
         self.assertEqual(third['status'], 'prepared')
         self.assertEqual(assess.call_count, 1)
         self.assertEqual(search.call_count, 2)
+
+    def test_vision_model_change_reuses_completed_search_work(self):
+        from html_first_checkpoint import prepare_html_first
+        assess = Mock(return_value=assessment())
+        vision = Mock()
+        options = dict(issuer_hosts=HOSTS, assess=assess, discover=self.search,
+                       model_identity='search-model', recover_vision=vision)
+        # Exercise the checkpoint boundary independently of PDF quality/identity.
+        def recover(source, root, *, assess, recover_vision, **kwargs):
+            assess({'identity': source['identity']})
+            recover_vision(source)
+            return {'bundle': source}
+        vision.return_value = {'bundle': bundle()}
+        with patch('html_first_checkpoint.recover_html_first_evidence', side_effect=recover):
+            first = prepare_html_first(bundle(), self.root, vision_model_identity='vision-a', **options)
+            same = prepare_html_first(bundle(), self.root, vision_model_identity='vision-a', **options)
+            changed = prepare_html_first(bundle(), self.root, vision_model_identity='vision-b', **options)
+        self.assertFalse(first['reused'])
+        self.assertTrue(same['reused'])
+        self.assertFalse(changed['reused'])
+        self.assertEqual(assess.call_count, 1)
+        self.assertEqual(vision.call_count, 2)

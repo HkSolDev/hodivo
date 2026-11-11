@@ -10,10 +10,12 @@ from stage_retry import StageRetries
 
 
 def prepare_html_first(bundle, root, *, issuer_hosts, assess, discover, process=None,
-                       recover_vision=None, model_identity=None, clock=None):
+                       recover_vision=None, model_identity=None, vision_model_identity=None, clock=None):
     request = {'bundle_id': bundle['bundle_id'], 'bundle': bundle,
                'issuer_hosts': issuer_hosts, 'model_identity': model_identity,
                'version': 'html-first-evidence-v1'}
+    if vision_model_identity is not None:
+        request['vision_model_identity'] = vision_model_identity
     fingerprint = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
     retries = StageRetries(root, clock)
     call_retries = StageRetries(root / 'calls', clock)
@@ -24,7 +26,9 @@ def prepare_html_first(bundle, root, *, issuer_hosts, assess, discover, process=
             return None
         def invoke(value):
             request = {'bundle_id': bundle['bundle_id'], 'kind': kind,
-                       'model_identity': model_identity, 'request': value}
+                       'model_identity': (vision_model_identity if kind == 'vision'
+                                          and vision_model_identity is not None else model_identity),
+                       'request': value}
             key = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
             def execute(_):
                 try:

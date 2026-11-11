@@ -489,3 +489,23 @@ populate these fields, or complete the other worker reliability gates.
   then shared per-notice limits. This change measures calls; it does not introduce
   a new call budget. Five-state assessment and end-to-end publication gates remain
   later slices. Preparation AI collection and frontend display remain deferred.
+
+### Vision checkpoint identity increment — 11 November 2026
+
+- Confirmed gap: evidence checkpoints included the search model but omitted the
+  Vision model. Changing Vision configuration could reuse an old outer result
+  without invoking the newly selected model. Likelihood 6, impact 5, risk 30.
+- Add optional Vision identity (provider class and model) to the outer request;
+  Vision call checkpoints use that identity while assessment/research retain
+  their search identity. Calls without a Vision identity keep legacy keys.
+- Configuration changes intentionally create a fresh outer evidence checkpoint.
+  Existing inner assessment/research responses remain reusable for identical
+  requests. An upgrade from an unversioned Vision identity may repeat Vision
+  once; no completed draft or publication receipt is rewritten by this helper.
+- Offline regression proves same-config reuse, changed-Vision execution and
+  assessment reuse. Full Python suite: 527 passed. Existing transient research
+  test confirms waiting makes no second search call and successful assessment
+  survives retry. No new retry policy introduced.
+- Remaining: search provider identity beyond its model name, finer injected
+  assessor identities, retry classification review and shared per-notice limits.
+  Live-provider correctness remains untested; no deployment performed.

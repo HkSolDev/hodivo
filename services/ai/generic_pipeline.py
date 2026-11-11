@@ -309,7 +309,10 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     evidence_result = prepare_html_first(bundle, root / 'html_first',
                         issuer_hosts=issuer_hosts, assess=assessor, discover=discover,
                         process=evidence_process, recover_vision=recover_vision,
-                        model_identity=getattr(provider, 'model', None), clock=retry_clock)
+                        model_identity=getattr(provider, 'model', None),
+                        vision_model_identity=({'provider': type(active_vision).__name__,
+                            'model': active_vision.model} if active_vision is not None else None),
+                        clock=retry_clock)
                     if evidence_result['status'] != 'prepared':
                         counts['blocked'] += 1
                         counts['blocked_reasons'].append(evidence_result['reason'])
