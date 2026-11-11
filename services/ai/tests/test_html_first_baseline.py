@@ -1,6 +1,5 @@
 """Offline capture comparison; no extraction, provider calls or publication."""
 import json
-import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -13,6 +12,12 @@ FIXTURES = Path(__file__).parent / 'fixtures'
 class HtmlFirstBaselineTests(unittest.TestCase):
     def test_four_capture_cases(self):
         measurements = []
+        expected_notices = {
+            'iiit_saved_text': {'IIITP/ECE/0002': 'IIIT Pune'},
+            'complete_html': {'EB/01/2026': 'Example Board'},
+            'multi_notice': {'EB/01/2026': 'Example Board', 'EB/02/2026': 'Example Board'},
+            'poor_text_pdf': {'EB/01/2026': 'Example Board'},
+        }
         for case in ('iiit_saved_text', 'complete_html', 'multi_notice', 'poor_text_pdf'):
             for html_first in (False, True):
                 with self.subTest(case=case, html_first=html_first):
@@ -59,7 +64,24 @@ class HtmlFirstBaselineTests(unittest.TestCase):
                         measurements.append(row)
                         self.assertFalse(summary['ai_called'])
                         self.assertFalse(summary['published'])
-                        self.assertGreater(len(bundles), 0)
+                        notices = [b for b in bundles if b['identity']['advertisement_number']]
+                        actual_notices = {b['identity']['advertisement_number']: b['identity']['issuer']
+                                          for b in notices}
+                        self.assertEqual(actual_notices, expected_notices[case])
+                        self.assertEqual(len(notices), len(expected_notices[case]))
+                        for notice in notices:
+                            text = json.dumps(notice['documents'])
+                            if case == 'complete_html':
+                                for fact in ('30 November 2026', 'Bachelor degree required',
+                                             'Minimum age 18 years', 'Maximum age 27 years'):
+                                    self.assertIn(fact, text)
+                            elif case == 'iiit_saved_text':
+                                self.assertIn('JRF Recruitment', text)
+                                if not html_first:
+                                    self.assertIn('Junior Research Fellow (JRF)', text)
+                                    self.assertIn('No. of Positions One (01)', text)
+                            elif case == 'poor_text_pdf':
+                                self.assertIn('30 November 2026', text)
                         if html_first and case != 'multi_notice':
                             self.assertEqual(row['pdf_calls'], 0)
                         if case == 'poor_text_pdf':
