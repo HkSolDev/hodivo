@@ -50,6 +50,35 @@ class HtmlFirstEvidenceTests(unittest.TestCase):
         path.write_text(json.dumps(normalize_html(html.encode(), url, include_link_context=True)))
         return {'final_url': url, 'document_kind': 'html', 'content_path': str(path)}, None, False
 
+    def test_five_states_route_only_actionable_gaps_to_research(self):
+        data = {'supported_fields': ['min_age'], 'missing_fields': ['max_age'],
+                'explicitly_unstated_fields': ['experience_rules.0.minimum_years'],
+                'conflicting_fields': ['vacancies'], 'unreadable_fields': ['min_marks_percent']}
+        result = self.recover(Mock(return_value={'status': 'ok', 'data': data}))
+        self.assertEqual(result['field_states'], data)
+        self.assertEqual(self.search.call_args.args[0]['remaining_fields'],
+                         ['max_age', 'min_marks_percent', 'vacancies'])
+        self.assertEqual(result['bundle'], bundle())
+
+    def test_explicitly_unstated_optional_fact_does_not_trigger_search(self):
+        result = self.recover(Mock(return_value={'status': 'ok', 'data': {
+            'missing_fields': [], 'explicitly_unstated_fields': ['fee_rules.0.amount']}}))
+        self.search.assert_not_called()
+        self.assertEqual(result['bundle'], bundle())
+        self.assertEqual(result['field_states']['explicitly_unstated_fields'],
+                         ['fee_rules.0.amount'])
+
+    def test_invalid_or_overlapping_states_fall_back_to_coverage(self):
+        for extra in ({'unreadable_fields': 'min_age'},
+                      {'unreadable_fields': ['invented_field']},
+                      {'supported_fields': ['min_age']},
+                      {'unreadable_fields': ['max_age', 'max_age']}):
+            with self.subTest(extra=extra):
+                result = self.recover(Mock(return_value={'status': 'ok', 'data': {
+                    'missing_fields': ['min_age'], **extra}}))
+                self.assertEqual(result['reason'], 'assessment_response_invalid')
+                self.assertNotIn('field_states', result)
+
     def test_complete_html_reads_no_pdf_and_does_no_research(self):
         result = self.recover(Mock(return_value=assessment()))
         self.process.assert_not_called()

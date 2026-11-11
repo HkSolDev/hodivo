@@ -130,15 +130,22 @@ def recover_html_first_evidence(bundle, root, *, assess, discover, issuer_hosts,
         data = json.loads(data) if isinstance(data, str) else data
         if not isinstance(data, dict) or 'missing_fields' not in data:
             raise ValueError
-        missing = data['missing_fields']
-        conflicts = data.get('conflicting_fields', []) if isinstance(data, dict) else []
-        if not isinstance(missing, list) or not isinstance(conflicts, list):
-            raise ValueError
-        if any(not isinstance(field, str) or not any(pattern.fullmatch(field) for pattern in patterns)
-               for field in missing + conflicts):
-            raise ValueError
-        gaps = sorted({field for field in missing + conflicts if isinstance(field, str)
-                       and any(pattern.fullmatch(field) for pattern in patterns)})
+        states = {}
+        assigned = set()
+        for name in ('supported_fields', 'missing_fields', 'explicitly_unstated_fields',
+                     'conflicting_fields', 'unreadable_fields'):
+            values = data.get(name, [])
+            if (not isinstance(values, list)
+                    or any(not isinstance(field, str) or not any(pattern.fullmatch(field)
+                               for pattern in patterns) for field in values)
+                    or len(set(values)) != len(values)
+                    or assigned.intersection(values)):
+                raise ValueError
+            states[name] = values
+            assigned.update(values)
+        report['field_states'] = states
+        gaps = sorted(set(states['missing_fields'] + states['conflicting_fields']
+                          + states['unreadable_fields']))
     except (TypeError, ValueError):
         gaps = []
         report['reason'] = 'assessment_response_invalid'

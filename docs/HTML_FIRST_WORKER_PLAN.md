@@ -673,3 +673,30 @@ populate these fields, or complete the other worker reliability gates.
 - Next: five-state HTML-first evidence assessment, starting with inspection of
   existing assessment validation/tests. Authentic scanned-notice quality remains
   open. Preparation AI collection and frontend display remain deferred.
+
+### Five-state evidence planning, first slice — 11 November 2026
+
+- Confirmed implementation gap: assessment parsing only routed missing/conflicting
+  fields; an unreadable_fields response alone did not request research. Likelihood
+  3, impact 4, risk 12 under that concrete response. No live occurrence established.
+- Gemini now receives definitions for supported, missing, explicitly unstated,
+  conflicting and unreadable fields. The planner validates all five optional
+  arrays against existing field paths and rejects duplicates/overlapping states.
+  missing_fields remains required for compatibility with the existing response.
+  Legacy responses with only missing/conflicting fields remain accepted.
+- Missing/conflicting/unreadable fields request bounded research. Supported and
+  explicitly unstated fields do not. Labels never become candidate facts, clear
+  values or bypass extraction/source validation/review. The prompt restricts
+  explicitly unstated to optional facts established by the complete official
+  source, never snippet absence. This restriction is model guidance, not a new
+  deterministic proof that absence was established; evidence-backed absence
+  validation and live classification accuracy remain follow-ups.
+- Successful old checkpoints remain unchanged and are not invalidated to repeat
+  paid work. Their reports need not contain the new labels. No schema, matching,
+  database or public API contract changed.
+- All 536 Python tests, typecheck, lint and diff checks pass offline. Tests cover
+  five-way routing, optional unstated fields, invalid paths/types, duplicate and
+  overlapping classifications. No paid provider, push or deployment performed.
+- Next: inspect how to ground explicitly-unstated classifications in complete
+  captured sources before treating that distinction as verified. Authentic
+  scanned-notice comparison remains open; preparation AI/UI remain deferred.
