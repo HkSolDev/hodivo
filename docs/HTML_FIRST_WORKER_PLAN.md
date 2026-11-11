@@ -570,3 +570,34 @@ populate these fields, or complete the other worker reliability gates.
   and diff checks pass offline. No live calls, push or deployment performed.
 - Next: shared per-notice limits and end-to-end publication verification.
   Preparation AI collection and frontend display remain deferred.
+
+### Shared HTTP cap, first bounded slice — 11 November 2026
+
+- Analysis: stage-specific limits existed, but provider_post had no shared ceiling
+  across assessment, Vision, research, extraction, review and key rotation. This
+  is a confirmed missing planned guard, not evidence of runaway production cost.
+  Likelihood 4, impact 4, risk 16 when several stages and key retries run together.
+- HTML-first processing now allows at most 32 actual provider HTTP attempts for
+  each prepared notice during one worker pass. run_pipeline accepts a positive
+  integer max_provider_requests_per_notice override; legacy non-HTML-first
+  processing remains unchanged. This is an HTTP-attempt ceiling, not token,
+  provider-side search-query or money accounting. 32 is an initial conservative
+  implementation ceiling, not a measured ideal production allocation.
+- The existing metrics boundary checks before transport: denied calls are not
+  attempted/failed HTTP requests. Key rotation consumes the same allowance.
+  Exhaustion raises a retryable error, records provider_request_budget_exhausted
+  in the source report and increments provider_budget_exhaustions. Existing
+  validation, review and publication gates remain mandatory. The diagnostic
+  blocked outcome may accompany the stage failure outcome for the same notice.
+- Existing evidence checkpoints retain completed work. Regression proves a paid
+  assessment is not repeated when research resumes after budget exhaustion and
+  backoff. A fresh pass gets a fresh allowance; therefore this slice does NOT
+  bound cumulative spending across scheduled runs or implement persistent shared
+  research-round accounting. Those remain a separate follow-up. Existing saved
+  checkpoints are unchanged and no new durable state is introduced.
+- Tests cover exact transport ceiling, success/failure accounting, key rotation,
+  invalid limits, context cleanup, pipeline wiring/reporting and checkpoint
+  resume. All 531 Python tests pass offline; typecheck and lint pass. No live
+  calls, production changes, push or deployment performed.
+- Next: persistent per-notice allowance across retries, then end-to-end
+  review/retirement/publication verification. Preparation AI/UI remain deferred.

@@ -242,3 +242,33 @@ class HtmlFirstCheckpointTests(unittest.TestCase):
         self.assertTrue(same['reused'])
         self.assertFalse(changed['reused'])
         self.assertEqual(assess.call_count, 2)
+
+    def test_request_cap_waits_and_resumes_without_repeating_assessment(self):
+        import httpx
+        from html_first_checkpoint import prepare_html_first
+        from provider_metrics import provider_post, track_provider_requests
+        client = Mock()
+        client.post.return_value = httpx.Response(200)
+        def assess(request):
+            provider_post(client, 'https://provider.invalid')
+            return assessment(missing=['min_age'])
+        def discover(request):
+            provider_post(client, 'https://provider.invalid')
+            return {'data': {'source_urls': []}}
+        assessor = Mock(side_effect=assess)
+        clock = [1000.0]
+        options = dict(issuer_hosts=HOSTS, assess=assessor, discover=discover,
+                       clock=lambda: clock[0])
+        with track_provider_requests(max_attempts=1):
+            first = prepare_html_first(bundle(), self.root, **options)
+        self.assertEqual(first['status'], 'waiting')
+        with track_provider_requests(max_attempts=1):
+            second = prepare_html_first(bundle(), self.root, **options)
+        self.assertEqual(second['status'], 'waiting')
+        self.assertEqual(client.post.call_count, 1)
+        clock[0] += 1000
+        with track_provider_requests(max_attempts=1):
+            third = prepare_html_first(bundle(), self.root, **options)
+        self.assertEqual(third['status'], 'prepared')
+        self.assertEqual(assessor.call_count, 1)
+        self.assertEqual(client.post.call_count, 2)

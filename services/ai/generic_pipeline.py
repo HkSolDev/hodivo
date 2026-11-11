@@ -22,7 +22,7 @@ from validate_candidate import validate_candidate
 from stage_retry import StageRetries
 from extraction_checkpoint import extract_or_resume
 from review_publication import is_retired, is_valid_receipt_file
-from provider_metrics import track_provider_requests
+from provider_metrics import track_provider_requests, provider_budget_exhausted
 from autonomous_pipeline import (
     _map_post_to_ingest_post,
     apply_validated_vision_recovery,
@@ -121,7 +121,7 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                  pdf_bytes_by_doc=None, page_images_by_doc=None,
                  search_client=None, capture_client=None, issuer_hosts=None,
                  html_first=False, evidence_assessor=None, evidence_discover=None,
-                 evidence_process=None):
+                 evidence_process=None, max_provider_requests_per_notice=32):
     """Crawl sources and process only coverage-approved evidence.
 
     When a verified PDF page is marked unusable by deterministic native-text
@@ -130,6 +130,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
     re-checking ``is_extraction_approved``. Autonomous persistence runs only
     when all deterministic evidence and acceptance gates approve.
     """
+    if type(max_provider_requests_per_notice) is not int or max_provider_requests_per_notice < 1:
+        raise ValueError('max_provider_requests_per_notice must be a positive integer')
     if type(html_first) is not bool:
         raise ValueError('html_first must be a boolean')
     if html_first:
@@ -241,7 +243,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
             repair_reports = []
             evidence_report = None
             request_scope = ExitStack()
-            requests = request_scope.enter_context(track_provider_requests())
+            requests = request_scope.enter_context(track_provider_requests(
+                max_attempts=max_provider_requests_per_notice if html_first else None))
             try:
                 raw_text = Path(path).read_text(encoding='utf-8')
                 prepared = json.loads(raw_text)
@@ -803,6 +806,11 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                     retry = retries.read('extraction', fingerprint)
                     counts['bundle_outcomes'][-1]['reasons'] = [retry.get('reason') or 'extraction_failed']
             finally:
+                if provider_budget_exhausted():
+                    counts['provider_budget_exhaustions'] = counts.get('provider_budget_exhaustions', 0) + 1
+                    counts['blocked_reasons'].append('provider_request_budget_exhausted')
+                    counts['bundle_outcomes'].append({'bundle_id': bundle_id,
+                        'outcome': 'blocked', 'reasons': ['provider_request_budget_exhausted']})
                 request_scope.close()
                 for outcome, value in requests.items():
                     key = f'provider_requests_{outcome}'

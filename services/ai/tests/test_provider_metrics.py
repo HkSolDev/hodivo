@@ -8,6 +8,30 @@ from provider_schedule import ProviderDeferred
 
 
 class ProviderMetricsTests(unittest.TestCase):
+    def test_shared_request_cap_blocks_transport_and_restores_context(self):
+        from provider_metrics import provider_post, provider_budget_exhausted, ProviderRequestLimit
+        client = Mock()
+        client.post.return_value = httpx.Response(200)
+        with track_provider_requests(max_attempts=2) as counts:
+            provider_post(client, 'https://provider.invalid')
+            client.post.side_effect = httpx.ReadTimeout('fixture')
+            with self.assertRaises(httpx.ReadTimeout):
+                provider_post(client, 'https://provider.invalid')
+            with self.assertRaises(ProviderRequestLimit) as error:
+                provider_post(client, 'https://provider.invalid')
+            self.assertTrue(error.exception.retryable)
+            self.assertTrue(provider_budget_exhausted())
+        self.assertEqual(client.post.call_count, 2)
+        self.assertEqual(counts, {'attempted': 2, 'succeeded': 1, 'failed': 1})
+        self.assertFalse(provider_budget_exhausted())
+        client.post.side_effect = None
+        with track_provider_requests(max_attempts=2):
+            provider_post(client, 'https://provider.invalid')
+        for invalid in (0, -1, True, 1.5):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                with track_provider_requests(max_attempts=invalid):
+                    pass
+
     def test_missing_credentials_do_not_count_a_request(self):
         with track_provider_requests() as counts:
             with patch('extract_bundle.provider_keys', return_value=[]), patch('extract_bundle.provider_off_peak_delay', return_value=0):
@@ -83,6 +107,7 @@ class ProviderMetricsTests(unittest.TestCase):
                 def evidence(*args, **kwargs):
                     prepare_identity.append(kwargs['model_identity'])
                     provider_post(client, 'https://provider.invalid')
+                    provider_post(client, 'https://provider.invalid')
                     return {'status': 'waiting', 'reason': 'evidence_provider_retry_wait'}
                 def review(*args, **kwargs):
                     provider_post(client, 'https://provider.invalid')
@@ -101,10 +126,12 @@ class ProviderMetricsTests(unittest.TestCase):
                         extract=lambda _: {'bundle_id': source_input['bundle_id'],
                                            'facts': {'purpose': 'recruitment'}},
                         issuer_hosts={'Example Board': ['example.gov.in']}, html_first=(stage == 'evidence'), evidence_assessor=None,
-                        evidence_discover=lambda _: {})
+                        evidence_discover=lambda _: {}, max_provider_requests_per_notice=1)
                 if stage == 'evidence':
                     self.assertEqual(prepare_identity[0],
                         {'provider': 'FixtureSearchProvider', 'model': 'fixture-model'})
+                    self.assertIn('provider_request_budget_exhausted',
+                        report['sources']['fixture']['blocked_reasons'])
                 expected = ({'attempted': 1, 'succeeded': 1, 'failed': 0} if stage == 'evidence'
                             else {'attempted': 2, 'succeeded': 1, 'failed': 1})
                 self.assertEqual(report['summary']['provider_requests'], expected)
@@ -130,7 +157,15 @@ class ProviderMetricsTests(unittest.TestCase):
                         result = provider.request_json(system_prompt='fixture', parts=[{'text': 'fixture'}])
                     self.assertEqual(result['retryable'], error_type is not httpx.LocalProtocolError)
                     self.assertEqual(counts, {'attempted': 1, 'succeeded': 0, 'failed': 1})
+        from provider_metrics import ProviderRequestLimit
+        client.post.reset_mock()
         client.post.side_effect = None
+        client.post.return_value = httpx.Response(429, json={})
+        with track_provider_requests(max_attempts=1) as counts:
+            with self.assertRaises(ProviderRequestLimit):
+                gemini.request_json(system_prompt='fixture', parts=[{'text': 'fixture'}])
+        self.assertEqual(client.post.call_count, 1)
+        self.assertEqual(counts, {'attempted': 1, 'succeeded': 0, 'failed': 1})
         client.post.return_value = httpx.Response(200, json={'choices': [
             {'finish_reason': 'stop', 'message': {'content': '{}'}}]})
         with track_provider_requests() as counts:
