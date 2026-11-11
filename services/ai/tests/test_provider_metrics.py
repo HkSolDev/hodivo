@@ -101,3 +101,30 @@ class ProviderMetricsTests(unittest.TestCase):
                 expected = ({'attempted': 1, 'succeeded': 1, 'failed': 0} if stage == 'evidence'
                             else {'attempted': 2, 'succeeded': 1, 'failed': 1})
                 self.assertEqual(report['summary']['provider_requests'], expected)
+
+    def test_task_adapters_count_key_rotation_and_transport_failures(self):
+        from providers.gemini import GeminiProvider
+        from providers.xai import XaiProvider
+        client = Mock()
+        client.post.side_effect = [httpx.Response(429, json={}), httpx.Response(200,
+            json={'candidates': [{'content': {'parts': [{'text': '{}'}]}, 'finishReason': 'STOP'}]})]
+        gemini = GeminiProvider(keys=['fixture-a', 'fixture-b'], client=client)
+        with track_provider_requests() as counts:
+            result = gemini.request_json(system_prompt='fixture', parts=[{'text': 'fixture'}])
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(counts, {'attempted': 2, 'succeeded': 1, 'failed': 1})
+        for provider in (gemini, XaiProvider(model='fixture-model', client=client,
+                                           env={'XAI_API_KEY': 'fixture'})):
+            with self.subTest(provider=type(provider).__name__):
+                client.post.side_effect = httpx.ConnectError('fixture')
+                with track_provider_requests() as counts:
+                    result = provider.request_json(system_prompt='fixture', parts=[{'text': 'fixture'}])
+                self.assertTrue(result['retryable'])
+                self.assertEqual(counts, {'attempted': 1, 'succeeded': 0, 'failed': 1})
+        client.post.side_effect = None
+        client.post.return_value = httpx.Response(200, json={'choices': [
+            {'finish_reason': 'stop', 'message': {'content': '{}'}}]})
+        with track_provider_requests() as counts:
+            result = provider.request_json(system_prompt='fixture', parts=[{'text': 'fixture'}])
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(counts, {'attempted': 1, 'succeeded': 1, 'failed': 0})

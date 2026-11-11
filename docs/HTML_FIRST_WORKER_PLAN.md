@@ -509,3 +509,25 @@ populate these fields, or complete the other worker reliability gates.
 - Remaining: search provider identity beyond its model name, finer injected
   assessor identities, retry classification review and shared per-notice limits.
   Live-provider correctness remains untested; no deployment performed.
+
+### Task-adapter HTTP accounting correction — 11 November 2026
+
+- Analysis found that GeminiProvider and XaiProvider used direct HTTP `.post`
+  calls, bypassing `provider_post`. The earlier per-notice scope fix was necessary
+  but its synthetic callback regression did not prove adapter instrumentation.
+- Confirmed reproduction: Gemini key rotation made two fake HTTP requests while
+  totals remained zero. Likelihood 9, impact 5, risk 45. This understated real
+  auxiliary-task HTTP usage and would undermine a shared request budget.
+- Minimal fix: both adapters call the existing provider_post helper. Transport,
+  payloads, key rotation, return shapes and retry policy are unchanged. Each key
+  attempt counts separately; no extra outer increment causes double counting.
+- Adapter regression verifies Gemini 429-to-success rotation, Gemini/xAI network
+  failures and xAI success. Focused 26 tests and full 528-test Python suite pass
+  offline. HTTP success still does not imply valid extraction or factual accuracy.
+- Scope: generic worker's per-notice counter observes synchronous task requests
+  through these adapters. Legacy OpenAIProvider is not selected by task_provider
+  and was left unchanged. Provider-side searches inside a single HTTP response
+  are not separate HTTP attempts. No token/cost budget is claimed.
+- Remaining: retry classification, search-provider checkpoint identity, shared
+  per-notice limits and end-to-end publication verification. No live calls or
+  deployment performed.

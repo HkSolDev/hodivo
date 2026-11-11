@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from provider_metrics import provider_post
 from schema import PostBatch
 
 
@@ -162,8 +163,8 @@ class GeminiProvider:
         for idx, key in enumerate(self.keys, start=1):
             attempts = idx
             try:
-                response = transport.post(
-                    url,
+                response = provider_post(
+                    transport, url,
                     headers={"x-goog-api-key": key},
                     json=payload,
                     timeout=timeout,
