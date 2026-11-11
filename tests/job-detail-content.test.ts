@@ -356,3 +356,32 @@ test('uses the stored vacancy count and preserves condition-only requirements wi
   assert.doesNotMatch(markup, /All applicants|₹100|years or above/);
   assert.match(markup, /Maximum age unavailable here/);
 });
+
+test('shows the base age independently of category limits and preserves unknown bounds', () => {
+  for (const [minAge, maxAge, expected] of [
+    [18, 30, '18–30 years'],
+    [null, 35, 'Up to 35 years'],
+    [18, null, 'At least 18 years'],
+    [null, null, null],
+  ] as const) {
+    const job: JobDetailData = {
+      ...completeJob,
+      minAge,
+      maxAge,
+      reviewedDetails: null,
+    };
+    const before = JSON.stringify(job);
+    const markup = renderToStaticMarkup(
+      createElement(JobDetailContent, { job }),
+    );
+    if (expected) {
+      assert.ok(markup.includes(`Base age: <strong>${expected}</strong>`));
+    } else {
+      assert.doesNotMatch(markup, /Base age:/);
+    }
+    assert.doesNotMatch(markup, /Base age: <strong>18–35 years/);
+    assert.match(markup, /18–35 years/); // The separate SC rule is retained.
+    assert.match(markup, /Age calculated as on/);
+    assert.equal(JSON.stringify(job), before);
+  }
+});

@@ -147,8 +147,8 @@ function ageRange(
   max: number | null | undefined,
 ): string | null {
   if (min != null && max != null) return `${min}–${max} years`;
-  if (max != null) return `Maximum ${max} years`;
-  if (min != null) return `Minimum ${min} years`;
+  if (max != null) return `Up to ${max} years`;
+  if (min != null) return `At least ${min} years`;
   return null;
 }
 
