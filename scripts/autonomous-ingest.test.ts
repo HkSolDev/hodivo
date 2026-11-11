@@ -568,7 +568,11 @@ await test(
   async (t) => {
     const url = new URL(process.env.TEST_DATABASE_URL!);
     assert.equal(url.hostname, '127.0.0.1');
-    assert.equal(url.pathname, '/aptus_preparation_test');
+    assert.ok(
+      url.pathname === '/aptus_preparation_test' ||
+        (process.env.GITHUB_ACTIONS === 'true' && url.pathname === '/aptus_ci'),
+      'Use the dedicated local test database or the GitHub Actions test database',
+    );
     assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
     const { prisma } = await import('../src/db.js');
     const bundleId = `preparation-storage-${crypto.randomUUID()}`;
@@ -659,7 +663,11 @@ await test(
   async (t) => {
     const url = new URL(process.env.TEST_DATABASE_URL!);
     assert.equal(url.hostname, '127.0.0.1');
-    assert.equal(url.pathname, '/aptus_preparation_test');
+    assert.ok(
+      url.pathname === '/aptus_preparation_test' ||
+        (process.env.GITHUB_ACTIONS === 'true' && url.pathname === '/aptus_ci'),
+      'Use the dedicated local test database or the GitHub Actions test database',
+    );
     assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
     const { prisma } = await import('../src/db.js');
     const payload = generateAutonomousPayloadFromPython({
