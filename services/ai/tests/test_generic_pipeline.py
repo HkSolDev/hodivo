@@ -388,6 +388,8 @@ class GenericPipelineTests(unittest.TestCase):
         saved_path = next((self.root / 'pipeline_vision_review_blocked' / 'drafts').glob('*.json'))
         saved = StorageCandidate.model_validate_json(saved_path.read_bytes())
         self.assertTrue(saved.metadata['repair_pending'])
+        self.assertEqual(saved.metadata['repair_source_identity'], saved.review.bundle_identity)
+        self.assertTrue(saved.metadata['discovery_source_urls'])
         self.assertEqual(saved.metadata['repair_candidate']['bundle_id'], saved.bundle_id)
 
         # A due rejected draft resumes its saved facts and runs review again.

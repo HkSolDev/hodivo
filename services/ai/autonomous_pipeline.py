@@ -4,6 +4,7 @@ import copy
 import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -802,6 +803,24 @@ def review_and_repair(extracted, source_input, *, review_fn=None,
                       storage_dir=None, max_repairs=2):
     """Repair review findings from verified official evidence, then review again."""
     reports = []
+    if (max_repairs > 0 and search_client is not None and capture_client is not None
+            and callable(getattr(search_client, 'discover_notice', None))
+            and extracted.get('facts', {}).get('posts')
+            and (not verify_enrichment_identity(source_input)[0]
+                 or any(not is_official_authority(d.get('authority'))
+                        for d in source_input.get('documents', [])))):
+        from notice_discovery import recover_official_notice
+        extracted, source_input, discovery = recover_official_notice(
+            extracted, source_input, search_client=search_client,
+            capture_client=capture_client, issuer_hosts=issuer_hosts)
+        reports.append(discovery)
+        if discovery['status'] == 'recovered':
+            issuer_hosts = {**(issuer_hosts or {}), **discovery['issuer_hosts']}
+    verified, identity, _ = verify_enrichment_identity(source_input)
+    if verified and not issuer_hosts:
+        hosts = sorted({urlsplit(d['source_url']).hostname for d in source_input.get('documents', [])
+                        if is_official_authority(d.get('authority')) and d.get('source_url')})
+        issuer_hosts = {identity['issuer']: hosts}
     for attempt in range(max_repairs + 1):
         review = review_extracted_candidate(extracted, source_input, review_fn=review_fn)
         if review['passed'] or attempt == max_repairs:
