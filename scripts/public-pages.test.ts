@@ -19,10 +19,10 @@ const job = {
   minMarksPercent: null,
   source: {
     name: 'Fixture source',
-    url: 'https://example.org/notice',
+    url: 'https://fixture.gov.in/notice',
     notificationPdfUrl: 'javascript:alert(1)',
     officialSiteUrl: null,
-    applyUrl: 'https://example.org/apply',
+    applyUrl: 'https://fixture.gov.in/apply',
     fetchedAt: new Date('2026-10-02'),
   },
   eligibilityRules: {
@@ -128,7 +128,7 @@ await test('anonymous public HTML pages', async (t) => {
       assert($('main').text().includes('female'));
       assert($('main').text().includes('Do not combine relaxations.'));
       assert.equal($('a[href^="javascript:"]').length, 0);
-      assert.equal($('a[href="https://example.org/apply"]').length, 1);
+      assert.equal($('a[href="https://fixture.gov.in/apply"]').length, 1);
     },
   );
 

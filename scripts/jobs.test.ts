@@ -86,6 +86,14 @@ await test('public jobs HTTP contract', async (t) => {
                   id: 'job-21',
                   postName: 'Assistant',
                   applicationLastDate: null,
+                  source: {
+                    name: 'Fixture source',
+                    url: 'https://fixture.gov.in/notice',
+                    notificationPdfUrl: null,
+                    officialSiteUrl: null,
+                    applyUrl: null,
+                    fetchedAt: null,
+                  },
                 },
               ]);
             },
