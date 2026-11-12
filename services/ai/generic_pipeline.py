@@ -436,6 +436,8 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                         if repair_state.get('repair_next_at', 0) <= (retry_clock or time.time)():
                             repair_resume = repair_state['repair_candidate']
                             source_input['documents'] = cached_envelope['source_evidence']
+                            source_input['identity'] = repair_state.get('repair_source_identity',
+                                                                       source_input.get('identity', {}))
                             cached_envelope = None
                     if cached_envelope is not None:
                         counts['reused'] += 1
@@ -638,6 +640,9 @@ def run_pipeline(root, *, sources_path=DEFAULT_SOURCES_PATH, source_id=None,
                             'repair_pending': acceptance['decision'] != 'accepted',
                             'repair_next_at': (retry_clock or time.time)() + 3600,
                             'repair_candidate': extracted,
+                            'repair_source_identity': source_input.get('identity', {}),
+                            'discovery_source_urls': [d['source_url'] for d in
+                                prepared['llm_input']['input']['documents'] if d.get('source_url')],
                         }
                         draft_path = root / 'drafts' / f"{extracted['bundle_id']}.json"
                         atomic_write(draft_path, json.dumps(envelope, ensure_ascii=False, indent=2).encode())

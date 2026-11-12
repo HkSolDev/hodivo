@@ -6,11 +6,24 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 
 from capture import capture
+from normalize_html import normalize_html
+from research_gap_prompt import RECRUITMENT_RESEARCH_INSTRUCTIONS
 
 
 class GeminiRepairSearch:
     def __init__(self, provider):
         self.provider = provider
+
+    def discover_notice(self, request):
+        return self.provider.discover_sources(
+            query=json.dumps(request, ensure_ascii=False),
+            system_prompt=RECRUITMENT_RESEARCH_INSTRUCTIONS +
+                ' Supplied identity fields are unverified discovery hints, not established facts. '
+                'Find the latest official notice and dated amendments for the matching recruitment cycle. '
+                'Do not substitute an older cycle or a different, newer recruitment. '
+                'An advertisement number is optional for discovery. Return source_urls only.',
+            response_schema={'type': 'object', 'properties': {'source_urls': {
+                'type': 'array', 'items': {'type': 'string'}}}, 'required': ['source_urls']})
 
     def discover_for_request(self, request):
         schema = {'type': 'object', 'properties': {'candidates': {
@@ -52,6 +65,13 @@ class OfficialRepairCapture:
         else:
             units.append({'locator': 'html:body', 'text':
                           BeautifulSoup(body, 'html.parser').get_text(' ', strip=True)})
-        return {'status': 'captured', 'source_url': snapshot['final_url'],
+        kind = 'pdf' if body.startswith(b'%PDF-') else 'html'
+        content = ({'format': 'pdf', 'source_url': snapshot['final_url'],
+                    'sections': [{'text': u['text'], 'evidence': [{'page': u['page']}]}
+                                 for u in units]}
+                   if kind == 'pdf' else normalize_html(body, snapshot['final_url']))
+        document = {'document_id': snapshot['sha256'], 'source_url': snapshot['final_url'],
+                    'format': kind, 'content': content}
+        return {'status': 'captured', 'document': document, 'source_url': snapshot['final_url'],
                 'document_id': snapshot['sha256'], 'sha256': snapshot['sha256'],
                 'captured_at': snapshot['captured_at'], 'text_units': units}
