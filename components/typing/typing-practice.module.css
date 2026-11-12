@@ -1,0 +1,248 @@
+/* Typing practice styling; uses only the shared Aptus light/dark tokens. */
+.root {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.controlRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.controlGroup {
+  margin: 0;
+  min-width: 0;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--small-radius);
+  padding: var(--space-3) var(--space-4);
+}
+
+.controlGroup:disabled {
+  opacity: 0.55;
+}
+
+.legend {
+  padding: 0 var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.active {
+  background: var(--accent-surface);
+  border-color: var(--ink);
+}
+
+.inlineForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.customLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.durationInput {
+  width: 7rem;
+  margin-top: var(--space-2);
+}
+
+.passageDraft {
+  display: block;
+  width: 100%;
+  min-height: 6.5rem;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--control-line);
+  border-radius: var(--small-radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.passage {
+  margin: 0;
+  padding: var(--space-4);
+  min-height: 9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--small-radius);
+  background: var(--surface);
+  font:
+    400 clamp(1.15rem, 1.9vw + 0.8rem, 1.4rem) / 1.9 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    'Liberation Mono',
+    monospace;
+  overflow-wrap: anywhere;
+}
+
+.word {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.space {
+  display: inline-block;
+  white-space: pre;
+}
+
+.correct {
+  color: var(--ink);
+}
+
+.incorrect {
+  color: var(--danger);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.current {
+  background: var(--soft-hover);
+  border-radius: 2px;
+}
+
+.untyped {
+  color: var(--muted);
+}
+
+.typingLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.typingInput {
+  display: block;
+  width: 100%;
+  min-height: 5.5rem;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--control-line);
+  border-radius: var(--small-radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.typingInput:focus-visible,
+.passageDraft:focus-visible,
+.durationInput:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+}
+
+.stat div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.stat dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusLine {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink-secondary);
+}
+
+.note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--warning);
+}
+
+.error {
+  margin: var(--space-2) 0 0;
+  font-size: 0.875rem;
+  color: var(--danger);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.summary {
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-4);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+.summaryGrid div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.summaryGrid dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.summaryGrid dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.disclaimer {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 30rem) {
+  .inlineForm {
+    align-items: stretch;
+  }
+
+  .durationInput {
+    width: 100%;
+  }
+}

@@ -6,6 +6,7 @@ export function Footer() {
       <span className="brand">Hodivo</span>
       <p>Check the recruitment notice before applying.</p>
       <Link href="/how-it-works">How Hodivo works</Link>
+      <Link href="/typing">Typing practice</Link>
     </footer>
   );
 }
