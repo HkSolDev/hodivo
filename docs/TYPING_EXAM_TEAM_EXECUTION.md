@@ -70,16 +70,16 @@ source preparation may occur during S3/S4, but applying the import waits for S2.
 No worker receives a new implementation assignment while an old writer owns
 those paths. Future worktree paths below are planned, not already created.
 
-| Stage | Owner | Starts after | Completion evidence |
-| --- | --- | --- | --- |
-| S0 baseline | Coordinator + existing practice reviewer | now | accepted practice SHA, preserved dirty index |
-| S1 rule matrix | Coordinator + DeepSeek Free; Terra review | research exists | sourced rules, explicit unresolved items |
-| S2 contract/storage boundary | Coordinator; Terra review | S0/S1 | exact contract/fixtures and validated importer |
-| S3 read APIs | OpenCode GLM Free | S2 | public projections, API + disposable DB tests |
-| S4 input/timer/scoring | OpenCode DeepSeek Free | S2 | pure transitions/input/scoring fixture checks |
-| S5A/S5B frontend | AGY 3.8 Flash High | S2, then S3/S4 | faithful UI, API integration, browser checks |
-| S6 first content | Coordinator | S2, integrated S3/S4 | source record, dry-run, isolated read-back |
-| S7 acceptance/PR | Terra + coordinator | S3–S6 | exact-commit review, checks, accurate PR |
+| Stage                        | Owner                                     | Starts after         | Completion evidence                            |
+| ---------------------------- | ----------------------------------------- | -------------------- | ---------------------------------------------- |
+| S0 baseline                  | Coordinator + existing practice reviewer  | now                  | accepted practice SHA, preserved dirty index   |
+| S1 rule matrix               | Coordinator + DeepSeek Free; Terra review | research exists      | sourced rules, explicit unresolved items       |
+| S2 contract/storage boundary | Coordinator; Terra review                 | S0/S1                | exact contract/fixtures and validated importer |
+| S3 read APIs                 | OpenCode GLM Free                         | S2                   | public projections, API + disposable DB tests  |
+| S4 input/timer/scoring       | OpenCode DeepSeek Free                    | S2                   | pure transitions/input/scoring fixture checks  |
+| S5A/S5B frontend             | AGY 3.8 Flash High                        | S2, then S3/S4       | faithful UI, API integration, browser checks   |
+| S6 first content             | Coordinator                               | S2, integrated S3/S4 | source record, dry-run, isolated read-back     |
+| S7 acceptance/PR             | Terra + coordinator                       | S3–S6                | exact-commit review, checks, accurate PR       |
 
 ## S0 — preserve and finish the current baseline
 
@@ -333,3 +333,9 @@ is unavailable on this account; no global permission settings were changed.
 Hemant approved runnable simulation without official scoring: 600 seconds, normal corrections, first accepted insertion timing, blocked paste/drop and continued timing through confirmation. Contract exam-v1 and serialized fixtures frozen at e5876be. Importer/editor support d310259; local domain session/input 163d8b3; reviewed/fixed client cc11273. Affected local suite 59/59 passed; strict checks and lint passed. Independent domain review timed out, so final acceptance remains pending.
 
 GLM and DeepSeek larger generation tasks returned no code after length exhaustion. MiniMax client code was recovered from scratch files and corrected by coordinator; its first UI call returned no code. AGY was added at Hemant request, completed static original HTML/CSS fidelity review, then timed out on full UI generation. No backend route or exam page is implemented. UI must still closely follow the original reference across the required responsive matrix. See agent-progress/typing-exam-dispatch-20261113.md for actual ownership, sessions and outcomes. Next tasks must be bounded, one small deliverable per call. No model availability, exit 0 or test claim substitutes for inspected artifacts and manager-run checks.
+
+## Integrated simulation checkpoint — 13 November
+
+Supersedes the earlier queued/not-implemented status: exam-v1 backend catalogue and four public APIs, responsive /typing/exam page, supported local timer/editor behavior and actual API/client validation are now implemented. Manager integrated AGY artifacts and implemented backend after free-model generation timeouts. Independent GPT reviews found and verified fixes; Gemini4Hydrogen, OpenCodeGLM and DeepSeek static suggestions were adjudicated against the frozen contract; AGY3.8 final review timed out and GPT5.6Terra failed authentication. Native6.1Terra reviewed the final UI lifecycle fixes.
+
+Local checks:61affected unit/API/import/domain/client tests;3disposable PostgreSQL checks;11exam browser checks;11existing practice browser checks, all zero failures/skips. TypeScript and lint passed. See agent-progress/typing-exam-remaining-implementation.md for commands, review limits and final build result. Content import material is prepared as hidden draft practice text with honest provenance; no official scorer, content publication, migration, deployment or merge.

@@ -39,3 +39,9 @@ Exam catalogue APIs, exam input/timer/scoring/UI and real content are the next
 staged batch, not completed by practice. See TYPING_EXAM_TEAM_EXECUTION.md.
 No shared/live migration, content publication, deployment or merge performed.
 Real Safari/mobile hardware and frontend Docker image were not exercised.
+
+## Integrated simulation checkpoint — 13 November
+
+Supersedes the earlier queued/not-implemented status: exam-v1 backend catalogue and four public APIs, responsive /typing/exam page, supported local timer/editor behavior and actual API/client validation are now implemented. Manager integrated AGY artifacts and implemented backend after free-model generation timeouts. Independent GPT reviews found and verified fixes; Gemini4Hydrogen, OpenCodeGLM and DeepSeek static suggestions were adjudicated against the frozen contract; AGY3.8 final review timed out and GPT5.6Terra failed authentication. Native6.1Terra reviewed the final UI lifecycle fixes.
+
+Local checks:61affected unit/API/import/domain/client tests;3disposable PostgreSQL checks;11exam browser checks;11existing practice browser checks, all zero failures/skips. TypeScript and lint passed. See agent-progress/typing-exam-remaining-implementation.md for commands, review limits and final build result. Content import material is prepared as hidden draft practice text with honest provenance; no official scorer, content publication, migration, deployment or merge.
