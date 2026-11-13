@@ -7,7 +7,7 @@ import type {
   ExamVersionDetail,
   ExamVersionSummary,
 } from './exam-contract.js';
-import { createExamSession } from './exam-session';
+import { createExamSession } from './exam-session.js';
 
 export type ExamErrorCode =
   'INVALID_REQUEST' | 'NOT_FOUND' | 'EXAM_NOT_READY' | 'SERVICE_UNAVAILABLE';

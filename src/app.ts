@@ -1,5 +1,6 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { registerTypingPracticeRoutes } from './routes/typing-practice.js';
+import { registerTypingExamRoutes } from './routes/typing-exams.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerPublicRoutes } from './routes/public.js';
 import { handleMatch } from './routes/match.js';
@@ -25,6 +26,7 @@ export function buildApp(
   env: NodeJS.ProcessEnv = process.env,
   database?: Parameters<typeof registerPublicRoutes>[1],
   typingDatabase?: Parameters<typeof registerTypingPracticeRoutes>[1],
+  examCatalogue?: Parameters<typeof registerTypingExamRoutes>[1],
 ) {
   const app = Fastify({
     ...safeLoggingOptions,
@@ -61,6 +63,7 @@ export function buildApp(
   registerHealthRoute(app);
   registerPublicRoutes(app, database);
   registerTypingPracticeRoutes(app, typingDatabase);
+  registerTypingExamRoutes(app, examCatalogue);
   const config = auth ? null : readAuthConfig(env);
   const appAuth = auth ?? (config ? createAuth(config) : null);
   if (appAuth) registerAuthRoutes(app, appAuth);

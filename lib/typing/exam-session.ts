@@ -1,4 +1,4 @@
-import type { ExamSession, ExamStartSnapshot } from './exam-contract';
+import type { ExamSession, ExamStartSnapshot } from './exam-contract.js';
 
 export function createExamSession(snapshot: ExamStartSnapshot): ExamSession {
   const { rules, readiness } = snapshot.version;
