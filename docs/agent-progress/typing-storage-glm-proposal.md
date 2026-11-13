@@ -45,16 +45,16 @@ Proposed by this document (require coordinator/Hemant approval before any implem
 
 ## 2. Affected files (proposed; none edited in this batch)
 
-| Path | Change | Note |
-| --- | --- | --- |
-| `prisma/schema.prisma` | Additive: 3 models + enums below | Shared file; needs approval and a reviewed additive migration |
-| `prisma/migrations/*` | New additive migration | Never applied without authorization |
-| `src/lib/typing-content.ts` | New: canonicalization, hash, counting helper | Shared pure functions; location to be reviewed against both TS projects and Docker COPY rules (plan §3) |
-| `src/lib/typing-catalogue.ts` | New: explicit Prisma reads and public projections | Named in plan §3 |
-| `src/routes/typing.ts` | New: the three GET endpoints | Named in plan §3 |
-| `src/app.ts` | One-line registration | Only touch is registration; `app.ts` is shared |
-| `scripts/import-typing-content.ts` | New: validated, dry-run-default, draft-only import | Uses existing DB config; never prints credentials |
-| `docs/contracts/*` + lock | New contract record for this boundary | Coordinator-owned; requires protocol §7 change process |
+| Path                               | Change                                             | Note                                                                                                    |
+| ---------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `prisma/schema.prisma`             | Additive: 3 models + enums below                   | Shared file; needs approval and a reviewed additive migration                                           |
+| `prisma/migrations/*`              | New additive migration                             | Never applied without authorization                                                                     |
+| `src/lib/typing-content.ts`        | New: canonicalization, hash, counting helper       | Shared pure functions; location to be reviewed against both TS projects and Docker COPY rules (plan §3) |
+| `src/lib/typing-catalogue.ts`      | New: explicit Prisma reads and public projections  | Named in plan §3                                                                                        |
+| `src/routes/typing.ts`             | New: the three GET endpoints                       | Named in plan §3                                                                                        |
+| `src/app.ts`                       | One-line registration                              | Only touch is registration; `app.ts` is shared                                                          |
+| `scripts/import-typing-content.ts` | New: validated, dry-run-default, draft-only import | Uses existing DB config; never prints credentials                                                       |
+| `docs/contracts/*` + lock          | New contract record for this boundary              | Coordinator-owned; requires protocol §7 change process                                                  |
 
 ## 3. Model contract (proposed exact shape)
 
@@ -69,59 +69,59 @@ enum TypingSourceKind { OFFICIAL_PREVIOUS_YEAR RECONSTRUCTED PRACTICE }
 
 ### TypingExam — stable identity
 
-| Field | Type | Null | Notes |
-| --- | --- | --- | --- |
-| `id` | String | no | Internal stable ID; safe to expose (matches jobs API practice) |
-| `slug` | String | no | `@unique`. Catalogue key for import idempotency; `[a-z0-9-]{1,64}` |
-| `name` | String | no | Display name |
-| `organization` | String? | yes | Null while unknown; never defaulted |
-| `createdAt`, `updatedAt` | DateTime | no | Maintenance timestamps |
+| Field                    | Type     | Null | Notes                                                              |
+| ------------------------ | -------- | ---- | ------------------------------------------------------------------ |
+| `id`                     | String   | no   | Internal stable ID; safe to expose (matches jobs API practice)     |
+| `slug`                   | String   | no   | `@unique`. Catalogue key for import idempotency; `[a-z0-9-]{1,64}` |
+| `name`                   | String   | no   | Display name                                                       |
+| `organization`           | String?  | yes  | Null while unknown; never defaulted                                |
+| `createdAt`, `updatedAt` | DateTime | no   | Maintenance timestamps                                             |
 
 ### TypingExamVersion — one explicit set of rules
 
-| Field | Type | Null | Notes |
-| --- | --- | --- | --- |
-| `id` | String | no | |
-| `examId` | String | no | FK → TypingExam, `onDelete: Restrict` |
-| `versionKey` | String | no | `[a-z0-9-]{1,64}`; `@@unique([examId, versionKey])` |
-| `label` | String | no | Human-readable edition name |
-| `examYear` | Int? | yes | Null when unspecified |
-| `language` | String | no | Only `"en"` supported in slice 1 (plan: English first) |
-| `durationSeconds` | Int? | yes | Positive int required at publication |
-| `backspacePolicy` | `TypingBackspacePolicy?` | yes | Enum `UNRESTRICTED \| DISABLED \| CURRENT_WORD_ONLY`; value set freezable now, but `CURRENT_WORD_ONLY` semantics must be confirmed against implemented session behavior before any published version uses it (§8) |
-| `editingPolicy` | String? | yes | **Value set NOT freezable.** Stored as provisional string in drafts; publication validation accepts only members of a code-owned frozen union that is empty until the first exam rules are recorded. Nothing publishes until then. |
-| `scoringMethod` | String? | yes | **Value set NOT freezable.** Same mechanism as `editingPolicy`. |
-| `targetWpm` | Int? | yes | Stored only if the selected scoring method requires it |
-| `maxErrorPercent` | Float? | yes | Same condition |
-| `targetKeystrokes` | Int? | yes | Same condition |
-| `instructions` | String? | yes | Plain text; non-empty required at publication |
-| `ruleSourceUrl` | String? | yes | Evidence URL |
-| `ruleSourceNote` | String? | yes | Page/section reference |
-| `status` | TypingContentStatus | no | Default `DRAFT` |
-| `reviewedAt` | DateTime? | yes | Set only by the deliberate publish operation |
-| `publishedAt` | DateTime? | yes | Set at publication |
-| `createdAt`, `updatedAt` | DateTime | no | |
+| Field                    | Type                     | Null | Notes                                                                                                                                                                                                                              |
+| ------------------------ | ------------------------ | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                     | String                   | no   |                                                                                                                                                                                                                                    |
+| `examId`                 | String                   | no   | FK → TypingExam, `onDelete: Restrict`                                                                                                                                                                                              |
+| `versionKey`             | String                   | no   | `[a-z0-9-]{1,64}`; `@@unique([examId, versionKey])`                                                                                                                                                                                |
+| `label`                  | String                   | no   | Human-readable edition name                                                                                                                                                                                                        |
+| `examYear`               | Int?                     | yes  | Null when unspecified                                                                                                                                                                                                              |
+| `language`               | String                   | no   | Only `"en"` supported in slice 1 (plan: English first)                                                                                                                                                                             |
+| `durationSeconds`        | Int?                     | yes  | Positive int required at publication                                                                                                                                                                                               |
+| `backspacePolicy`        | `TypingBackspacePolicy?` | yes  | Enum `UNRESTRICTED \| DISABLED \| CURRENT_WORD_ONLY`; value set freezable now, but `CURRENT_WORD_ONLY` semantics must be confirmed against implemented session behavior before any published version uses it (§8)                  |
+| `editingPolicy`          | String?                  | yes  | **Value set NOT freezable.** Stored as provisional string in drafts; publication validation accepts only members of a code-owned frozen union that is empty until the first exam rules are recorded. Nothing publishes until then. |
+| `scoringMethod`          | String?                  | yes  | **Value set NOT freezable.** Same mechanism as `editingPolicy`.                                                                                                                                                                    |
+| `targetWpm`              | Int?                     | yes  | Stored only if the selected scoring method requires it                                                                                                                                                                             |
+| `maxErrorPercent`        | Float?                   | yes  | Same condition                                                                                                                                                                                                                     |
+| `targetKeystrokes`       | Int?                     | yes  | Same condition                                                                                                                                                                                                                     |
+| `instructions`           | String?                  | yes  | Plain text; non-empty required at publication                                                                                                                                                                                      |
+| `ruleSourceUrl`          | String?                  | yes  | Evidence URL                                                                                                                                                                                                                       |
+| `ruleSourceNote`         | String?                  | yes  | Page/section reference                                                                                                                                                                                                             |
+| `status`                 | TypingContentStatus      | no   | Default `DRAFT`                                                                                                                                                                                                                    |
+| `reviewedAt`             | DateTime?                | yes  | Set only by the deliberate publish operation                                                                                                                                                                                       |
+| `publishedAt`            | DateTime?                | yes  | Set at publication                                                                                                                                                                                                                 |
+| `createdAt`, `updatedAt` | DateTime                 | no   |                                                                                                                                                                                                                                    |
 
 Indexes: `@@index([examId, status])`, `@@index([status])`. Restrictive FK; no index on
 unqueried fields.
 
 ### TypingPassage — one selectable revision
 
-| Field | Type | Null | Notes |
-| --- | --- | --- | --- |
-| `id` | String | no | |
-| `examVersionId` | String | no | FK → TypingExamVersion, `onDelete: Restrict` |
-| `contentKey` | String | no | `[a-z0-9-]{1,128}` |
-| `revision` | Int | no | `>= 1`; `@@unique([examVersionId, contentKey, revision])` |
-| `title` | String | no | |
-| `examYear`, `shift` | Int? / String? | yes | Null when unspecified |
-| `text` | String | no | Canonicalized stored text (§4); PG `text` column; ≤ 50,000 code points |
-| `contentHash` | String | no | SHA-256 hex (64 chars) of stored text (§4) |
-| `sourceKind` | TypingSourceKind | no | |
-| `sourceUrl`, `sourceNote` | String? | yes | Provenance |
-| `status` | TypingContentStatus | no | Default `DRAFT` |
-| `reviewedAt`, `publishedAt` | DateTime? | yes | As on version |
-| `createdAt`, `updatedAt` | DateTime | no | |
+| Field                       | Type                | Null | Notes                                                                  |
+| --------------------------- | ------------------- | ---- | ---------------------------------------------------------------------- |
+| `id`                        | String              | no   |                                                                        |
+| `examVersionId`             | String              | no   | FK → TypingExamVersion, `onDelete: Restrict`                           |
+| `contentKey`                | String              | no   | `[a-z0-9-]{1,128}`                                                     |
+| `revision`                  | Int                 | no   | `>= 1`; `@@unique([examVersionId, contentKey, revision])`              |
+| `title`                     | String              | no   |                                                                        |
+| `examYear`, `shift`         | Int? / String?      | yes  | Null when unspecified                                                  |
+| `text`                      | String              | no   | Canonicalized stored text (§4); PG `text` column; ≤ 50,000 code points |
+| `contentHash`               | String              | no   | SHA-256 hex (64 chars) of stored text (§4)                             |
+| `sourceKind`                | TypingSourceKind    | no   |                                                                        |
+| `sourceUrl`, `sourceNote`   | String?             | yes  | Provenance                                                             |
+| `status`                    | TypingContentStatus | no   | Default `DRAFT`                                                        |
+| `reviewedAt`, `publishedAt` | DateTime?           | yes  | As on version                                                          |
+| `createdAt`, `updatedAt`    | DateTime            | no   |                                                                        |
 
 Indexes: `@@index([examVersionId, status])`, `@@index([status])`.
 
@@ -196,21 +196,30 @@ Selects only published versions joined to their exam, ordered `exam.name asc, ex
 version.id asc` (ID tie-breaker).
 
 ```json
-{ "data": [ {
-    "exam": { "id": "…", "slug": "…", "name": "…", "organization": null },
-    "version": { "id": "…", "versionKey": "v1", "label": "…",
-                 "examYear": 2024, "language": "en",
-                 "durationSeconds": 600,
-                 "backspacePolicy": "DISABLED",
-                 "editingPolicy": "<frozen at first exam>",
-                 "scoringMethod": "<frozen at first exam>" }
-} ],
-  "pagination": { "page": 1, "pageSize": 20, "totalItems": 0, "totalPages": 0 } }
+{
+  "data": [
+    {
+      "exam": { "id": "…", "slug": "…", "name": "…", "organization": null },
+      "version": {
+        "id": "…",
+        "versionKey": "v1",
+        "label": "…",
+        "examYear": 2024,
+        "language": "en",
+        "durationSeconds": 600,
+        "backspacePolicy": "DISABLED",
+        "editingPolicy": "<frozen at first exam>",
+        "scoringMethod": "<frozen at first exam>"
+      }
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 20, "totalItems": 0, "totalPages": 0 }
+}
 ```
 
 Policy fields are non-null for every published version (publication precondition, §3);
 they may only be `null` in drafts, which never appear here. `targets`, instructions and
-rule-source live on the detail response only. Each item is explicitly an *exam version*,
+rule-source live on the detail response only. Each item is explicitly an _exam version_,
 not an exam (plan §6).
 
 ### `GET /api/typing/passages?examVersionId=…`
@@ -222,10 +231,22 @@ rejection → 400. Only passages that are `PUBLISHED` inside a `PUBLISHED` versi
 `contentHash`, no reviewer/internal fields**:
 
 ```json
-{ "data": [ { "id": "…", "contentKey": "…", "revision": 1, "title": "…",
-              "examYear": 2024, "shift": null, "sourceKind": "OFFICIAL_PREVIOUS_YEAR",
-              "charCount": 932, "wordCount": 164 } ],
-  "pagination": { "…": "…" } }
+{
+  "data": [
+    {
+      "id": "…",
+      "contentKey": "…",
+      "revision": 1,
+      "title": "…",
+      "examYear": 2024,
+      "shift": null,
+      "sourceKind": "OFFICIAL_PREVIOUS_YEAR",
+      "charCount": 932,
+      "wordCount": 164
+    }
+  ],
+  "pagination": { "…": "…" }
+}
 ```
 
 ### `GET /api/typing/passages/:id`
@@ -233,19 +254,34 @@ rejection → 400. Only passages that are `PUBLISHED` inside a `PUBLISHED` versi
 One published passage plus its exact applicable rules:
 
 ```json
-{ "id": "…", "contentKey": "…", "revision": 1, "title": "…",
-  "examYear": 2024, "shift": null,
+{
+  "id": "…",
+  "contentKey": "…",
+  "revision": 1,
+  "title": "…",
+  "examYear": 2024,
+  "shift": null,
   "text": "<exact stored text>",
   "contentHash": "<64 hex>",
-  "sourceKind": "…", "sourceUrl": null, "sourceNote": "…",
-  "charCount": 932, "wordCount": 164,
+  "sourceKind": "…",
+  "sourceUrl": null,
+  "sourceNote": "…",
+  "charCount": 932,
+  "wordCount": 164,
   "rules": {
     "durationSeconds": 600,
     "backspacePolicy": "DISABLED",
-    "editingPolicy": "…", "scoringMethod": "…",
-    "targets": { "targetWpm": null, "maxErrorPercent": null, "targetKeystrokes": null },
+    "editingPolicy": "…",
+    "scoringMethod": "…",
+    "targets": {
+      "targetWpm": null,
+      "maxErrorPercent": null,
+      "targetKeystrokes": null
+    },
     "instructions": "…",
-    "ruleSource": { "url": null, "note": "…" } } }
+    "ruleSource": { "url": null, "note": "…" }
+  }
+}
 ```
 
 Targets are `null` when not required/unknown — never `0`. Public projections expose no
@@ -311,45 +347,60 @@ qualification rule, and includes no exam UI work.
 This is a documentation-only snapshot — no runtime tests were executed. Proposed checks
 for the implementing batch, mirroring plan §11:
 
-- *Import*: valid draft insert; repeated import = no-op; changed text under the same
+- _Import_: valid draft insert; repeated import = no-op; changed text under the same
   `(contentKey, revision)` = conflict + full rollback; empty/oversized/control-char text,
   invalid enum or key format rejected; attempt to write `PUBLISHED` refused; derived counts
   equal helper output; DB failure leaves no partial writes.
-- *Database (disposable DB)*: migration applies; FK restrict behavior; unique-key conflicts;
+- _Database (disposable DB)_: migration applies; FK restrict behavior; unique-key conflicts;
   draft/retired invisible to published-only queries; deterministic order with ID tie-break.
-- *Fastify (inject)*: 200 shape exactly as §6; 400 for unknown/duplicate/out-of-range query
+- _Fastify (inject)_: 200 shape exactly as §6; 400 for unknown/duplicate/out-of-range query
   params; 404 unknown/draft/retired detail and malformed ID; 405 non-GET; 503 simulated DB
   failure; list responses contain no `text`; detail returns the exact associated rules.
-- *Read-back integrity*: import → read back text, hash, metadata and rule fields unchanged.
+- _Read-back integrity_: import → read back text, hash, metadata and rule fields unchanged.
 
 ## 11. Illustrative draft import JSON (NOT an official exam; test data only)
 
 ```json
 {
-  "exams": [ {
-    "slug": "illustrative-typing-exam",
-    "name": "Illustrative Typing Exam (draft, not an official paper)",
-    "organization": null,
-    "versions": [ {
-      "versionKey": "v1",
-      "label": "Illustrative draft — rules unresolved",
-      "examYear": null, "language": "en",
-      "durationSeconds": null, "backspacePolicy": null,
-      "editingPolicy": null, "scoringMethod": null,
-      "targetWpm": null, "maxErrorPercent": null, "targetKeystrokes": null,
-      "instructions": null, "ruleSourceUrl": null, "ruleSourceNote": null,
-      "status": "DRAFT",
-      "passages": [ {
-        "contentKey": "illustrative-sample-1", "revision": 1,
-        "title": "Illustrative practice sample",
-        "examYear": null, "shift": null,
-        "sourceKind": "PRACTICE",
-        "sourceUrl": null,
-        "sourceNote": "Locally written sample; not an official previous-year paper",
-        "text": "The quick brown fox jumps over the lazy dog.\nA second line kept exactly as typed."
-      } ]
-    } ]
-  } ]
+  "exams": [
+    {
+      "slug": "illustrative-typing-exam",
+      "name": "Illustrative Typing Exam (draft, not an official paper)",
+      "organization": null,
+      "versions": [
+        {
+          "versionKey": "v1",
+          "label": "Illustrative draft — rules unresolved",
+          "examYear": null,
+          "language": "en",
+          "durationSeconds": null,
+          "backspacePolicy": null,
+          "editingPolicy": null,
+          "scoringMethod": null,
+          "targetWpm": null,
+          "maxErrorPercent": null,
+          "targetKeystrokes": null,
+          "instructions": null,
+          "ruleSourceUrl": null,
+          "ruleSourceNote": null,
+          "status": "DRAFT",
+          "passages": [
+            {
+              "contentKey": "illustrative-sample-1",
+              "revision": 1,
+              "title": "Illustrative practice sample",
+              "examYear": null,
+              "shift": null,
+              "sourceKind": "PRACTICE",
+              "sourceUrl": null,
+              "sourceNote": "Locally written sample; not an official previous-year paper",
+              "text": "The quick brown fox jumps over the lazy dog.\nA second line kept exactly as typed."
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
 ```
 

@@ -2,12 +2,12 @@
 
 Baseline: e5876be. Contract: exam-v1. Hemant approved initial simulation and requested AGY participation.
 
-| Worker | Lane | Execution session |
-| --- | --- | --- |
-| GLM Free | api | 17945 |
-| DeepSeek Free | domain | 3658 |
-| MiniMax Free | ui | 97936 |
-| AGY 3.8 Flash High | review | 73708 |
+| Worker             | Lane   | Execution session |
+| ------------------ | ------ | ----------------- |
+| GLM Free           | api    | 17945             |
+| DeepSeek Free      | domain | 3658              |
+| MiniMax Free       | ui     | 97936             |
+| AGY 3.8 Flash High | review | 73708             |
 
 Writers return proposed file artifacts only, without tools or shared-file mutations. Coordinator installs only reviewed owned paths in the assigned worktree, runs tests and integrates sequentially. Prompts include the frozen contract/types/fixtures and relevant actual source. No agent completion or passing test is inferred from dispatch.
 

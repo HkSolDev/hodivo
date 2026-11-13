@@ -29,19 +29,19 @@ Pure functions under `lib/typing` own the active-time clock, positional feedback
 
 ## Observed verification
 
-| Check | Result and boundary |
-| --- | --- |
-| Original source suite, run by DeepSeek |30 passed; source pure functions only |
-| Combined production-function/SSR/regression/job-card/page-design tests |27 passed; includes existing isolated browser design-review regression |
-| Expanded independent typing browser suite |8 passed in isolated headless Chrome/Node24 against local fixture API |
-| Input/browser cases |Corrected typo75% accuracy; identical replacement; native partial replacement; unsupported direct input; CDP Chromium composition commit and simulated cancel; pause/resume; duration finish; restart; literal markup; validation |
-| Responsive/theme |390/834/1440 in both schemes with200-character unbroken passage;10000-character passage at390; screenshots inspected at390 light and1440 dark |
-| Navigation/no-JS |Footer round-trip, fresh input after navigation, visible no-JS explanation and existing footer link |
-| Scoped lint |Passes on all typing files and footer |
-| Next route type generation |Passes in isolated integration workspace |
-| Next TypeScript check |Blocked only by pre-existing recommendations-preview.tsx:144 nullable-string error |
-| Standard webpack production build |Compiles successfully; then stops on the same existing nullable-string type error |
-| Root pnpm typecheck baseline |Existing frontend/profile-api.ts:6 missing .js import extension; not changed here |
+| Check                                                                  | Result and boundary                                                                                                                                                                                                               |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Original source suite, run by DeepSeek                                 | 30 passed; source pure functions only                                                                                                                                                                                             |
+| Combined production-function/SSR/regression/job-card/page-design tests | 27 passed; includes existing isolated browser design-review regression                                                                                                                                                            |
+| Expanded independent typing browser suite                              | 8 passed in isolated headless Chrome/Node24 against local fixture API                                                                                                                                                             |
+| Input/browser cases                                                    | Corrected typo75% accuracy; identical replacement; native partial replacement; unsupported direct input; CDP Chromium composition commit and simulated cancel; pause/resume; duration finish; restart; literal markup; validation |
+| Responsive/theme                                                       | 390/834/1440 in both schemes with200-character unbroken passage;10000-character passage at390; screenshots inspected at390 light and1440 dark                                                                                     |
+| Navigation/no-JS                                                       | Footer round-trip, fresh input after navigation, visible no-JS explanation and existing footer link                                                                                                                               |
+| Scoped lint                                                            | Passes on all typing files and footer                                                                                                                                                                                             |
+| Next route type generation                                             | Passes in isolated integration workspace                                                                                                                                                                                          |
+| Next TypeScript check                                                  | Blocked only by pre-existing recommendations-preview.tsx:144 nullable-string error                                                                                                                                                |
+| Standard webpack production build                                      | Compiles successfully; then stops on the same existing nullable-string type error                                                                                                                                                 |
+| Root pnpm typecheck baseline                                           | Existing frontend/profile-api.ts:6 missing .js import extension; not changed here                                                                                                                                                 |
 
 Exact commands were run in `/private/tmp/aptus-typing-review` with independent dependency copies, no `.env`, credentials or production access. Browser tests launch local fixture servers and a temporary Chrome profile. They use a framework test-only terminal flag to avoid interactive upgrade prompts; dependency versions and application production settings are unchanged.
 

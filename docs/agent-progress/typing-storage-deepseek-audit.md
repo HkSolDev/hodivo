@@ -226,7 +226,7 @@ Proposals requiring approval:
   `contentKey + revision` (`:148`) without the parent scope.
 - **Revision allocation.** Do not auto-increment implicitly. The import file
   should carry the explicit revision. A taken `(examVersionId, contentKey,
-  revision)` with identical content and metadata is a no-op; with different
+revision)` with identical content and metadata is a no-op; with different
   bytes or metadata it is a conflict. The operator creates the next revision.
 - **Create, never upsert.** Prisma `upsert` can silently mutate a published row.
   Use `create` inside a transaction, or read-and-insert with a guarded
@@ -347,7 +347,7 @@ internal tensions, not code defects:
    the selected method"; do not imply that retirement erases values or that
    drafts may contain invented placeholders.
 5. **`contentKey` uniqueness scope is unstated.** The plan says `contentKey +
-   revision` but also places passages under a version. Freeze the full key.
+revision` but also places passages under a version. Freeze the full key.
 6. **Canonicalization and counting convention are unstated.** The plan says
    "documented" but names no document or rule. The API cannot promise exact
    text and derived counts without it.

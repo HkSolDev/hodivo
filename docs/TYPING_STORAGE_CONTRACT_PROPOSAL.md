@@ -24,11 +24,11 @@ foreign keys. Existing recruitment, applicant, auth and saved-job models remain
 unchanged. Add an SQL migration for review; do not apply it to a shared or live DB.
 No seed records. Test fixtures are illustrative and never auto-imported.
 
-| Entity | Required non-null fields | Explicitly nullable fields |
-| --- | --- | --- |
-| Exam | id, slug, name, createdAt, updatedAt | organization |
-| Version | id, examId, versionKey, label, language, status, createdAt, updatedAt | examYear, durationSeconds, backspacePolicy, editingPolicy, scoringMethod, targetWpm, maxErrorPercent, targetKeystrokes, instructions, ruleSourceUrl, ruleSourceNote, reviewedAt, publishedAt |
-| Passage | id, examVersionId, contentKey, revision, title, text, contentHash, sourceKind, status, createdAt, updatedAt | examYear, shift, sourceUrl, sourceNote, reviewedAt, publishedAt |
+| Entity  | Required non-null fields                                                                                    | Explicitly nullable fields                                                                                                                                                                   |
+| ------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exam    | id, slug, name, createdAt, updatedAt                                                                        | organization                                                                                                                                                                                 |
+| Version | id, examId, versionKey, label, language, status, createdAt, updatedAt                                       | examYear, durationSeconds, backspacePolicy, editingPolicy, scoringMethod, targetWpm, maxErrorPercent, targetKeystrokes, instructions, ruleSourceUrl, ruleSourceNote, reviewedAt, publishedAt |
+| Passage | id, examVersionId, contentKey, revision, title, text, contentHash, sourceKind, status, createdAt, updatedAt | examYear, shift, sourceUrl, sourceNote, reviewedAt, publishedAt                                                                                                                              |
 
 IDs use the existing cuid convention; timestamps are database/application-owned,
 not supplied by import. Status enum: DRAFT, PUBLISHED, RETIRED, default DRAFT.

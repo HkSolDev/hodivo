@@ -38,14 +38,14 @@ flowchart LR
   I[Validated manual content import] --> D
 ```
 
-| Layer | Owns | Does not own |
-| --- | --- | --- |
-| Next.js | Page URLs, metadata, server-rendered page structure, existing API proxy | A second database or competing typing API |
-| React | Local input, session state, timer display, focus, dialogs and results | Official exam-rule inference |
-| Pure TypeScript functions | Evaluation, elapsed-time arithmetic, policy decisions and scoring | DOM access, fetching, database writes |
-| Fastify | Validated catalogue/detail requests and bounded responses | Per-keystroke requests or browser-triggered scraping |
-| Prisma/PostgreSQL | Published passage content, versioned rules and provenance | A live session's mutable timer |
-| Content import script | Validates and previews deliberate content changes | Automatic publication of unreviewed papers |
+| Layer                     | Owns                                                                    | Does not own                                         |
+| ------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| Next.js                   | Page URLs, metadata, server-rendered page structure, existing API proxy | A second database or competing typing API            |
+| React                     | Local input, session state, timer display, focus, dialogs and results   | Official exam-rule inference                         |
+| Pure TypeScript functions | Evaluation, elapsed-time arithmetic, policy decisions and scoring       | DOM access, fetching, database writes                |
+| Fastify                   | Validated catalogue/detail requests and bounded responses               | Per-keystroke requests or browser-triggered scraping |
+| Prisma/PostgreSQL         | Published passage content, versioned rules and provenance               | A live session's mutable timer                       |
+| Content import script     | Validates and previews deliberate content changes                       | Automatic publication of unreviewed papers           |
 
 This follows Aptus's existing split: Next frontend, Fastify application API,
 Prisma/PostgreSQL persistence. Keep the Python recruitment worker independent.
@@ -53,11 +53,11 @@ No new framework, state library, queue, cache service or AI dependency is needed
 
 ## 3. Pages, layouts and component ownership
 
-| URL | Purpose | Presentation |
-| --- | --- | --- |
-| `/typing` | Random words/custom-text practice | Aptus shell and light/dark theme |
-| `/typing/exam` | Choose a published exam version and passage | Compact exam introduction and selector |
-| `/typing/exam/[passageId]` | Load and run one selected exam | Dedicated full-screen assessment shell |
+| URL                        | Purpose                                     | Presentation                           |
+| -------------------------- | ------------------------------------------- | -------------------------------------- |
+| `/typing`                  | Random words/custom-text practice           | Aptus shell and light/dark theme       |
+| `/typing/exam`             | Choose a published exam version and passage | Compact exam introduction and selector |
+| `/typing/exam/[passageId]` | Load and run one selected exam              | Dedicated full-screen assessment shell |
 
 Keep one minimal `app/layout.tsx` for the document. Move the existing site shell
 into an `(site)` route-group layout, keeping existing URLs unchanged. Place the
@@ -106,29 +106,29 @@ written. Keep typing records separate from recruitment Post and applicant User.
 
 ### TypingExam: stable identity
 
-| Field | Meaning |
-| --- | --- |
-| `id` | Internal stable identifier |
-| `slug` | Unique catalogue key, such as a reviewed exam-family identifier |
-| `name`, `organization` | Display identity; organization nullable when unknown |
-| `createdAt`, `updatedAt` | Maintenance timestamps |
+| Field                    | Meaning                                                         |
+| ------------------------ | --------------------------------------------------------------- |
+| `id`                     | Internal stable identifier                                      |
+| `slug`                   | Unique catalogue key, such as a reviewed exam-family identifier |
+| `name`, `organization`   | Display identity; organization nullable when unknown            |
+| `createdAt`, `updatedAt` | Maintenance timestamps                                          |
 
 ### TypingExamVersion: one explicit set of rules
 
-| Field | Meaning |
-| --- | --- |
-| `id`, `examId` | Version identity and parent exam |
-| `versionKey`, `label` | Unique key within exam and human-readable edition |
-| `examYear`, `language` | Year nullable if unspecified; supported language explicit |
-| `durationSeconds` | Positive integer; nullable only while draft |
-| `backspacePolicy` | `UNRESTRICTED`, `DISABLED`, `CURRENT_WORD_ONLY`; unknown stays null in draft |
-| `editingPolicy` | Supported named policy covering cursor movement, selection, Delete and insertion |
-| `scoringMethod` | Supported code-owned enum/version, not executable code or an arbitrary formula |
+| Field                                              | Meaning                                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `id`, `examId`                                     | Version identity and parent exam                                                           |
+| `versionKey`, `label`                              | Unique key within exam and human-readable edition                                          |
+| `examYear`, `language`                             | Year nullable if unspecified; supported language explicit                                  |
+| `durationSeconds`                                  | Positive integer; nullable only while draft                                                |
+| `backspacePolicy`                                  | `UNRESTRICTED`, `DISABLED`, `CURRENT_WORD_ONLY`; unknown stays null in draft               |
+| `editingPolicy`                                    | Supported named policy covering cursor movement, selection, Delete and insertion           |
+| `scoringMethod`                                    | Supported code-owned enum/version, not executable code or an arbitrary formula             |
 | `targetWpm`, `maxErrorPercent`, `targetKeystrokes` | Separate nullable numeric fields; store only requirements supported by the selected method |
-| `instructions` | Plain-text exam instructions |
-| `ruleSourceUrl`, `ruleSourceNote` | Evidence URL/reference and page/section details |
-| `status` | `DRAFT`, `PUBLISHED`, `RETIRED` |
-| `reviewedAt`, `publishedAt`, `createdAt` | Review/publication provenance |
+| `instructions`                                     | Plain-text exam instructions                                                               |
+| `ruleSourceUrl`, `ruleSourceNote`                  | Evidence URL/reference and page/section details                                            |
+| `status`                                           | `DRAFT`, `PUBLISHED`, `RETIRED`                                                            |
+| `reviewedAt`, `publishedAt`, `createdAt`           | Review/publication provenance                                                              |
 
 Do not introduce a generic JSON rules engine. Add a typed field or a specific
 scoring method only when a real supported exam needs it. Editing-policy values
@@ -142,17 +142,17 @@ label a visitor qualified just because a missing threshold became zero.
 
 ### TypingPassage: one selectable paper/passage revision
 
-| Field | Meaning |
-| --- | --- |
-| `id`, `examVersionId` | Passage identity and exact applicable rules |
-| `contentKey`, `revision` | Stable content key with explicit revision number; unique together |
-| `title`, `examYear`, `shift` | Display metadata; year/shift nullable when unspecified |
-| `text` | Approved plain text; preserve case, punctuation and meaningful line breaks |
-| `contentHash` | Server/import-computed hash of canonical stored text |
-| `sourceKind` | `OFFICIAL_PREVIOUS_YEAR`, `RECONSTRUCTED`, `PRACTICE` |
-| `sourceUrl`, `sourceNote` | Provenance and document/page reference |
-| `status` | `DRAFT`, `PUBLISHED`, `RETIRED` |
-| `reviewedAt`, `publishedAt`, `createdAt` | Review and publication timestamps |
+| Field                                    | Meaning                                                                    |
+| ---------------------------------------- | -------------------------------------------------------------------------- |
+| `id`, `examVersionId`                    | Passage identity and exact applicable rules                                |
+| `contentKey`, `revision`                 | Stable content key with explicit revision number; unique together          |
+| `title`, `examYear`, `shift`             | Display metadata; year/shift nullable when unspecified                     |
+| `text`                                   | Approved plain text; preserve case, punctuation and meaningful line breaks |
+| `contentHash`                            | Server/import-computed hash of canonical stored text                       |
+| `sourceKind`                             | `OFFICIAL_PREVIOUS_YEAR`, `RECONSTRUCTED`, `PRACTICE`                      |
+| `sourceUrl`, `sourceNote`                | Provenance and document/page reference                                     |
+| `status`                                 | `DRAFT`, `PUBLISHED`, `RETIRED`                                            |
+| `reviewedAt`, `publishedAt`, `createdAt` | Review and publication timestamps                                          |
 
 Compute character/word counts from stored text with one documented counting
 convention. Return derived counts in API metadata; do not accept the old
@@ -210,11 +210,11 @@ All four current stored character counts differ from their actual text lengths.
 Add routes to the existing Fastify application and use the existing Next API
 rewrite. Do not add parallel Next database handlers for the same feature.
 
-| Endpoint proposal | Response and use |
-| --- | --- |
-| `GET /api/typing/exams?page=1&pageSize=20` | Paginated published exam-version summaries with parent exam identity; explicitly document that each selectable item is a version |
-| `GET /api/typing/passages?examVersionId=…&page=1&pageSize=20` | Passage summaries for the selected version; no full passage text |
-| `GET /api/typing/passages/:id` | One published passage plus its exact supported rule configuration |
+| Endpoint proposal                                             | Response and use                                                                                                                 |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/typing/exams?page=1&pageSize=20`                    | Paginated published exam-version summaries with parent exam identity; explicitly document that each selectable item is a version |
+| `GET /api/typing/passages?examVersionId=…&page=1&pageSize=20` | Passage summaries for the selected version; no full passage text                                                                 |
+| `GET /api/typing/passages/:id`                                | One published passage plus its exact supported rule configuration                                                                |
 
 List responses use `{ data, pagination }` in the existing Aptus style. Detail
 responses contain passage identity/revision/hash, plain text, source metadata,
@@ -335,23 +335,23 @@ verification. Do not add an attempt table preemptively.
 
 The user has now authorized implementation using OpenCode free GLM and DeepSeek agents, coordinated and independently reviewed in [the typing team batch](AGENT_COORDINATION_2026-11-12-typing.md). This supersedes the planning-only authorization note below; scope remains one mode at a time.
 
-| Slice | Verified current status | Remaining work |
-| --- | --- | --- |
-| 0 | Source audit and scoring probes complete; frozen practice contract and isolated baselines recorded | Browser evidence is recorded with practice; no official exam visual claim |
-| 1 | GLM implementation and coordinator fixes verified:27 combined tests and 8 typing browser checks passed; DeepSeek accepted targeted fixes on static review | Local integration/release evidence is in TYPING_IMPLEMENTATION_REVIEW.md; real OS/mobile IME testing remains unrun |
-| 2 | Draft storage/import reviewed by Terra and integrated locally; 53 earlier database/pure checks and 38 post-fix pure checks pass. [Current evidence](TYPING_STORAGE_IMPLEMENTATION_REVIEW.md). Read API not implemented | Implement the public read API next; official rules remain content-entry decisions |
-| 3 | Not started | Preserve source exam appearance after storage/API slice |
-| 4 | Practice frontend Docker source inclusion added; runtime checks passed; no release performed | Existing unrelated type errors block a clean standard build; image execution and deployment remain unrun |
+| Slice | Verified current status                                                                                                                                                                                                | Remaining work                                                                                                     |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 0     | Source audit and scoring probes complete; frozen practice contract and isolated baselines recorded                                                                                                                     | Browser evidence is recorded with practice; no official exam visual claim                                          |
+| 1     | GLM implementation and coordinator fixes verified:27 combined tests and 8 typing browser checks passed; DeepSeek accepted targeted fixes on static review                                                              | Local integration/release evidence is in TYPING_IMPLEMENTATION_REVIEW.md; real OS/mobile IME testing remains unrun |
+| 2     | Draft storage/import reviewed by Terra and integrated locally; 53 earlier database/pure checks and 38 post-fix pure checks pass. [Current evidence](TYPING_STORAGE_IMPLEMENTATION_REVIEW.md). Read API not implemented | Implement the public read API next; official rules remain content-entry decisions                                  |
+| 3     | Not started                                                                                                                                                                                                            | Preserve source exam appearance after storage/API slice                                                            |
+| 4     | Practice frontend Docker source inclusion added; runtime checks passed; no release performed                                                                                                                           | Existing unrelated type errors block a clean standard build; image execution and deployment remain unrun           |
 
 Agent rationale and review reports will accompany the accepted implementation. No production database, worker, deployment or paid model changes are included.
 
-| Slice | Deliverable | Done when |
-| --- | --- | --- |
-| 0. Baseline and shared behavior | Preserve source, actual production-function tests, supported input/counting definition | Known source-audit findings reproduced; no formulas silently changed; baseline screenshots captured when browser works |
-| 1. Practice only | `/typing`, focused React session, Aptus style and entry link | One complete session works through input, corrections, pause, completion and restart; responsive/theme/accessibility checks pass |
-| 2. Storage and read API | Three models, additive migration, dry-run import, paginated reads and one reviewed exam fixture | Import is validated/idempotent; read-back matches; drafts hidden; list omits text; selected detail returns exact rules; no exam UI work mixed in |
-| 3. Exam only | Separate layout, selectors, selected passage and faithful React assessment interface | Complete selected exam works with its stored configuration; visuals match baseline; all editing policies actually published have behavioral checks |
-| 4. Integration and release preparation | Built images, regression checks, docs and concrete release record | Frontend/API images contain required modules; empty/failure/retired states work; existing Aptus flows pass; migration/deploy/rollback instructions reviewed |
+| Slice                                  | Deliverable                                                                                     | Done when                                                                                                                                                   |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Baseline and shared behavior        | Preserve source, actual production-function tests, supported input/counting definition          | Known source-audit findings reproduced; no formulas silently changed; baseline screenshots captured when browser works                                      |
+| 1. Practice only                       | `/typing`, focused React session, Aptus style and entry link                                    | One complete session works through input, corrections, pause, completion and restart; responsive/theme/accessibility checks pass                            |
+| 2. Storage and read API                | Three models, additive migration, dry-run import, paginated reads and one reviewed exam fixture | Import is validated/idempotent; read-back matches; drafts hidden; list omits text; selected detail returns exact rules; no exam UI work mixed in            |
+| 3. Exam only                           | Separate layout, selectors, selected passage and faithful React assessment interface            | Complete selected exam works with its stored configuration; visuals match baseline; all editing policies actually published have behavioral checks          |
+| 4. Integration and release preparation | Built images, regression checks, docs and concrete release record                               | Frontend/API images contain required modules; empty/failure/retired states work; existing Aptus flows pass; migration/deploy/rollback instructions reviewed |
 
 Finish each slice and review its evidence before beginning the next mode.
 The content-storage slice can define rules with Hemant as the first exam is
@@ -359,15 +359,15 @@ entered. Do not block practice on deciding every possible exam rule.
 
 ## 11. Verification plan
 
-| Layer | Essential checks |
-| --- | --- |
-| Pure functions | Actual evaluator, correction semantics, score examples, missing thresholds, invalid elapsed time, exact boundaries, all supported editing policies |
-| Content import | Empty/oversized text, invalid enums, unknown draft rules, publication rejection, derived counts, transaction rollback, repeated no-op import, immutable revision protection |
-| Database | Disposable test DB: additive migration, FK behavior, ordering/pagination, version selection, draft/retired filtering and read-back integrity |
-| Fastify | Existing inject pattern: 200/400/404/503, bounded queries, invalid/duplicate parameters, no full text in list, exact passage/rule association |
-| React/browser | Practice lifecycle; exam lifecycle; real keyboard input/corrections; delayed deadline; focus/composition behavior; restart/unmount cleanup; dialogs and navigation |
-| Visual/regression | 390/834/1440 widths, both practice themes, fixed exam palette, zoom/reduced motion, site/exam transitions, Home/Saved/Profile/sign-in and no-JS public browsing |
-| Build/artifact | `pnpm typecheck`, `pnpm lint`, relevant existing tests, frontend build and both image import/startup checks |
+| Layer             | Essential checks                                                                                                                                                            |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pure functions    | Actual evaluator, correction semantics, score examples, missing thresholds, invalid elapsed time, exact boundaries, all supported editing policies                          |
+| Content import    | Empty/oversized text, invalid enums, unknown draft rules, publication rejection, derived counts, transaction rollback, repeated no-op import, immutable revision protection |
+| Database          | Disposable test DB: additive migration, FK behavior, ordering/pagination, version selection, draft/retired filtering and read-back integrity                                |
+| Fastify           | Existing inject pattern: 200/400/404/503, bounded queries, invalid/duplicate parameters, no full text in list, exact passage/rule association                               |
+| React/browser     | Practice lifecycle; exam lifecycle; real keyboard input/corrections; delayed deadline; focus/composition behavior; restart/unmount cleanup; dialogs and navigation          |
+| Visual/regression | 390/834/1440 widths, both practice themes, fixed exam palette, zoom/reduced motion, site/exam transitions, Home/Saved/Profile/sign-in and no-JS public browsing             |
+| Build/artifact    | `pnpm typecheck`, `pnpm lint`, relevant existing tests, frontend build and both image import/startup checks                                                                 |
 
 Interactive typing requires JavaScript; provide an honest no-JS message while
 keeping existing job browsing usable. Extend relevant tests instead of copying
@@ -427,13 +427,11 @@ Next is slice 2, storage and read API, with the first exam configuration decided
 when content is entered. Exam mode follows that slice. No push, deployment,
 production migration or publication is included in the practice implementation.
 
-
 Storage preparation update: the requested free agents have completed design
 assignments. See [the storage batch](AGENT_COORDINATION_2026-11-12-typing-storage.md)
 and [the coordinator-reviewed contract proposal](TYPING_STORAGE_CONTRACT_PROPOSAL.md).
 This subdivides slice 2 into draft storage/import first, public API next. No
 contract freeze, database implementation or migration application is claimed.
-
 
 Draft-storage implementation update: see [the current handoff](TYPING_STORAGE_IMPLEMENTATION_REVIEW.md).
 Code is frozen on the isolated review branch; 53 focused typing checks and the

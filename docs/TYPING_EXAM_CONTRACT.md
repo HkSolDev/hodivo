@@ -65,12 +65,12 @@ returned ID only when the extra eligible row exists, otherwise null. No clamping
 catalogue download. Stable pagination assumes records are not deleted or
 republished during browsing; it is not a transaction across multiple requests.
 
-| Endpoint | 200 body | Visibility |
-| --- | --- | --- |
-| `/api/typing/exams` | `{exams: ExamSummary[], nextCursor: string|null}` | Exams with at least one published English version |
-| `/api/typing/exams/:examId/versions` | `{versions: VersionSummary[], nextCursor: string|null}` | Published English versions of that visible exam |
-| `/api/typing/exam-versions/:versionId` | `{version: VersionDetail}` | Published English version with matching visible parent |
-| `/api/typing/exam-versions/:versionId/passage` | `{snapshot: StartSnapshot}` | Only a ready version and eligible published passage |
+| Endpoint                                       | 200 body                                         | Visibility                                             |
+| ---------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| `/api/typing/exams`                            | `{exams: ExamSummary[], nextCursor: string       | null}`                                                 | Exams with at least one published English version |
+| `/api/typing/exams/:examId/versions`           | `{versions: VersionSummary[], nextCursor: string | null}`                                                 | Published English versions of that visible exam   |
+| `/api/typing/exam-versions/:versionId`         | `{version: VersionDetail}`                       | Published English version with matching visible parent |
+| `/api/typing/exam-versions/:versionId/passage` | `{snapshot: StartSnapshot}`                      | Only a ready version and eligible published passage    |
 
 Limit/cursor apply only to the two list routes. Detail/start accept no query.
 Visible exam with no matching list entries returns an empty list; missing or
@@ -138,14 +138,14 @@ Proposed stable reasons, sorted in this order, unique:
 `RULES_INCOMPLETE`, `RULES_UNSUPPORTED`, `SCORING_UNAVAILABLE`,
 `NO_ELIGIBLE_PASSAGE`. Only expose them for otherwise public content.
 
-| Situation | Proposed result |
-| --- | --- |
-| Missing, draft or retired version | 404; never expose rules/text |
-| Public but missing/unsupported required editor or duration | detail canStart=false; passage 409 |
-| Public with no eligible published passage | detail canStart=false; passage 409 |
-| Complete editor/timer, null scorer | canStart=true; scoringAvailable=false; no official result |
-| Complete supported configuration and eligible passage | canStart=true; passage 200 |
-| Database failure | 503; retry available |
+| Situation                                                  | Proposed result                                           |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| Missing, draft or retired version                          | 404; never expose rules/text                              |
+| Public but missing/unsupported required editor or duration | detail canStart=false; passage 409                        |
+| Public with no eligible published passage                  | detail canStart=false; passage 409                        |
+| Complete editor/timer, null scorer                         | canStart=true; scoringAvailable=false; no official result |
+| Complete supported configuration and eligible passage      | canStart=true; passage 200                                |
+| Database failure                                           | 503; retry available                                      |
 
 Hemant approved option A on 13 November 2026: permit a clearly labelled exam simulation with confirmed
 timer/editor rules while `scoringAvailable=false`. Show no SSC marks, error

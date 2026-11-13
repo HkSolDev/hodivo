@@ -39,9 +39,7 @@
       "error": {
         "code": "EXAM_NOT_READY",
         "message": "This exam is not ready to start.",
-        "reasons": [
-          "RULES_INCOMPLETE"
-        ]
+        "reasons": ["RULES_INCOMPLETE"]
       }
     },
     "503": {

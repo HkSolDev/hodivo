@@ -57,15 +57,15 @@ retain separate historical and current evidence.
 
 ## Verification against the frozen code
 
-| Check | Observed result |
-| --- | --- |
-| Complete typing-storage suite, explicit Node 24, disposable PostgreSQL 14.20 | 53 passed, 0 failed, 0 skipped |
-| Existing backend + contract suite, explicit Node 24 and existing Python environment | 140 passed, 18 skipped, 0 failed |
-| Existing practice pure/SSR/regression tests | 23 passed |
-| Full repository lint in integration worktree | Passed |
-| Prisma generate and validate | Passed; no DB operations |
-| TypeScript check | Only existing `frontend/profile-api.ts:6` missing `.js` extension; clean typecheck remains blocked |
-| Existing Prisma schema prefix | Byte-for-byte preserved before additive typing definitions |
+| Check                                                                               | Observed result                                                                                    |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Complete typing-storage suite, explicit Node 24, disposable PostgreSQL 14.20        | 53 passed, 0 failed, 0 skipped                                                                     |
+| Existing backend + contract suite, explicit Node 24 and existing Python environment | 140 passed, 18 skipped, 0 failed                                                                   |
+| Existing practice pure/SSR/regression tests                                         | 23 passed                                                                                          |
+| Full repository lint in integration worktree                                        | Passed                                                                                             |
+| Prisma generate and validate                                                        | Passed; no DB operations                                                                           |
+| TypeScript check                                                                    | Only existing `frontend/profile-api.ts:6` missing `.js` extension; clean typecheck remains blocked |
+| Existing Prisma schema prefix                                                       | Byte-for-byte preserved before additive typing definitions                                         |
 
 The typing suite includes actual CLI preview/apply/repeat/conflict/argument
 handling; full semantic read-back; identical published-record replay without
@@ -104,20 +104,40 @@ Illustrative input only; not an official exam and not automatically seeded:
 
 ```json
 {
-  "exam": { "slug": "illustrative-exam", "name": "Illustrative exam", "organization": null },
-  "version": {
-    "versionKey": "draft-1", "label": "Unreviewed draft", "language": "en",
-    "examYear": null, "durationSeconds": null, "backspacePolicy": null,
-    "editingPolicy": null, "scoringMethod": null, "targetWpm": null,
-    "maxErrorPercent": null, "targetKeystrokes": null, "instructions": null,
-    "ruleSourceUrl": null, "ruleSourceNote": null
+  "exam": {
+    "slug": "illustrative-exam",
+    "name": "Illustrative exam",
+    "organization": null
   },
-  "passages": [{
-    "contentKey": "sample", "revision": 1, "title": "Illustrative passage",
-    "text": "An illustrative passage.\nSecond line kept exactly.",
-    "examYear": null, "shift": null, "sourceKind": "PRACTICE",
-    "sourceUrl": null, "sourceNote": null
-  }]
+  "version": {
+    "versionKey": "draft-1",
+    "label": "Unreviewed draft",
+    "language": "en",
+    "examYear": null,
+    "durationSeconds": null,
+    "backspacePolicy": null,
+    "editingPolicy": null,
+    "scoringMethod": null,
+    "targetWpm": null,
+    "maxErrorPercent": null,
+    "targetKeystrokes": null,
+    "instructions": null,
+    "ruleSourceUrl": null,
+    "ruleSourceNote": null
+  },
+  "passages": [
+    {
+      "contentKey": "sample",
+      "revision": 1,
+      "title": "Illustrative passage",
+      "text": "An illustrative passage.\nSecond line kept exactly.",
+      "examYear": null,
+      "shift": null,
+      "sourceKind": "PRACTICE",
+      "sourceUrl": null,
+      "sourceNote": null
+    }
+  ]
 }
 ```
 

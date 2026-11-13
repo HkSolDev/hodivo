@@ -27,6 +27,7 @@ Coordinator disposition: shared blur/click trigger reproduced in browser. Sugges
 ### Minimal Robust Fix
 
 #### Recommended Fix: Anchor `Restart` Before `Resume` in DOM Order
+
 Swap the order inside `.actions` so `Restart` remains at index `0` and `Resume` is appended conditionally:
 
 ```tsx
@@ -51,11 +52,12 @@ Swap the order inside `.actions` so `Restart` remains at index `0` and `Resume` 
 ```
 
 #### Why This Retains Accessibility & Robustness:
+
 - **Mouse & Touch**: `Restart` is permanently anchored at position `0` in the flex container. When `Resume` mounts or unmounts, `Restart`'s coordinates do not move. `mousedown` and `mouseup` hit the exact same element, firing `click` without delay or displacement.
 - **No Event-Suppression Hacks**: Avoids `e.preventDefault()` on `mousedown` or `touchstart`, which breaks mobile touch scrolling and suppresses synthetic `click` events on iOS/Android.
 - **Keyboard Navigation**: Focus moves predictably from `<textarea>` to `Restart` (and then `Resume` when paused). Both buttons remain native `<button>` elements operable via `Tab` and `Enter`/`Space` (WCAG 2.4.3 compliant).
 
-*(Alternative if design strictly requires `Resume` visually before `Restart`: Use a ref `isRestartingRef = useRef(false)`, set `onPointerDown={() => { isRestartingRef.current = true; }}` on `Restart`, and in `handleTypingBlur` check `if (isRestartingRef.current) return;`. Do not use `onMouseDown.preventDefault()`, as touchstart blurs before mousedown on touch devices).*
+_(Alternative if design strictly requires `Resume` visually before `Restart`: Use a ref `isRestartingRef = useRef(false)`, set `onPointerDown={() => { isRestartingRef.current = true; }}` on `Restart`, and in `handleTypingBlur` check `if (isRestartingRef.current) return;`. Do not use `onMouseDown.preventDefault()`, as touchstart blurs before mousedown on touch devices)._
 
 ---
 
@@ -63,11 +65,11 @@ Swap the order inside `.actions` so `Restart` remains at index `0` and `Resume` 
 
 Review across `widths: 320, 390, 568, 834, 1440, 1920`:
 
-| Component | CSS Mechanism | Assessment |
-| :--- | :--- | :--- |
-| **Passage Container** (`.passage`, `.word`) | `overflow-wrap: anywhere; max-width: 100%;` + `clamp(1.15rem, 1.9vw + 0.8rem, 1.4rem)` | **No overflow**. Long unbreakable words wrap cleanly. Font scaling is safe across 320px (evaluates to ~1.18rem) up to 1920px (clamped at 1.4rem). |
-| **Control Row & Groups** (`.controlGroup`, `.buttonRow`) | `min-width: 0;` on `.controlGroup`; `flex-wrap: wrap;` on `.buttonRow` | **No overflow**. Flex children do not blow past the viewport; duration presets wrap cleanly on 320px. |
-| **Textareas** (`.typingInput`, `.passageDraft`) | `width: 100%; resize: vertical;` | **No overflow**. Disabling horizontal resizing protects responsive layout. |
-| **Live Stats** (`.stats`) | `display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5);` | **No overflow**. Items wrap onto two lines on 320px if horizontal gap is wide. *(Minor note: `.stat div` selector is inactive because `.stat` is directly on the `<div>`; default block flow works without overflow).* |
-| **Summary Grid** (`.summaryGrid`) | `grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));` | **No overflow**. At 320px (~288px available width inside padding), `9rem` (144px) cleanly collapses to a single `1fr` column without horizontal blowout, then expands to 2+ columns at 390px+. |
-| **Inline Form** (`.inlineForm`, `@media (max-width: 30rem)`) | `.durationInput { width: 100%; }` | **Low risk / Minor cleanup**. At `<= 30rem`, wrapping `<label className={styles.customLabel}>` should have `display: flex; flex-direction: column; width: 100%;` to ensure the input fills the container cleanly rather than relying on inline label expansion. |
+| Component                                                    | CSS Mechanism                                                                          | Assessment                                                                                                                                                                                                                                                      |
+| :----------------------------------------------------------- | :------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Passage Container** (`.passage`, `.word`)                  | `overflow-wrap: anywhere; max-width: 100%;` + `clamp(1.15rem, 1.9vw + 0.8rem, 1.4rem)` | **No overflow**. Long unbreakable words wrap cleanly. Font scaling is safe across 320px (evaluates to ~1.18rem) up to 1920px (clamped at 1.4rem).                                                                                                               |
+| **Control Row & Groups** (`.controlGroup`, `.buttonRow`)     | `min-width: 0;` on `.controlGroup`; `flex-wrap: wrap;` on `.buttonRow`                 | **No overflow**. Flex children do not blow past the viewport; duration presets wrap cleanly on 320px.                                                                                                                                                           |
+| **Textareas** (`.typingInput`, `.passageDraft`)              | `width: 100%; resize: vertical;`                                                       | **No overflow**. Disabling horizontal resizing protects responsive layout.                                                                                                                                                                                      |
+| **Live Stats** (`.stats`)                                    | `display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5);`                  | **No overflow**. Items wrap onto two lines on 320px if horizontal gap is wide. _(Minor note: `.stat div` selector is inactive because `.stat` is directly on the `<div>`; default block flow works without overflow)._                                          |
+| **Summary Grid** (`.summaryGrid`)                            | `grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));`                          | **No overflow**. At 320px (~288px available width inside padding), `9rem` (144px) cleanly collapses to a single `1fr` column without horizontal blowout, then expands to 2+ columns at 390px+.                                                                  |
+| **Inline Form** (`.inlineForm`, `@media (max-width: 30rem)`) | `.durationInput { width: 100%; }`                                                      | **Low risk / Minor cleanup**. At `<= 30rem`, wrapping `<label className={styles.customLabel}>` should have `display: flex; flex-direction: column; width: 100%;` to ensure the input fills the container cleanly rather than relying on inline label expansion. |

@@ -9,11 +9,18 @@ approved contract. Manager supplied context directly; no file tools.
 **Principles:** published-only egress; drafts/retired return the same `404` as nonexistent ids (no existence leak); pagination is cursor-only with a hard max (no offset, no "all" endpoints); passage text is only ever served one-version-at-a-time, never in listings; GET-only.
 
 **Shared error shape** (all non-200s):
+
 ```json
-{ "error": { "code": "invalid_cursor | invalid_limit | not_found | no_published_passage", "message": "..." } }
+{
+  "error": {
+    "code": "invalid_cursor | invalid_limit | not_found | no_published_passage",
+    "message": "..."
+  }
+}
 ```
 
 ### 1. `GET /api/public/typing-exams?limit=&cursor=`
+
 - `200` → `{ items: [{ id, slug, name, organization }], nextCursor: string | null }`
 - Only exams with ≥1 published version. Ordered deterministically (e.g. `createdAt, id`). No versions/policies/text here.
 - `limit`: non-numeric or `<1` → `400 invalid_limit`; `>50` → clamped to 50; default 20.
@@ -21,17 +28,20 @@ approved contract. Manager supplied context directly; no file tools.
 - Empty result → `200 { items: [], nextCursor: null }` — not 404.
 
 ### 2. `GET /api/public/typing-exams/{examIdOrSlug}/versions`
+
 - `200` → `{ exam: {id, slug, name, organization}, items: [{ id, label, language, runnable, unreadyReason? }] }`
 - Published versions only, ordered by label. Unknown exam → `404 not_found` (identical body to a draft-exam id).
 - `runnable` = published **and** `durationSeconds != null` **and** `backspacePolicy`/`editingPolicy`/`scoringMethod` in the supported enum **and** `thresholds` valid **and** ≥1 published passage.
 - `unreadyReason` (single string, shown when `runnable=false`): `missing_duration | unsupported_backspace_policy | unsupported_editing_policy | unsupported_scoring_method | invalid_thresholds | no_published_passage`. Published-but-unready is still listed — it just can't start.
 
 ### 3. `GET /api/public/typing-exams/{examIdOrSlug}/versions/{versionId}`
+
 - `200` → adds `durationSeconds`, `backspacePolicy`, `editingPolicy`, `scoringMethod`, `thresholds` (only when supported; otherwise `null` + `unreadyReason`).
 - Draft/retired `versionId` → `404 not_found`, never `403`.
 - Never contains passage text or any review notes/audit fields — response keys are a fixed whitelist.
 
 ### 4. `GET /api/public/typing-exams/{examIdOrSlug}/versions/{versionId}/passage`
+
 - The "start a run" snapshot: `200` → `{ id, revision, contentHash, text, language }` — latest **published** revision only.
 - Repeat calls are idempotent (same `revision`/`contentHash`) until a new revision publishes; the client pins `contentHash` for the run so a future result endpoint can verify it.
 - Version published but no published passage → `404 no_published_passage`. Version not published → `404 not_found` (generic).

@@ -22,7 +22,7 @@ below.
 
 - The plan correctly says the API/UI are not implemented and defers exact
   semantics to a frozen contract (`docs/TYPING_EXAM_IMPLEMENTATION_PLAN.md:7-8,
-  65-76`).
+65-76`).
 - The current schema owns rules on `TypingExamVersion`, passages under that
   version, and gives version/passage independent draft/published/retired states
   (`prisma/schema.prisma:328-407`). The importer rejects unknown fields and

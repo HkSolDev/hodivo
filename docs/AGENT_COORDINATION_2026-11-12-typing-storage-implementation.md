@@ -9,11 +9,11 @@ from original branch `codex/typing-practice-plan` HEAD `d930a69e` plus explicitl
 snapshotted current local source. No fetch, production or release claim.
 Original source hashes: `/private/tmp/typing-storage-implementation-baseline.json`.
 
-| Role | Model | Worktree / branch | Owned paths |
-| --- | --- | --- | --- |
-| Implementation | OpenCode `opencode/glm-5.3-flash-free` | `/private/tmp/aptus-typing-storage-impl`, `codex/typing-storage-impl-20261112` | schema additive section only; new migration `20261112120000_add_typing_catalogue`; `src/lib/typing-content.ts`, `src/lib/typing-import.ts`; `scripts/import-typing-content.ts`; `scripts/typing-content.test.ts`, `scripts/typing-import.test.ts`, `scripts/typing-import-database.test.ts`; `docs/agent-progress/typing-storage-glm-implementation.md` |
-| Independent review | OpenCode `opencode/deepseek-v4.1-flash-free` | `/private/tmp/aptus-typing-storage-review`, `codex/typing-storage-review-20261112` | `docs/agent-progress/typing-storage-deepseek-implementation-review.md` only |
-| Coordinator | Main conversation | Original checkout + review worktree | Frozen contract, batch, independent acceptance tests and integration |
+| Role               | Model                                        | Worktree / branch                                                                  | Owned paths                                                                                                                                                                                                                                                                                                                                             |
+| ------------------ | -------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Implementation     | OpenCode `opencode/glm-5.3-flash-free`       | `/private/tmp/aptus-typing-storage-impl`, `codex/typing-storage-impl-20261112`     | schema additive section only; new migration `20261112120000_add_typing_catalogue`; `src/lib/typing-content.ts`, `src/lib/typing-import.ts`; `scripts/import-typing-content.ts`; `scripts/typing-content.test.ts`, `scripts/typing-import.test.ts`, `scripts/typing-import-database.test.ts`; `docs/agent-progress/typing-storage-glm-implementation.md` |
+| Independent review | OpenCode `opencode/deepseek-v4.1-flash-free` | `/private/tmp/aptus-typing-storage-review`, `codex/typing-storage-review-20261112` | `docs/agent-progress/typing-storage-deepseek-implementation-review.md` only                                                                                                                                                                                                                                                                             |
+| Coordinator        | Main conversation                            | Original checkout + review worktree                                                | Frozen contract, batch, independent acceptance tests and integration                                                                                                                                                                                                                                                                                    |
 
 No API registration/publication/frontend/worker/auth/CI/dependency/old-migration
 or protected existing-contract edits. Agents cannot change accepted semantics.
@@ -35,7 +35,6 @@ Integration will copy only accepted owned paths after exact-commit review.
 Original unrelated staged/unstaged work is preserved. No push, merge, live
 migration, official-content publication or deployment is authorized.
 
-
 ## Coordinator implementation clarifications
 
 The natural JSON envelope is `{ exam: {...}, version: {...}, passages: [...] }`;
@@ -49,7 +48,6 @@ These clarify representation, not new official exam rules. Duplicate JSON keys
 retain standard JSON.parse last-value behavior; no custom JSON parser is in scope.
 Backspace policy accepts the three approved enum values or explicit null; only
 editingPolicy/scoringMethod are null-only. Do not narrow that accepted policy.
-
 
 ## Actual handoff: verified candidate, not integrated
 

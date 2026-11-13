@@ -10,9 +10,9 @@ Input-file SHA-256 manifest: `/private/tmp/typing-storage-baseline.json`. Both a
 
 ## Assignments
 
-| Agent | Model | Isolated directory | Sole writable deliverable |
-| --- | --- | --- | --- |
-| GLM | `opencode/glm-5.3-flash-free` | `/private/tmp/aptus-typing-storage-glm` | `docs/agent-progress/typing-storage-glm-proposal.md` |
+| Agent    | Model                               | Isolated directory                           | Sole writable deliverable                              |
+| -------- | ----------------------------------- | -------------------------------------------- | ------------------------------------------------------ |
+| GLM      | `opencode/glm-5.3-flash-free`       | `/private/tmp/aptus-typing-storage-glm`      | `docs/agent-progress/typing-storage-glm-proposal.md`   |
 | DeepSeek | `opencode/deepseek-v4.1-flash-free` | `/private/tmp/aptus-typing-storage-deepseek` | `docs/agent-progress/typing-storage-deepseek-audit.md` |
 
 GLM proposes exact catalogue/import/API boundaries. DeepSeek independently audits the plan and actual existing route/storage patterns. Coordinator compares both and records remaining decisions before implementation. Their recommendations are proposals, not frozen product semantics.

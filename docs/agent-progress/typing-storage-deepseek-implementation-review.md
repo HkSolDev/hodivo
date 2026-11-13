@@ -214,8 +214,8 @@ Exact expected outcomes:
 - Separate reporting of pure checks and real database checks. Mocks cannot
   replace the disposable-database persistence proof.
 - Ultimately run the batch commands (`node --import tsx --test
-  scripts/typing-*.test.ts`, `pnpm exec prisma validate --config
-  prisma7.config.ts`, `pnpm typecheck`, `pnpm lint`, relevant regressions) and
+scripts/typing-*.test.ts`, `pnpm exec prisma validate --config
+prisma7.config.ts`, `pnpm typecheck`, `pnpm lint`, relevant regressions) and
   report exactly what ran. None were run for this preparation.
 
 ## Ambiguities to report, not silently decide

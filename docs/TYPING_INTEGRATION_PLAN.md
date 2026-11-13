@@ -49,19 +49,19 @@ provenance were not independently researched in this pass.
 
 ## How the typing project works
 
-| Responsibility | Current files and behavior |
-| --- | --- |
-| Practice page | `index.html`, `style.css`: black theme, segmented duration/source controls, live statistics, character display, focus overlay, custom passage and results overlays |
-| Practice controller | `app.js`: creates 50 random words; records printable key events; changes final text on Backspace; starts clock on first printable key; updates every 100ms; finishes on duration or target length; Escape resets |
-| Character evaluation | `scratch/evaluate.js`: compares final text positionally and returns character states, counts and completion |
-| Clock | `scratch/clock.js`: injectable monotonic time, start/stop and pause/resume; practice excludes time away |
-| Practice statistics | `scratch/calculateStats.js`: combines final-text evaluation with lifetime keystroke counts and the shared exam scorer |
-| Shared scoring | `scratch/scoringEngine.js`: gross speed, error penalty, net speed, accuracy, error percentage and threshold status |
-| Word source | `scratch/words.js`: samples a small English dictionary with replacement |
-| Exam document | `exam-mode/index.html`, `exam.css`: navy header, placeholder candidate card, countdown, passage selection, font controls, vertically split passage/input, action bar and confirmation/results dialogs |
-| Exam controller | `exam-mode/exam.js`: separate state, first-key start, non-pausing deadline, textarea input, three Backspace policies, clipboard guards, submit and reset |
-| Profiles/passages | `exam-mode/passages.js`: four presets, one passage per preset, thresholds and policy data |
-| Learning experiments | `scratch/framework-free.mjs`, `stats.js`, `wpm.js`, probe scripts and tests: includes older alternative implementations; do not copy the whole scratch directory into public assets |
+| Responsibility       | Current files and behavior                                                                                                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Practice page        | `index.html`, `style.css`: black theme, segmented duration/source controls, live statistics, character display, focus overlay, custom passage and results overlays                                               |
+| Practice controller  | `app.js`: creates 50 random words; records printable key events; changes final text on Backspace; starts clock on first printable key; updates every 100ms; finishes on duration or target length; Escape resets |
+| Character evaluation | `scratch/evaluate.js`: compares final text positionally and returns character states, counts and completion                                                                                                      |
+| Clock                | `scratch/clock.js`: injectable monotonic time, start/stop and pause/resume; practice excludes time away                                                                                                          |
+| Practice statistics  | `scratch/calculateStats.js`: combines final-text evaluation with lifetime keystroke counts and the shared exam scorer                                                                                            |
+| Shared scoring       | `scratch/scoringEngine.js`: gross speed, error penalty, net speed, accuracy, error percentage and threshold status                                                                                               |
+| Word source          | `scratch/words.js`: samples a small English dictionary with replacement                                                                                                                                          |
+| Exam document        | `exam-mode/index.html`, `exam.css`: navy header, placeholder candidate card, countdown, passage selection, font controls, vertically split passage/input, action bar and confirmation/results dialogs            |
+| Exam controller      | `exam-mode/exam.js`: separate state, first-key start, non-pausing deadline, textarea input, three Backspace policies, clipboard guards, submit and reset                                                         |
+| Profiles/passages    | `exam-mode/passages.js`: four presets, one passage per preset, thresholds and policy data                                                                                                                        |
+| Learning experiments | `scratch/framework-free.mjs`, `stats.js`, `wpm.js`, probe scripts and tests: includes older alternative implementations; do not copy the whole scratch directory into public assets                              |
 
 Practice flow: keydown -> `typed` plus keystroke `log` -> `evaluate` -> character
 spans; clock tick -> `calculateStats` -> live statistics; completion -> results.
@@ -74,20 +74,20 @@ not a final submitted-text comparison.
 
 ## Aptus frontend integration map
 
-| Area | Existing path and implication |
-| --- | --- |
-| Shared shell | `app/layout.tsx` always adds Header, width-constrained main, Footer and WorkspaceProvider. A nested exam page would inherit this shell. |
-| Main navigation | `components/layout/primary-navigation.tsx`: Home, Saved, Profile/Sign in; mobile CSS fixes a three-column bar to the bottom. Adding a destination requires both navigation and CSS/test changes. |
-| Theme | `public/css/tokens.css`: system sans, neutral surfaces, spacing/radii, focus and danger tokens; OS-driven dark mode already exists. Reuse these values for practice. |
-| Global CSS | Root imports base/layout/navigation/components/catalogue/sign-in/home CSS. Importing either typing stylesheet globally would collide with body, header, brand, button and layout styles. |
-| Home | `app/page.tsx` validates filters and page; `CatalogueGrid` fetches public jobs from the internal API with no-store; controls preserve search/sort/view in URLs. |
-| Job detail | `app/jobs/[id]/page.tsx` fetches the job and renders `JobDetailContent`; current detail fetch uses a 60-second revalidation hint. |
-| Accounts/private data | AuthBar checks sessions; WorkspaceProvider owns account/profile/results/saved state and stale-request protection. Profile page verifies the session server-side; ProfileAccess also gates client rendering. |
-| Saved/results | Saved jobs fetch through validated client API helpers; results are held in workspace memory. Typing needs neither applicant fields nor those APIs. |
-| Review fixtures | Local review providers and sample recommendation/profile views are development-only. Do not treat them as production data. |
-| Two web implementations | Next App Router serves the current frontend; `frontend/app.ts` and Fastify public HTML/static routes also exist. The Fastify static allowlist currently does not serve nested typing assets. Target the Next frontend explicitly. |
-| Container build | `deployment/frontend.Dockerfile` copies only `public/css` into the build stage, then copies build-stage public assets into runtime. A local-only public folder addition would be missing from the image unless build COPY is updated. |
-| Regression coverage | `tests/next-navigation.test.ts`, `next-frontend.test.ts`, `page-design.test.ts`, public browsing and frontend contract tests already cover parts of navigation, responsive layouts and data boundaries. Extend relevant coverage. |
+| Area                    | Existing path and implication                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared shell            | `app/layout.tsx` always adds Header, width-constrained main, Footer and WorkspaceProvider. A nested exam page would inherit this shell.                                                                                               |
+| Main navigation         | `components/layout/primary-navigation.tsx`: Home, Saved, Profile/Sign in; mobile CSS fixes a three-column bar to the bottom. Adding a destination requires both navigation and CSS/test changes.                                      |
+| Theme                   | `public/css/tokens.css`: system sans, neutral surfaces, spacing/radii, focus and danger tokens; OS-driven dark mode already exists. Reuse these values for practice.                                                                  |
+| Global CSS              | Root imports base/layout/navigation/components/catalogue/sign-in/home CSS. Importing either typing stylesheet globally would collide with body, header, brand, button and layout styles.                                              |
+| Home                    | `app/page.tsx` validates filters and page; `CatalogueGrid` fetches public jobs from the internal API with no-store; controls preserve search/sort/view in URLs.                                                                       |
+| Job detail              | `app/jobs/[id]/page.tsx` fetches the job and renders `JobDetailContent`; current detail fetch uses a 60-second revalidation hint.                                                                                                     |
+| Accounts/private data   | AuthBar checks sessions; WorkspaceProvider owns account/profile/results/saved state and stale-request protection. Profile page verifies the session server-side; ProfileAccess also gates client rendering.                           |
+| Saved/results           | Saved jobs fetch through validated client API helpers; results are held in workspace memory. Typing needs neither applicant fields nor those APIs.                                                                                    |
+| Review fixtures         | Local review providers and sample recommendation/profile views are development-only. Do not treat them as production data.                                                                                                            |
+| Two web implementations | Next App Router serves the current frontend; `frontend/app.ts` and Fastify public HTML/static routes also exist. The Fastify static allowlist currently does not serve nested typing assets. Target the Next frontend explicitly.     |
+| Container build         | `deployment/frontend.Dockerfile` copies only `public/css` into the build stage, then copies build-stage public assets into runtime. A local-only public folder addition would be missing from the image unless build COPY is updated. |
+| Regression coverage     | `tests/next-navigation.test.ts`, `next-frontend.test.ts`, `page-design.test.ts`, public browsing and frontend contract tests already cover parts of navigation, responsive layouts and data boundaries. Extend relevant coverage.     |
 
 ## Recommended smallest integration
 
@@ -161,18 +161,18 @@ Preserving this baseline does not independently certify official rules.
 
 ## Findings to resolve before public release
 
-| Finding | Evidence and practical consequence | Proposed treatment |
-| --- | --- | --- |
-| Passage counters are incorrect | Stored/actual chars: CGL 2042/914, CHSL 1765/791, RRB 1538/592, High Court 1890/607. Word counts also differ. UI reads stored charCount. | Derive counts from actual text; separately obtain verified full-length passages. |
-| Exam rule/source claims are unsupported by supplied citations | Profiles state official cutoffs/policies; passages say previous-year paper without a source URL/document. | Verify each named preset and passage before claiming official equivalence; otherwise describe it as a simulation. |
-| Scoring measures attempts, including corrected mistakes | `c x Backspace a t` for `cat` in 6s produces gross 8, net 0, accuracy 75%, error percentage 125%. This follows the current formula. | Decide whether practice should use this metric; freeze exam scoring only after checking its intended rules. Do not silently substitute final-text scoring. |
-| Tests partly exercise duplicate code | Character-state tests import `framework-free.mjs`; live controllers import `evaluate.js`. WPM tests use stats.js, not the unused wpm.js. | Point behavioral tests at production modules; retain useful experiments outside shipped assets. |
-| Practice intercepts page-wide keys | Global keydown accepts `key.length === 1` without modifier/composition checks and does not prevent native Space behavior. | Scope input handling to the workspace; verify shortcuts, scrolling, focus and IME behavior. |
-| Practice has no editable typing input | Focusable spans and global keydown do not reliably summon a mobile keyboard. | Add a real labeled input/textarea while preserving character rendering. |
-| Exam assumes append-only editing but uses a native textarea | Correctness compares against value.length; cursor movement/selection/Delete/Enter can change text without equivalent logging. Word-lock tracks a buffer rather than caret state. | Decide permitted editing and make input/log/policy consistent; test all three policies without changing the exam appearance. |
-| Deadline enforcement depends on scheduled callbacks | Input handlers do not check the deadline themselves; busy/background tabs can delay the interval and scoring uses actual elapsed time. | Test delayed expiry and enforce the chosen deadline at input/submission boundaries. |
-| Dialog/accessibility gaps | Practice overlays lack dialog semantics/focus management; exam has dialog attributes but no focus trap/return; exam Tab is blocked in textarea. | Fix focus behavior in a separate functional slice, retaining exam visual fidelity. |
-| Unicode and legacy-module defects | `evaluate('a😀b','a😀b')` reports correct total 4 but marks emoji/b incorrectly; unused wpm.js returns 1 for 50 chars/60s. | Define supported input and align character indexing. Exclude unused legacy code from integration. |
+| Finding                                                       | Evidence and practical consequence                                                                                                                                               | Proposed treatment                                                                                                                                         |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Passage counters are incorrect                                | Stored/actual chars: CGL 2042/914, CHSL 1765/791, RRB 1538/592, High Court 1890/607. Word counts also differ. UI reads stored charCount.                                         | Derive counts from actual text; separately obtain verified full-length passages.                                                                           |
+| Exam rule/source claims are unsupported by supplied citations | Profiles state official cutoffs/policies; passages say previous-year paper without a source URL/document.                                                                        | Verify each named preset and passage before claiming official equivalence; otherwise describe it as a simulation.                                          |
+| Scoring measures attempts, including corrected mistakes       | `c x Backspace a t` for `cat` in 6s produces gross 8, net 0, accuracy 75%, error percentage 125%. This follows the current formula.                                              | Decide whether practice should use this metric; freeze exam scoring only after checking its intended rules. Do not silently substitute final-text scoring. |
+| Tests partly exercise duplicate code                          | Character-state tests import `framework-free.mjs`; live controllers import `evaluate.js`. WPM tests use stats.js, not the unused wpm.js.                                         | Point behavioral tests at production modules; retain useful experiments outside shipped assets.                                                            |
+| Practice intercepts page-wide keys                            | Global keydown accepts `key.length === 1` without modifier/composition checks and does not prevent native Space behavior.                                                        | Scope input handling to the workspace; verify shortcuts, scrolling, focus and IME behavior.                                                                |
+| Practice has no editable typing input                         | Focusable spans and global keydown do not reliably summon a mobile keyboard.                                                                                                     | Add a real labeled input/textarea while preserving character rendering.                                                                                    |
+| Exam assumes append-only editing but uses a native textarea   | Correctness compares against value.length; cursor movement/selection/Delete/Enter can change text without equivalent logging. Word-lock tracks a buffer rather than caret state. | Decide permitted editing and make input/log/policy consistent; test all three policies without changing the exam appearance.                               |
+| Deadline enforcement depends on scheduled callbacks           | Input handlers do not check the deadline themselves; busy/background tabs can delay the interval and scoring uses actual elapsed time.                                           | Test delayed expiry and enforce the chosen deadline at input/submission boundaries.                                                                        |
+| Dialog/accessibility gaps                                     | Practice overlays lack dialog semantics/focus management; exam has dialog attributes but no focus trap/return; exam Tab is blocked in textarea.                                  | Fix focus behavior in a separate functional slice, retaining exam visual fidelity.                                                                         |
+| Unicode and legacy-module defects                             | `evaluate('a😀b','a😀b')` reports correct total 4 but marks emoji/b incorrectly; unused wpm.js returns 1 for 50 chars/60s.                                                       | Define supported input and align character indexing. Exclude unused legacy code from integration.                                                          |
 
 Clipboard/dev-key restrictions are browser interaction rules, not a secure
 anti-cheat boundary. No account history, leaderboard, backend scoring or

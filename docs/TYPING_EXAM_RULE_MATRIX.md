@@ -4,19 +4,19 @@ Batch: typing-exam-execution-20261113. Coordinator-owned, 13 November 2026.
 Target confirmed by Hemant: SSC CHSL 2025, LDC/JSA, English.
 This is the S1 evidence matrix; it is not a frozen runnable contract.
 
-| Item | Evidence | Implementation consequence |
-| --- | --- | --- |
-| Ordinary duration | 2025 notice section 13.8.13.7, pp.19–20 | 600 seconds; separate from compensatory profiles |
-| English speed target | Same notice | 35 WPM target; not a universal generic scorer |
-| Evaluation reference | Notice sections 13.8.13.3–4 | Commission evaluation guidelines; error precision two decimals |
-| Corrections | Revised guide Annexure I, p.2 | Correction permitted during available time; ordinary native editing is appropriate |
-| Passage completion | Revised guide Annexure I, p.2 | No required repetition; allow correction until time ends |
-| Full versus half errors | Revised guide p.1 | Separate weighted word categories; practice character-attempt scorer is unsuitable |
-| Paragraph handling | Revised guide Annexure I, p.2 | Preserve canonical LF/TAB; offer accessible paragraph insertion without trapping keyboard navigation |
-| Exact timer trigger/submit flow | No authoritative browser event specified | Coordinator must define web simulation behavior explicitly; not claim an official DOM event |
-| Alignment, denominator, rounding | Guide names classes but not a complete executable algorithm | Do not present our chosen algorithm as SSC software or official qualification |
-| 2025 FRTA typing cutoff | Official FRTA, 17 August 2026, para 6(ii), p.1 | UR 7%; listed other categories 10%; no inferred candidate category or automatic official pass/fail |
-| Actual previous-year passage | Not yet sourced/reviewed | No synthetic paragraph may be labelled official previous-year content |
+| Item                             | Evidence                                                    | Implementation consequence                                                                           |
+| -------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Ordinary duration                | 2025 notice section 13.8.13.7, pp.19–20                     | 600 seconds; separate from compensatory profiles                                                     |
+| English speed target             | Same notice                                                 | 35 WPM target; not a universal generic scorer                                                        |
+| Evaluation reference             | Notice sections 13.8.13.3–4                                 | Commission evaluation guidelines; error precision two decimals                                       |
+| Corrections                      | Revised guide Annexure I, p.2                               | Correction permitted during available time; ordinary native editing is appropriate                   |
+| Passage completion               | Revised guide Annexure I, p.2                               | No required repetition; allow correction until time ends                                             |
+| Full versus half errors          | Revised guide p.1                                           | Separate weighted word categories; practice character-attempt scorer is unsuitable                   |
+| Paragraph handling               | Revised guide Annexure I, p.2                               | Preserve canonical LF/TAB; offer accessible paragraph insertion without trapping keyboard navigation |
+| Exact timer trigger/submit flow  | No authoritative browser event specified                    | Coordinator must define web simulation behavior explicitly; not claim an official DOM event          |
+| Alignment, denominator, rounding | Guide names classes but not a complete executable algorithm | Do not present our chosen algorithm as SSC software or official qualification                        |
+| 2025 FRTA typing cutoff          | Official FRTA, 17 August 2026, para 6(ii), p.1              | UR 7%; listed other categories 10%; no inferred candidate category or automatic official pass/fail   |
+| Actual previous-year passage     | Not yet sourced/reviewed                                    | No synthetic paragraph may be labelled official previous-year content                                |
 
 ## Primary evidence
 
