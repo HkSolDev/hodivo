@@ -4,7 +4,7 @@ import { TypingPractice } from '@/components/typing/typing-practice';
 export const metadata: Metadata = {
   title: 'Typing practice',
   description:
-    'Practice typing speed and accuracy with random words or your own passage. Time away from the field is not counted.',
+    'Practice typing speed and accuracy with published exam passages. Time away from the field is not counted.',
 };
 
 export default function TypingPage() {
@@ -12,8 +12,8 @@ export default function TypingPage() {
     <section aria-labelledby="typing-title">
       <h1 id="typing-title">Typing practice</h1>
       <p className="muted">
-        Build typing speed and accuracy with a 15, 30 or 60 second session, or
-        bring your own passage. Corrections count in the attempt history, and no
+        Build typing speed and accuracy with published exam passages in a 15, 30
+        or 60 second session. Corrections count in the attempt history, and no
         typing leaves your browser.
       </p>
       <noscript>

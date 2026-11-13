@@ -353,11 +353,9 @@ test('server-rendered practice page, footer link and no-JS message stay literal 
   assert.match(pageHtml, /Enable JavaScript to use this page/);
   assert.match(pageHtml, /<label class="typingLabel">Type the passage here/);
   assert.match(pageHtml, /aria-label="Passage to type"/);
-  // The deterministic initial passage renders as text content, not HTML.
-  assert.match(
-    pageHtml,
-    /<span class="current">t<\/span><span class="untyped">h<\/span>/,
-  );
+  // Catalogue requests start after hydration; SSR never invents a passage.
+  assert.match(pageHtml, /disabled/);
+  assert.doesNotMatch(pageHtml, /Custom text|Practice this passage/);
   assert.doesNotMatch(pageHtml, /<script/);
 
   const footerHtml = renderToStaticMarkup(createElement(Footer));

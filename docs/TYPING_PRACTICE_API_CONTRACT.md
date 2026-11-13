@@ -62,3 +62,18 @@ response and actual client/API compatibility. Browser tests cover loading/empty/
 retry/races, same-passage Restart, Next passage, editing and responsive matrix.
 Typecheck/lint/production build, existing storage and relevant practice tests.
 Steps4–6 (exam APIs/UI/content) are separate next batch after this vertical slice.
+
+Coordinator implementation note: route injection is a typed zero-argument
+passage loader (defaults to the shared selector), passed through buildApp's
+optional fourth parameter. This avoids mocking Prisma proxy internals; the real
+DB+route integration test supplies the actual selector with a disposable client.
+No HTTP/selection semantics changed. GLM returned no files; coordinator took over
+its paths after stopping its task-specific client. AGY only supplies file/patch
+output for assigned frontend paths; manager applies and tests it.
+
+Worker fallback record: GLM client returned no source files and was stopped.
+Both bounded AGY3.8FlashHigh source-generation requests timed out with no output
+or files; their workers had no write tools. Frontend ownership transferred to a
+separate GPT5.6Terra implementer task01a1d0f4-7933-79e3-9b65-8514b45d7ee3.
+Original reviewer task01a1d0ed-5200-7ed0-9dee-8adcbf9655f4 remains read-only.
+No two implementation agents write the same path concurrently.

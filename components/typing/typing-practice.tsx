@@ -13,21 +13,18 @@ import {
 } from 'react';
 import {
   MAX_CUSTOM_DURATION_SECONDS,
-  MAX_CUSTOM_PASSAGE_LENGTH,
   MIN_CUSTOM_DURATION_SECONDS,
   parseCustomDuration,
-  validateCustomPassage,
 } from '@/lib/typing/custom-input';
+import {
+  loadPracticePassage,
+  type PracticePassage,
+} from '@/lib/typing/practice-api';
 import {
   createTypingSession,
   type EditRejection,
   type SessionSnapshot,
 } from '@/lib/typing/session';
-import {
-  getRandomWords,
-  INITIAL_WORDS_PASSAGE,
-  WORDS_PER_SESSION,
-} from '@/lib/typing/words';
 import { PassageView } from './passage-view';
 import styles from './typing-practice.module.css';
 
@@ -35,17 +32,11 @@ const DURATION_PRESETS = [15, 30, 60] as const;
 const DEFAULT_DURATION_SECONDS = 15;
 const TICK_MS = 100;
 const LIVE_STATS_MIN_ELAPSED_MS = 1000;
-type PassageMode = 'words' | 'custom';
-
-const PASSAGE_ERRORS: Record<
-  'unsupported-characters' | 'empty' | 'too-long',
-  string
-> = {
-  'unsupported-characters':
-    'Use English letters, digits, punctuation and whitespace only. The passage was rejected, not scored.',
-  empty: 'Enter a passage with at least one character.',
-  'too-long': `The passage is longer than ${MAX_CUSTOM_PASSAGE_LENGTH} characters after normalization. Shorten it to practice here.`,
-};
+type PassageState =
+  | { status: 'loading' }
+  | { status: 'ready'; passage: PracticePassage }
+  | { status: 'empty' }
+  | { status: 'error' };
 
 const COMPOSITION_NOTE =
   'IME composition and dead keys are not supported in the typing field. Type plain keys instead.';
@@ -62,7 +53,7 @@ export function TypingPractice() {
   const engineRef = useRef<ReturnType<typeof createTypingSession> | null>(null);
   if (engineRef.current === null) {
     engineRef.current = createTypingSession({
-      target: INITIAL_WORDS_PASSAGE,
+      target: '',
       durationMs: DEFAULT_DURATION_SECONDS * 1000,
     });
   }
@@ -71,13 +62,13 @@ export function TypingPractice() {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(() =>
     engine.snapshot(),
   );
-  const [mode, setMode] = useState<PassageMode>('words');
+  const [passageState, setPassageState] = useState<PassageState>({
+    status: 'loading',
+  });
   const [durationSeconds, setDurationSeconds] = useState(
     DEFAULT_DURATION_SECONDS,
   );
-  const [passageDraft, setPassageDraft] = useState('');
   const [durationDraft, setDurationDraft] = useState('');
-  const [passageError, setPassageError] = useState<string | null>(null);
   const [durationError, setDurationError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -89,18 +80,11 @@ export function TypingPractice() {
     text: string;
     position: number;
   } | null>(null);
+  const requestRef = useRef<{ controller: AbortController; id: number } | null>(
+    null,
+  );
 
   const durationErrorId = useId();
-  const passageErrorId = useId();
-
-  // Draw the real random word passage only after hydration so the server
-  // render stays deterministic (Strict Mode reruns are harmless resets).
-  useEffect(() => {
-    const session = engineRef.current;
-    if (!session) return;
-    session.restart({ target: getRandomWords(WORDS_PER_SESSION) });
-    setSnapshot(session.snapshot());
-  }, []);
 
   // Interval only refreshes the display; the deadline itself is enforced by
   // the engine before each edit and inside tick(). Strict Mode cleanup-safe.
@@ -320,7 +304,6 @@ export function TypingPractice() {
     pendingInsertionRef.current = null;
     const textarea = textareaRef.current;
     if (textarea) textarea.value = '';
-    setPassageError(null);
     setDurationError(null);
     setNote(null);
     setSnapshot(session.snapshot());
@@ -329,6 +312,45 @@ export function TypingPractice() {
   const handleRestart = () => {
     restartSession();
   };
+
+  const loadPassage = () => {
+    requestRef.current?.controller.abort();
+    const request = {
+      controller: new AbortController(),
+      id: (requestRef.current?.id ?? 0) + 1,
+    };
+    requestRef.current = request;
+    restartSession({ target: '' });
+    setPassageState({ status: 'loading' });
+    void loadPracticePassage(request.controller.signal)
+      .then((passage) => {
+        if (
+          request.controller.signal.aborted ||
+          requestRef.current?.id !== request.id
+        )
+          return;
+        if (passage === null) {
+          setPassageState({ status: 'empty' });
+          return;
+        }
+        restartSession({ target: passage.text });
+        setPassageState({ status: 'ready', passage });
+      })
+      .catch(() => {
+        if (
+          request.controller.signal.aborted ||
+          requestRef.current?.id !== request.id
+        ) {
+          return;
+        }
+        setPassageState({ status: 'error' });
+      });
+  };
+
+  useEffect(() => {
+    loadPassage();
+    return () => requestRef.current?.controller.abort();
+  }, []);
 
   const applyDuration = (seconds: number) => {
     restartSession({ durationMs: seconds * 1000 });
@@ -348,23 +370,6 @@ export function TypingPractice() {
     applyDuration(seconds);
   };
 
-  const handleModeChange = (nextMode: PassageMode) => {
-    if (nextMode === 'words') {
-      restartSession({ target: getRandomWords(WORDS_PER_SESSION) });
-    }
-    setMode(nextMode);
-  };
-
-  const handlePassageSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const result = validateCustomPassage(passageDraft);
-    if (!result.ok) {
-      setPassageError(PASSAGE_ERRORS[result.reason]);
-      return;
-    }
-    restartSession({ target: result.passage });
-  };
-
   const showLiveStats =
     snapshot.elapsedMs !== null &&
     snapshot.elapsedMs >= LIVE_STATS_MIN_ELAPSED_MS;
@@ -376,6 +381,8 @@ export function TypingPractice() {
         ? 'Paused — the clock is stopped. Resume to continue.'
         : null;
 
+  const loading = passageState.status === 'loading';
+  const canNext = snapshot.status === 'idle' || snapshot.status === 'finished';
   const toggleClass = (active: boolean) =>
     `button button-secondary${active ? ` ${styles.active}` : ''}`;
 
@@ -384,7 +391,7 @@ export function TypingPractice() {
       <div className={styles.controlRow}>
         <fieldset
           className={styles.controlGroup}
-          disabled={settingsLocked}
+          disabled={settingsLocked || loading}
           aria-label="Session duration"
         >
           <legend className={styles.legend}>Duration</legend>
@@ -427,60 +434,42 @@ export function TypingPractice() {
             )}
           </form>
         </fieldset>
-
-        <fieldset
-          className={styles.controlGroup}
-          disabled={settingsLocked}
-          aria-label="Passage source"
-        >
-          <legend className={styles.legend}>Passage source</legend>
-          <div className={styles.buttonRow}>
-            <button
-              type="button"
-              className={toggleClass(mode === 'words')}
-              aria-pressed={mode === 'words'}
-              onClick={() => handleModeChange('words')}
-            >
-              Words
-            </button>
-            <button
-              type="button"
-              className={toggleClass(mode === 'custom')}
-              aria-pressed={mode === 'custom'}
-              onClick={() => handleModeChange('custom')}
-            >
-              Custom text
-            </button>
-          </div>
-          {mode === 'custom' && (
-            <form onSubmit={handlePassageSubmit}>
-              <label className={styles.customLabel}>
-                Your passage
-                <textarea
-                  className={styles.passageDraft}
-                  rows={4}
-                  value={passageDraft}
-                  aria-describedby={passageErrorId}
-                  aria-invalid={passageError ? true : undefined}
-                  onChange={(event) => {
-                    setPassageDraft(event.target.value);
-                    setPassageError(null);
-                  }}
-                  placeholder={`Type or paste up to ${MAX_CUSTOM_PASSAGE_LENGTH} characters of English text`}
-                />
-              </label>
-              <button type="submit" className="button button-secondary">
-                Practice this passage
-              </button>
-              {passageError && (
-                <p className={styles.error} id={passageErrorId} role="alert">
-                  {passageError}
-                </p>
-              )}
-            </form>
-          )}
-        </fieldset>
       </div>
+
+      {passageState.status === 'ready' && (
+        <p className={styles.statusLine}>
+          Passage: {passageState.passage.title}
+        </p>
+      )}
+      {passageState.status === 'loading' && (
+        <p className={styles.statusLine} role="status">
+          Loading a practice passage…
+        </p>
+      )}
+      {passageState.status === 'empty' && (
+        <p className={styles.error} role="status">
+          No practice passages are available yet. Try again later.{' '}
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={loadPassage}
+          >
+            Retry
+          </button>
+        </p>
+      )}
+      {passageState.status === 'error' && (
+        <p className={styles.error} role="alert">
+          Practice passages are temporarily unavailable.{' '}
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={loadPassage}
+          >
+            Retry
+          </button>
+        </p>
+      )}
 
       <dl className={styles.stats} aria-label="Live statistics">
         <div className={styles.stat}>
@@ -519,6 +508,7 @@ export function TypingPractice() {
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
+          disabled={passageState.status !== 'ready'}
         />
       </label>
 
@@ -546,8 +536,17 @@ export function TypingPractice() {
           // Keep blur-triggered layout changes from interrupting this click.
           onPointerDown={(event) => event.preventDefault()}
           onClick={handleRestart}
+          disabled={loading || passageState.status !== 'ready'}
         >
           Restart
+        </button>
+        <button
+          type="button"
+          className="button button-secondary"
+          onClick={loadPassage}
+          disabled={loading || !canNext}
+        >
+          Next passage
         </button>
       </div>
 

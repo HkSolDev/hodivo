@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { closeSync, existsSync, mkdtempSync, openSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -10,8 +10,42 @@ import { test } from 'node:test';
 import { chromium, expect } from 'playwright/test';
 
 test('public typing practice works in an isolated browser session', async (t) => {
-  const api = createServer((_request, response) => {
+  let nextText = 'cat';
+  let fixtureId = 0;
+  let apiState: 'ready' | 'empty' | 'error' | 'malformed' | 'slow' = 'ready';
+  let heldResponse: ServerResponse | null = null;
+  const passageRequests: string[] = [];
+  const api = createServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
+    if (request.url === '/api/typing/practice-passage') {
+      passageRequests.push(`${request.method} ${request.url}`);
+      if (apiState === 'slow') {
+        heldResponse = response;
+        return;
+      }
+      if (apiState === 'error') {
+        response.statusCode = 503;
+        response.end(JSON.stringify({ error: 'Unavailable' }));
+        return;
+      }
+      response.end(
+        JSON.stringify(
+          apiState === 'malformed'
+            ? { passage: { text: 'bad' } }
+            : {
+                passage:
+                  apiState === 'empty'
+                    ? null
+                    : {
+                        id: `fixture-${fixtureId}`,
+                        title: 'Fixture passage',
+                        text: nextText,
+                      },
+              },
+        ),
+      );
+      return;
+    }
     response.end(JSON.stringify({ user: null, enabled: false }));
   });
   api.listen(0, '127.0.0.1');
@@ -96,16 +130,15 @@ test('public typing practice works in an isolated browser session', async (t) =>
     exact: true,
   });
   const summary = page.getByRole('region', { name: 'Session summary' });
-  const custom = page.getByRole('textbox', {
-    name: 'Your passage',
-    exact: true,
-  });
+  await expect(input).toBeEnabled();
   async function setPassage(text: string) {
+    nextText = text;
+    fixtureId++;
     await page
-      .getByRole('button', { name: 'Custom text', exact: true })
+      .getByRole('button', { name: 'Next passage', exact: true })
       .click();
-    await custom.fill(text);
-    await page.getByRole('button', { name: 'Practice this passage' }).click();
+    await expect(page.getByLabel('Passage to type')).toHaveText(text);
+    await expect(input).toBeEnabled();
   }
 
   await t.test(
@@ -173,7 +206,7 @@ test('public typing practice works in an isolated browser session', async (t) =>
   );
 
   await t.test(
-    'custom inputs reject invalid data and render markup literally',
+    'duration validation remains and server passage markup renders literally',
     async () => {
       await page.getByRole('textbox', { name: 'Custom seconds' }).fill('1.5');
       await page.getByRole('button', { name: 'Set', exact: true }).click();
@@ -181,14 +214,6 @@ test('public typing practice works in an isolated browser session', async (t) =>
         page.getByText('Enter a whole number of seconds', { exact: false }),
       ).toBeVisible();
       await page.getByRole('button', { name: '15s', exact: true }).click();
-      await setPassage('  ');
-      await expect(
-        page.getByText('Enter a passage with at least one character.'),
-      ).toBeVisible();
-      await setPassage('hello 😀');
-      await expect(
-        page.getByText('Use English letters', { exact: false }),
-      ).toBeVisible();
       await setPassage('<img src=x onerror=alert(1)>');
       await expect(page.getByLabel('Passage to type')).toHaveText(
         '<img src=x onerror=alert(1)>',
@@ -272,7 +297,9 @@ test('public typing practice works in an isolated browser session', async (t) =>
         false,
       );
       t.diagnostic(`Typing review screenshots: ${screenshots}`);
-      await page.getByRole('link', { name: /How (?:Aptus|Hodivo) works/ }).click();
+      await page
+        .getByRole('link', { name: /How (?:Aptus|Hodivo) works/ })
+        .click();
       await expect(page).toHaveURL(`${origin}/how-it-works`);
       await page
         .getByRole('link', { name: 'Typing practice', exact: true })
@@ -293,14 +320,10 @@ test('public typing practice works in an isolated browser session', async (t) =>
       try {
         const mobile = await touch.newPage();
         await mobile.goto(`${origin}/typing`);
+        nextText = 'cat';
+        fixtureId++;
         await mobile
-          .getByRole('button', { name: 'Custom text', exact: true })
-          .tap();
-        await mobile
-          .getByRole('textbox', { name: 'Your passage', exact: true })
-          .fill('cat');
-        await mobile
-          .getByRole('button', { name: 'Practice this passage' })
+          .getByRole('button', { name: 'Next passage', exact: true })
           .tap();
         const mobileInput = mobile.getByRole('textbox', {
           name: 'Type the passage here',
@@ -310,6 +333,7 @@ test('public typing practice works in an isolated browser session', async (t) =>
           name: 'Restart',
           exact: true,
         });
+        await expect(mobileInput).toBeEnabled();
         await mobileInput.tap();
         await mobileInput.pressSequentially('c');
         await restart.tap();
@@ -320,6 +344,70 @@ test('public typing practice works in an isolated browser session', async (t) =>
       } finally {
         await touch.close();
       }
+    },
+  );
+
+  await t.test(
+    'empty, failure and malformed responses disable input and retry recovers',
+    async () => {
+      await page.goto(`${origin}/typing`);
+      await expect(input).toBeEnabled();
+      for (const state of ['empty', 'error', 'malformed'] as const) {
+        apiState = state;
+        await page
+          .getByRole('button', { name: 'Next passage', exact: true })
+          .click();
+        await expect(input).toBeDisabled();
+        await expect(
+          page.getByRole('button', { name: 'Retry', exact: true }),
+        ).toBeVisible();
+        apiState = 'ready';
+        nextText = 'cat';
+        fixtureId++;
+        await page.getByRole('button', { name: 'Retry', exact: true }).click();
+        await expect(input).toBeEnabled();
+        await expect(page.getByLabel('Passage to type')).toHaveText('cat');
+      }
+      assert(passageRequests.length > 0);
+      assert(
+        passageRequests.every(
+          (request) => request === 'GET /api/typing/practice-passage',
+        ),
+      );
+      await expect(
+        page.getByRole('button', { name: 'Custom text', exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: 'Words', exact: true }),
+      ).toHaveCount(0);
+    },
+  );
+
+  await t.test(
+    'loading disables editing and navigation cannot restore a stale passage',
+    async () => {
+      apiState = 'slow';
+      await page
+        .getByRole('button', { name: 'Next passage', exact: true })
+        .click();
+      await expect(input).toBeDisabled();
+      await expect(
+        page.getByRole('button', { name: 'Next passage', exact: true }),
+      ).toBeDisabled();
+      await expect.poll(() => heldResponse !== null).toBe(true);
+      await page.goto(`${origin}/how-it-works`);
+      apiState = 'ready';
+      nextText = 'Fresh passage after navigation.';
+      fixtureId++;
+      await page.goto(`${origin}/typing`);
+      await expect(input).toBeEnabled();
+      await expect(page.getByLabel('Passage to type')).toHaveText(nextText);
+      heldResponse?.end(
+        JSON.stringify({
+          passage: { id: 'stale', title: 'Stale', text: 'Old passage.' },
+        }),
+      );
+      await expect(page.getByLabel('Passage to type')).toHaveText(nextText);
     },
   );
 
