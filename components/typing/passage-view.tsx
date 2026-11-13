@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { evaluate, type EvaluatedChar } from '@/lib/typing/evaluate';
 import styles from './typing-practice.module.css';
 
@@ -35,14 +35,17 @@ function groupPassageChars(chars: EvaluatedChar[]): PassageGroup[] {
   return groups;
 }
 
-export function PassageView({
+export const PassageView = memo(function PassageView({
   target,
   typedText,
 }: {
   target: string;
   typedText: string;
 }) {
-  const evaluation = evaluate(target, typedText);
+  const groups = useMemo(
+    () => groupPassageChars(evaluate(target, typedText).chars),
+    [target, typedText],
+  );
   const containerRef = useRef<HTMLParagraphElement | null>(null);
   const currentRef = useRef<HTMLSpanElement | null>(null);
   const lastLineTopRef = useRef<number | null>(null);
@@ -73,7 +76,7 @@ export function PassageView({
       className={styles.passage}
       aria-label="Passage to type"
     >
-      {groupPassageChars(evaluation.chars).map((group, groupIndex) => {
+      {groups.map((group, groupIndex) => {
         if (group.kind === 'newline') {
           const char = group.chars[0];
           return (
@@ -107,4 +110,4 @@ export function PassageView({
       })}
     </p>
   );
-}
+});

@@ -83,8 +83,8 @@ export function evaluateExamReadiness(
   )
     reasons.push('RULES_INCOMPLETE');
   if (
-    (v.durationSeconds !== null && v.durationSeconds !== 600) ||
-    (v.targetWpm !== null && v.targetWpm !== 35) ||
+    !inRange(v.durationSeconds, 1, 3600) ||
+    !inRange(v.targetWpm, 1, 1000) ||
     (v.backspacePolicy !== null && v.backspacePolicy !== 'UNRESTRICTED') ||
     (v.editingPolicy !== null && v.editingPolicy !== 'native-correction-v1') ||
     !inRange(v.targetKeystrokes, 1, 100000) ||
