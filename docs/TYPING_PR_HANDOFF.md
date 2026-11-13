@@ -28,7 +28,10 @@ Log: /private/tmp/typing-s0-verification-20261113.log.
 Prior checks on this unchanged implementation: typecheck, lint, production Next
 build and 11/11 browser checks passed. Browser matrix:
 320/390/568/834/1440/1920, light/dark, keyboard/touch emulation.
-Independent review must name the final combined commit before acceptance.
+Terra accepted final code commit 15e50a72bb1c0c8368cafd3b02bd06ff23f242ef
+after the cache-header correction. Final combined rerun: 76/76, zero skips;
+log /private/tmp/typing-s0-final-verification-20261113.log. Reviewer independently
+inspected source/diff and read the suite log; browser checks were not rerun by reviewer.
 
 ## Remaining scope
 

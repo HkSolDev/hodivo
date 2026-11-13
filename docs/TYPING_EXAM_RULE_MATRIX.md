@@ -15,7 +15,7 @@ This is the S1 evidence matrix; it is not a frozen runnable contract.
 | Paragraph handling | Revised guide Annexure I, p.2 | Preserve canonical LF/TAB; offer accessible paragraph insertion without trapping keyboard navigation |
 | Exact timer trigger/submit flow | No authoritative browser event specified | Coordinator must define web simulation behavior explicitly; not claim an official DOM event |
 | Alignment, denominator, rounding | Guide names classes but not a complete executable algorithm | Do not present our chosen algorithm as SSC software or official qualification |
-| Qualification cutoff | Not yet verified in applicable result notice | Keep unknown; do not default to 5% or infer a category |
+| 2025 FRTA typing cutoff | Official FRTA, 17 August 2026, para 6(ii), p.1 | UR 7%; listed other categories 10%; no inferred candidate category or automatic official pass/fail |
 | Actual previous-year passage | Not yet sourced/reviewed | No synthetic paragraph may be labelled official previous-year content |
 
 ## Primary evidence
@@ -46,3 +46,11 @@ stored nullable rules exactly in public rule projections. No importer expansion,
 runnable official profile or qualification claim is approved by this matrix.
 Complete the evidence and explicit simulation decisions before domain/UI writers
 consume a runnable profile. Practice continues independently.
+
+## Additional primary cutoff evidence
+
+Manager directly fetched [2025 FRTA](https://ssc.gov.in/api/attachment/uploads/masterData/NoticeBoards/FRTA_CHSLE_2025_17082026.pdf),
+para 6(ii), p.1: typing error limits are 7% UR and 10% for listed other
+categories, including EWS. Separate DEO limits must not be reused. These are
+cycle-specific allocation standards, not a guarantee for future tests.
+A sourced cutoff does not resolve the scorer alignment/denominator algorithm.

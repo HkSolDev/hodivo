@@ -290,7 +290,8 @@ behavior demonstrated; missing Safari/real hardware checks stated explicitly.
 
 - Coordinator master prompt: assigned to this conversation and active.
 - S0: combined verification passed 76/76, zero skips. Practice commits cca038f and
-  review fix 15e50a7; final exact-commit Terra acceptance remains pending.
+  review fix 15e50a7; Terra accepted that exact code SHA with no material
+  finding. Browser/suite evidence was supplied, not independently rerun by Terra.
 - S1: Hemant selected SSC CHSL 2025 LDC/JSA English. GLM and DeepSeek
   returned bounded analysis; manager reviewed and recorded rejected proposals.
   Terra found revised official correction/completion guidance. See the
@@ -315,3 +316,8 @@ DeepSeek received reference text directly for bounded read-only analysis after
 file-reading permission denials; no runtime ownership transferred. AGY remains
 blocked. S3/S4/S5 implementation waits for the frozen S2 contract. Terra
 sequencing finding accepted: S6 may run alongside S5B after S3/S4 integration.
+
+S0 acceptance: Terra accepted 15e50a72bb1c0c8368cafd3b02bd06ff23f242ef;
+70d82c0 adds only staged plans/research. Branch pushed to draft PR46. S1
+additional evidence: manager fetched 2025 FRTA cutoff; evaluator implementation
+remains unfrozen. No S3/S4/S5 runtime writer has been launched.
