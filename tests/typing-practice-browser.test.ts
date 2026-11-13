@@ -59,7 +59,11 @@ test('public typing practice works in an isolated browser session', async (t) =>
   );
   const address = api.address();
   assert(address && typeof address !== 'string');
-  const log = openSync('/private/tmp/typing-browser-next.log', 'w');
+  const logPath = join(
+    mkdtempSync(join(tmpdir(), 'aptus-typing-log-')),
+    'next.log',
+  );
+  const log = openSync(logPath, 'w');
   const next = spawn(
     process.execPath,
     [
@@ -93,11 +97,7 @@ test('public typing practice works in an isolated browser session', async (t) =>
   const origin = 'http://127.0.0.1:18912';
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt++) {
-    assert.equal(
-      next.exitCode,
-      null,
-      'Next exited; inspect /private/tmp/typing-browser-next.log',
-    );
+    assert.equal(next.exitCode, null, `Next exited; inspect ${logPath}`);
     try {
       await fetch(`${origin}/typing`, { signal: AbortSignal.timeout(1000) });
       ready = true;

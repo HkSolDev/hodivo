@@ -99,6 +99,37 @@ Final production build passed after all selection and restart fixes; both
 `/typing` and `/typing/exam` appear in its output. Terra6.1 confirmed the final
 restart fix in source; it did not rerun the browser suite independently.
 
+## CI follow-up
+
+Run43375174379 passed all three image builds but exposed two portability/isolation
+issues in tests: the importer migration assertion counted matching tables across
+public and its isolated schema, and both browser tests opened macOS-only log
+paths. The query now filters `table_schema = current_schema()` while preserving
+its exact assertion. Logs/screenshots use platform temporary directories.
+The targeted importer database suite passed12/12 with public migrations present.
+Both browser suites passed22/22 after the portable-path correction. A broader
+local CI reproduction also encountered auth/autonomous-notice fixture failures;
+it is not recorded as a passing full suite. The independent CI worker is
+classifying those separately from the reproduced GitHub failures.
+Gemini3.8FlashHigh reviewed the bounded diagnosis/fix and returned successfully.
+Future CI reads are delegated to that review worker, per Hemant's preference.
+
+## Additional real-passage request
+
+Hemant requested around20 actual exam passages, real categories/rules and database
+storage for user availability. A separate worker researched with requested
+Gemini4Hydrogen; its240s call timed out. Independent worker checks yielded eight
+source leads, zero verified/import-eligible originals; no passages were copied
+or inserted as real exam content. See content-research/typing-real-exam-sources.md
+and typing-real-exam-candidates.json. This is research evidence, not an importer.
+
+Read-only live readiness inspection verified old API3f25b40 and frontend2ac9868
+images. The API is Coolify-managed; a database schema query using its documented
+IPv4 settings returned only `_prisma_migrations` among the requested names:
+TypingExam/TypingExamVersion/TypingPassage are not present. No live schema/data
+write, publication, merge or deployment was performed. User availability needs
+verified content plus separately sequenced migration and service rollout.
+
 Reproduction commands (database URL refers only to the isolated test instance):
 
 ```sh

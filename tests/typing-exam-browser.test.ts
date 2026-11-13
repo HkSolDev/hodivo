@@ -8,13 +8,17 @@ import {
   openSync,
   readFileSync,
   mkdirSync,
+  mkdtempSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { setTimeout } from 'node:timers/promises';
 import { test } from 'node:test';
 import { chromium, expect } from 'playwright/test';
 
 test('exam simulation integrates catalogue, local editing and responsive layout', async (t) => {
+  const artifacts = mkdtempSync(join(tmpdir(), 'aptus-exam-review-'));
   const { snapshot } = JSON.parse(
     readFileSync(
       new URL('./fixtures/typing-exam/start.json', import.meta.url),
@@ -108,7 +112,8 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
   );
   const address = api.address();
   assert(address && typeof address !== 'string');
-  const log = openSync('/private/tmp/typing-exam-browser-next.log', 'w');
+  const logPath = join(artifacts, 'next.log');
+  const log = openSync(logPath, 'w');
   const next = spawn(
     process.execPath,
     [
@@ -141,11 +146,7 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
   const origin = 'http://127.0.0.1:18913';
   let ready = false;
   for (let i = 0; i < 100; i++) {
-    assert.equal(
-      next.exitCode,
-      null,
-      'Next exited: inspect /private/tmp/typing-exam-browser-next.log',
-    );
+    assert.equal(next.exitCode, null, `Next exited: inspect ${logPath}`);
     try {
       await fetch(`${origin}/typing/exam`, {
         signal: AbortSignal.timeout(1000),
@@ -287,7 +288,8 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
   await t.test(
     'responsive widths, long text/font zoom and short viewport keep controls reachable',
     async () => {
-      mkdirSync('/private/tmp/typing-exam-screenshots', { recursive: true });
+      const screenshots = join(artifacts, 'screenshots');
+      mkdirSync(screenshots, { recursive: true });
       for (const width of [320, 390, 568, 834, 1440, 1920]) {
         await page.setViewportSize({
           width,
@@ -305,7 +307,7 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
           .getByRole('button', { name: 'Submit examination', exact: true })
           .scrollIntoViewIfNeeded();
         await page.screenshot({
-          path: `/private/tmp/typing-exam-screenshots/${width}.png`,
+          path: join(screenshots, `${width}.png`),
           fullPage: true,
         });
       }
@@ -325,6 +327,7 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
       await page.evaluate(() => {
         document.documentElement.style.fontSize = '';
       });
+      t.diagnostic(`Exam screenshots: ${screenshots}`);
     },
   );
   await t.test(

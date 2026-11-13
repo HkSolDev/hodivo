@@ -400,7 +400,8 @@ test(
       async () => {
         const legacy = await client.query(
           `SELECT table_name FROM information_schema.tables
-         WHERE table_name IN ('AuthUser', 'Post', 'Source', 'SavedJob')
+         WHERE table_schema = current_schema()
+           AND table_name IN ('AuthUser', 'Post', 'Source', 'SavedJob')
          ORDER BY table_name`,
         );
         assert.deepEqual(
