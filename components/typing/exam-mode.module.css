@@ -451,10 +451,12 @@
 }
 
 .passageContent {
+  position: relative;
   min-height: 10rem;
-  max-height: 24rem;
+  max-height: calc(var(--passage-line-height) * 6em + 28px);
   flex: 1 1 0;
   overflow-y: auto;
+  scrollbar-width: thin;
   padding: 14px 18px;
   font-family: var(--ion-font-passage);
   font-size: var(--passage-font-size);
