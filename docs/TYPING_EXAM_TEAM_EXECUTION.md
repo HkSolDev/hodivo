@@ -236,9 +236,10 @@ Owned paths: `app/typing/exam/page.tsx`, `components/typing/exam-mode.tsx`,
 
 Acceptance: 320/390/568/834/1440/1920 layouts, keyboard/touch controls, no horizontal
 page overflow, stale-response protection and exact configuration display.
-AGY is currently blocked by a headless command-permission denial. This assignment
-is queued, not running. Do not use permission-bypass flags. Coordinator may take
-over only after recording the handoff; any replacement must be identified.
+AGY headless permissions were resolved with exact session-only command grants;
+a read-only S5 plan review succeeded. Implementation remains queued on S2.
+Future implementation commands require their own scoped grants; never use
+permission-bypass flags. See the AGY progress report for the verified invocation.
 
 ## S6 — first real content and actual database/API proof
 
@@ -299,7 +300,8 @@ behavior demonstrated; missing Safari/real hardware checks stated explicitly.
 - S2: queued; unresolved exact scoring and lifecycle decisions remain visible
   in TYPING_EXAM_RULE_RESEARCH.md and Terra's review.
 - S3/S4: prompts and ownership assigned, implementation NOT launched; S2 gate.
-- S5: assigned but blocked by AGY headless permissions and S2 integration gate.
+- S5: AGY read-only plan review succeeded after session-scoped permission fix;
+  implementation remains queued on the S2 integration gate.
 - S6: queued; first edition/content not yet finalized.
 - S7: Terra architecture stage completed; final code review queued after integration.
 
@@ -321,3 +323,7 @@ S0 acceptance: Terra accepted 15e50a72bb1c0c8368cafd3b02bd06ff23f242ef;
 70d82c0 adds only staged plans/research. Branch pushed to draft PR46. S1
 additional evidence: manager fetched 2025 FRTA cutoff; evaluator implementation
 remains unfrozen. No S3/S4/S5 runtime writer has been launched.
+
+AGY follow-up: exact session command grants resolved the headless denial.
+Gemini3.8FlashHigh completed the actual S5 plan review successfully. Auto mode
+is unavailable on this account; no global permission settings were changed.
