@@ -28,7 +28,7 @@ export interface TypingVersionInput {
   examYear: number | null;
   durationSeconds: number | null;
   backspacePolicy: BackspacePolicy | null;
-  editingPolicy: null;
+  editingPolicy: 'native-correction-v1' | null;
   scoringMethod: null;
   targetWpm: number | null;
   maxErrorPercent: number | null;
@@ -197,6 +197,11 @@ function policyNull(value: unknown, label: string): null {
   return null;
 }
 
+function parseEditingPolicy(value: unknown): 'native-correction-v1' | null {
+  if (value === null || value === 'native-correction-v1') return value;
+  return fail('Unsupported version editingPolicy');
+}
+
 function requireEnglish(value: unknown): 'en' {
   if (value !== 'en') fail('Only the language "en" is accepted');
   return 'en';
@@ -282,7 +287,7 @@ function parseVersion(value: unknown): TypingVersionInput {
       3600,
     ),
     backspacePolicy: parseBackspacePolicy(version.backspacePolicy),
-    editingPolicy: policyNull(version.editingPolicy, 'version editingPolicy'),
+    editingPolicy: parseEditingPolicy(version.editingPolicy),
     scoringMethod: policyNull(version.scoringMethod, 'version scoringMethod'),
     targetWpm: optionalInteger(version.targetWpm, 'version targetWpm', 1, 1000),
     maxErrorPercent: optionalPercent(

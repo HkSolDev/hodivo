@@ -156,7 +156,7 @@ await describe('parseTypingImport', async () => {
     assert.equal(parsed.passages[0]?.shift, null);
   });
 
-  await test('accepts only null for editing and scoring policy fields', () => {
+  await test('rejects unknown editing and scoring methods and accepts legacy null', () => {
     for (const key of ['editingPolicy', 'scoringMethod']) {
       const input = validInput();
       input.version[key] = 'UNRESTRICTED';
@@ -166,6 +166,16 @@ await describe('parseTypingImport', async () => {
       input.version[key] = null;
       assert.doesNotThrow(() => parseTypingImport(input));
     }
+  });
+
+  await test('accepts the approved correction editor without inventing scoring', () => {
+    const input = validInput();
+    input.version.editingPolicy = 'native-correction-v1';
+    const parsed = parseTypingImport(input);
+    assert.equal(parsed.version.editingPolicy, 'native-correction-v1');
+    assert.equal(parsed.version.scoringMethod, null);
+    input.version.scoringMethod = 'native-correction-v1';
+    assert.throws(() => parseTypingImport(input), TypingValidationError);
   });
 
   await test('enforces slug, versionKey and contentKey alphabet and length bounds', () => {
