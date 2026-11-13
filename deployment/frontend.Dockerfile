@@ -8,6 +8,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY next.config.ts tsconfig.next.json ./
 COPY app ./app
 COPY components ./components
+COPY lib/typing ./lib/typing
 COPY frontend ./frontend
 COPY public/css ./public/css
 

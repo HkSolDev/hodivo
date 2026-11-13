@@ -324,3 +324,84 @@ model ValidationTask {
   @@index([status, claimExpiresAt])
   @@index([reviewRevisionId, validatorVersion])
 }
+
+enum TypingContentStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum TypingBackspacePolicy {
+  UNRESTRICTED
+  DISABLED
+  CURRENT_WORD_ONLY
+}
+
+enum TypingPassageSourceKind {
+  OFFICIAL_PREVIOUS_YEAR
+  RECONSTRUCTED
+  PRACTICE
+}
+
+model TypingExam {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  organization String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  versions     TypingExamVersion[]
+}
+
+model TypingExamVersion {
+  id               String   @id @default(cuid())
+  examId           String
+  exam             TypingExam @relation(fields: [examId], references: [id], onDelete: Restrict)
+  versionKey       String
+  label            String
+  language         String
+  status           TypingContentStatus @default(DRAFT)
+  examYear         Int?
+  durationSeconds  Int?
+  backspacePolicy  TypingBackspacePolicy?
+  editingPolicy    String?
+  scoringMethod    String?
+  targetWpm        Int?
+  maxErrorPercent  Float?
+  targetKeystrokes Int?
+  instructions     String?
+  ruleSourceUrl    String?
+  ruleSourceNote   String?
+  reviewedAt       DateTime?
+  publishedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  passages         TypingPassage[]
+
+  @@unique([examId, versionKey])
+  @@index([examId, status])
+}
+
+model TypingPassage {
+  id            String   @id @default(cuid())
+  examVersionId String
+  examVersion   TypingExamVersion @relation(fields: [examVersionId], references: [id], onDelete: Restrict)
+  contentKey    String
+  revision      Int
+  title         String
+  text          String
+  contentHash   String
+  sourceKind    TypingPassageSourceKind
+  status        TypingContentStatus @default(DRAFT)
+  examYear      Int?
+  shift         String?
+  sourceUrl     String?
+  sourceNote    String?
+  reviewedAt    DateTime?
+  publishedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([examVersionId, contentKey, revision])
+  @@index([examVersionId, status])
+}

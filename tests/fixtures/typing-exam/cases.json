@@ -1,0 +1,52 @@
+{
+  "invalidRequests": [
+    "/api/typing/exams?limit=0",
+    "/api/typing/exams?limit=51",
+    "/api/typing/exams?limit=1&limit=2",
+    "/api/typing/exams?cursor=",
+    "/api/typing/exams?unknown=1",
+    "/api/typing/exam-versions/INVALID",
+    "/api/typing/exam-versions/version1?limit=1"
+  ],
+  "lifecycle": [
+    {
+      "name": "first committed insertion starts",
+      "now": 100,
+      "text": "A",
+      "deadline": 600100
+    },
+    {
+      "name": "deadline rejects late input",
+      "now": 600100,
+      "phase": "finished",
+      "finishReason": "expired"
+    }
+  ],
+  "errors": {
+    "400": {
+      "error": {
+        "code": "INVALID_REQUEST",
+        "message": "Invalid exam request."
+      }
+    },
+    "404": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Exam content not found."
+      }
+    },
+    "409": {
+      "error": {
+        "code": "EXAM_NOT_READY",
+        "message": "This exam is not ready to start.",
+        "reasons": ["RULES_INCOMPLETE"]
+      }
+    },
+    "503": {
+      "error": {
+        "code": "SERVICE_UNAVAILABLE",
+        "message": "Exam content is temporarily unavailable."
+      }
+    }
+  }
+}

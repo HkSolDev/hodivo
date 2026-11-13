@@ -1,0 +1,36 @@
+{
+  "exam": {
+    "slug": "ssc-chsl",
+    "name": "SSC CHSL typing simulation",
+    "organization": "Staff Selection Commission"
+  },
+  "version": {
+    "versionKey": "chsl-2025-english-simulation-v1",
+    "label": "SSC CHSL 2025 LDC/JSA English simulation",
+    "language": "en",
+    "examYear": 2025,
+    "durationSeconds": 600,
+    "targetWpm": 35,
+    "targetKeystrokes": null,
+    "maxErrorPercent": null,
+    "backspacePolicy": "UNRESTRICTED",
+    "editingPolicy": "native-correction-v1",
+    "scoringMethod": null,
+    "instructions": "Corrections allowed. Official scoring unavailable.",
+    "ruleSourceUrl": "https://ssc.gov.in/api/attachment/uploads/masterData/NoticeBoards/Notice_of_adv_chsl_2025.pdf",
+    "ruleSourceNote": "Reviewed rule matrix: CHSL2025 notice section13.8.13.7 ordinary English600s/35WPM; revised correction guide. Browser choices approved13November2026. Official scorer unavailable. See docs/TYPING_EXAM_RULE_MATRIX.md and TYPING_EXAM_CONTRACT.md."
+  },
+  "passages": [
+    {
+      "contentKey": "supplied-forest-conservation-example",
+      "revision": 1,
+      "title": "Forest conservation — supplied practice example",
+      "text": "Forests play a vital role in sustaining ecological balance and maintaining atmospheric equilibrium. They act as natural carbon sinks, absorbing millions of tons of greenhouse gases annually while replenishing vital oxygen reserves. In recent decades, urban expansion and commercial deforestation have threatened biological diversity and disrupted seasonal monsoon cycles. Preserving natural heritage demands collective action from civic administrations, environmental scientists, and local communities. Sustainable conservation policies encourage community forestry, renewable energy adoption, and stringent penalties for unauthorized resource exploitation. Every citizen shares an active responsibility to protect indigenous wildlife and preserve ecological habitats for future generations.",
+      "examYear": null,
+      "shift": null,
+      "sourceKind": "PRACTICE",
+      "sourceUrl": null,
+      "sourceNote": "Exact text from user-supplied Keyboard_Typing_test/exam-mode/passages.js, entryssc-chsl-2023-s2. Its previous-year claim is unverified; retained only as practice content. No official passage attribution is asserted."
+    }
+  ]
+}
