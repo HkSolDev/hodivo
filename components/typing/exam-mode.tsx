@@ -100,6 +100,29 @@ export function ExamMode() {
       setLocalText(next?.text ?? '');
   }, []);
 
+  const passageContainerRef = useRef<HTMLDivElement | null>(null);
+  const passageCursorRef = useRef<HTMLSpanElement | null>(null);
+  const lastPassageLineTopRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const container = passageContainerRef.current;
+    const cursor = passageCursorRef.current;
+    if (!container || !cursor) return;
+
+    const lineTop = cursor.offsetTop;
+    if (lastPassageLineTopRef.current === lineTop) return;
+    lastPassageLineTopRef.current = lineTop;
+
+    const lineHeight =
+      Number.parseFloat(getComputedStyle(container).lineHeight) || 0;
+    const targetTop = Math.max(0, lineTop - container.offsetTop - lineHeight);
+    if (typeof container.scrollTo === 'function') {
+      container.scrollTo({ top: targetTop, behavior: 'smooth' });
+    } else {
+      container.scrollTop = targetTop;
+    }
+  }, [localText.length, snapshot?.passage.text, fontSize]);
+
   const fetchExams = useCallback(async (cursor?: string) => {
     examsAbortRef.current?.abort();
     const controller = new AbortController();
@@ -715,16 +738,26 @@ export function ExamMode() {
               Master Text Passage
             </h2>
             <span className={styles.panelHint}>
-              ⚠ Read-only. Does not auto-scroll. Use mouse wheel or scrollbar to
-              advance.
+              Read-only master passage. Auto-scrolls as you type; manual scroll
+              also available.
             </span>
           </div>
-          <div className={styles.passageContent}>
+          <div ref={passageContainerRef} className={styles.passageContent}>
             {isLoadingVersionDetail || isLoadingSnapshot ? (
               <p style={{ color: '#64748b' }}>Loading master passage...</p>
+            ) : snapshot?.passage.text ? (
+              <>
+                {snapshot.passage.text.slice(
+                  0,
+                  Math.min(localText.length, snapshot.passage.text.length),
+                )}
+                <span ref={passageCursorRef} aria-hidden="true" />
+                {snapshot.passage.text.slice(
+                  Math.min(localText.length, snapshot.passage.text.length),
+                )}
+              </>
             ) : (
-              (snapshot?.passage.text ??
-              'Select a ready exam version to load passage.')
+              'Select a ready exam version to load passage.'
             )}
           </div>
         </section>
