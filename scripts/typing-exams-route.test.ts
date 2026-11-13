@@ -203,4 +203,28 @@ test('readiness keeps unavailable scoring distinct from incomplete and unsupport
     evaluateExamReadiness({ ...base, publishedAt: null }, true).reasons,
     ['RULES_INCOMPLETE'],
   );
+  assert.deepEqual(
+    evaluateExamReadiness(
+      {
+        ...base,
+        durationSeconds: 900,
+        targetWpm: 27,
+        targetKeystrokes: 2000,
+        maxErrorPercent: 20,
+      },
+      true,
+    ),
+    { canStart: true, reasons: [], scoringAvailable: false },
+  );
+  for (const invalid of [
+    { durationSeconds: 0 },
+    { durationSeconds: 3601 },
+    { targetWpm: 0 },
+    { targetWpm: 1001 },
+  ]) {
+    assert.deepEqual(
+      evaluateExamReadiness({ ...base, ...invalid }, true).reasons,
+      ['RULES_UNSUPPORTED'],
+    );
+  }
 });
