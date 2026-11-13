@@ -1,5 +1,5 @@
-import type { ExamSession } from './exam-contract';
-import { advanceExamSession } from './exam-session';
+import type { ExamSession } from './exam-contract.js';
+import { advanceExamSession } from './exam-session.js';
 
 const insertions = new Set([
   'insertText',
@@ -23,6 +23,10 @@ const corrections = new Set([
   'historyRedo',
 ]);
 
+export function isSupportedExamInputType(inputType: string): boolean {
+  return insertions.has(inputType) || corrections.has(inputType);
+}
+
 export function applyExamInput(
   session: ExamSession,
   text: string,
@@ -35,7 +39,7 @@ export function applyExamInput(
     current.phase === 'finished' ||
     isComposing ||
     text.length > 50_000 ||
-    (!insertions.has(inputType) && !corrections.has(inputType))
+    !isSupportedExamInputType(inputType)
   )
     return current;
   if (text === current.text) return current;

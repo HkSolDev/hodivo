@@ -1,0 +1,784 @@
+/* ==========================================================================
+   TCS iON / DigiALM Style Exam Simulation Responsive CSS Module
+   ========================================================================== */
+
+.examLayout {
+  --ion-brand-primary: #1b3a57;
+  --ion-brand-dark: #0f2744;
+  --ion-brand-accent: #2563eb;
+  --ion-bg-canvas: #f0f2f5;
+  --ion-surface: #ffffff;
+  --ion-surface-subtle: #f8fafc;
+  --ion-border-light: #e2e8f0;
+  --ion-border-strong: #cbd5e1;
+  --ion-border-focus: #1d4ed8;
+  --ion-text-main: #0f172a;
+  --ion-text-secondary: #475569;
+  --ion-text-muted: #64748b;
+  --ion-text-inverse: #ffffff;
+  --ion-timer-green: #15803d;
+  --ion-timer-green-bg: #f0fdf4;
+  --ion-timer-amber: #b45309;
+  --ion-timer-amber-bg: #fffbeb;
+  --ion-timer-red: #b91c1c;
+  --ion-timer-red-bg: #fef2f2;
+  --ion-font-ui:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  --ion-font-passage: 'Times New Roman', Times, Georgia, serif;
+  --ion-font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --passage-font-size: 15px;
+  --passage-line-height: 1.7;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+  background-color: var(--ion-bg-canvas);
+  color: var(--ion-text-main);
+  font-family: var(--ion-font-ui);
+  box-sizing: border-box;
+}
+
+.fontSizeSmall {
+  --passage-font-size: 13px;
+}
+
+.fontSizeNormal {
+  --passage-font-size: 15px;
+}
+
+.fontSizeLarge {
+  --passage-font-size: 18px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* 1. Candidate Header */
+.header {
+  background: linear-gradient(
+    180deg,
+    var(--ion-brand-dark) 0%,
+    var(--ion-brand-primary) 100%
+  );
+  color: var(--ion-text-inverse);
+  padding: 8px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 2px solid #0b1e33;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.brandBadge {
+  background: #dc2626;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 4px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  user-select: none;
+}
+
+.headerMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.selectorRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.selectControl {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid var(--ion-border-strong);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: var(--ion-font-ui);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 260px;
+}
+
+.selectControl:disabled {
+  background: #e2e8f0;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.btnInline {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  padding: 3px 8px;
+  font-size: 0.76rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btnInline:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.btnInline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.headerSub {
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+.headerCenter {
+  display: flex;
+  align-items: center;
+}
+
+.nodeBadge {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.nodeVal {
+  color: #38bdf8;
+  font-family: var(--ion-font-mono);
+  margin-left: 4px;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.candidateCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.candidateAvatar {
+  width: 34px;
+  height: 40px;
+  background: #e2e8f0;
+  border: 1px solid #94a3b8;
+  border-radius: 2px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.candidateDetails {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.candidateName {
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+
+.candidateMeta {
+  color: #cbd5e1;
+}
+
+/* Timer Box */
+.timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 4px;
+  min-width: 100px;
+  border: 2px solid;
+  transition:
+    background-color 0.3s,
+    border-color 0.3s;
+}
+
+.timerLabel {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.timerDigits {
+  font-family: var(--ion-font-mono);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.timerSafe {
+  background: var(--ion-timer-green-bg);
+  border-color: var(--ion-timer-green);
+  color: var(--ion-timer-green);
+}
+
+.timerWarning {
+  background: var(--ion-timer-amber-bg);
+  border-color: var(--ion-timer-amber);
+  color: var(--ion-timer-amber);
+}
+
+.timerCritical {
+  background: var(--ion-timer-red-bg);
+  border-color: var(--ion-timer-red);
+  color: var(--ion-timer-red);
+  animation: timerPulse 1s infinite alternate;
+}
+
+@keyframes timerPulse {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0.88;
+    transform: scale(1.02);
+  }
+}
+
+/* 2. Controls & Counters Bar */
+.toolbar {
+  background: #e2e8f0;
+  border-bottom: 1px solid var(--ion-border-strong);
+  padding: 6px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toolbarSection {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbarLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ion-text-secondary);
+}
+
+.zoomControls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.btnZoom {
+  background: #ffffff;
+  border: 1px solid var(--ion-border-strong);
+  border-radius: 3px;
+  padding: 2px 9px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ion-text-main);
+  transition: all 0.15s ease;
+}
+
+.btnZoom:hover {
+  background: #f1f5f9;
+}
+
+.btnZoomActive {
+  background: var(--ion-brand-primary);
+  color: #ffffff;
+  border-color: var(--ion-brand-primary);
+}
+
+.rulePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid var(--ion-border-strong);
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  color: var(--ion-text-secondary);
+}
+
+.ruleDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+}
+
+.statPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  color: var(--ion-text-secondary);
+}
+
+.statValue {
+  color: var(--ion-text-main);
+  font-family: var(--ion-font-mono);
+  font-size: 0.9rem;
+}
+
+/* Readiness & Error Alerts */
+.alertBanner {
+  margin: 12px 16px 0 16px;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 0.84rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.alertError {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.alertBanner .btnInline {
+  color: inherit;
+  border-color: currentColor;
+  background: #ffffff;
+}
+
+.alertWarning {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.alertReasonsList {
+  margin-top: 4px;
+  padding-left: 18px;
+  font-size: 0.78rem;
+}
+
+/* 3. Split-Screen Layout */
+.splitScreen {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  padding: 12px 16px;
+  min-height: 480px;
+  background: #f1f5f9;
+  box-sizing: border-box;
+}
+
+.panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ion-surface);
+  border: 1px solid var(--ion-border-strong);
+  border-radius: 4px;
+  min-height: 200px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.panelHeader {
+  background: #f8fafc;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--ion-border-light);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.panelTitle {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ion-brand-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.panelHint {
+  font-size: 0.74rem;
+  color: var(--ion-text-muted);
+}
+
+.passageContent {
+  min-height: 10rem;
+  max-height: 24rem;
+  flex: 1 1 0;
+  overflow-y: auto;
+  padding: 14px 18px;
+  font-family: var(--ion-font-passage);
+  font-size: var(--passage-font-size);
+  line-height: var(--passage-line-height);
+  color: #111827;
+  user-select: none;
+  -webkit-user-select: none;
+  background: #ffffff;
+  cursor: default;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.typingTextarea {
+  min-height: 10rem;
+  flex: 1 1 0;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 14px 18px;
+  font-family: var(--ion-font-passage);
+  font-size: var(--passage-font-size);
+  line-height: var(--passage-line-height);
+  color: #111827;
+  background: #ffffff;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.typingTextarea:focus {
+  background: #fafcff;
+}
+
+.typingTextarea:focus-visible {
+  outline: 2px solid var(--ion-border-focus);
+  outline-offset: -2px;
+}
+
+.typingTextarea:disabled {
+  background: #f8fafc;
+  color: #475569;
+  cursor: not-allowed;
+}
+
+/* 4. Footer Action Bar */
+.footer {
+  background: #ffffff;
+  border-top: 1px solid var(--ion-border-strong);
+  padding: 8px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  z-index: 10;
+}
+
+.footerLeft {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.exitLink {
+  color: var(--ion-brand-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.exitLink:hover {
+  text-decoration: underline;
+}
+
+.footerWarning {
+  font-size: 0.78rem;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn {
+  padding: 7px 16px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.86rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  font-family: var(--ion-font-ui);
+}
+
+.btnPrimary {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0369a1;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: #0369a1;
+}
+
+.btnSecondary {
+  background: #f1f5f9;
+  border-color: var(--ion-border-strong);
+  color: var(--ion-text-main);
+}
+
+.btnSecondary:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.btnDanger {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #b91c1c;
+}
+
+.btnDanger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 5. Native Accessible Dialog */
+.dialog {
+  border: 1px solid var(--ion-border-strong);
+  border-radius: 6px;
+  padding: 0;
+  width: 90%;
+  max-width: 520px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+  background: #ffffff;
+  color: var(--ion-text-main);
+}
+
+.dialog[open] {
+  margin: auto;
+}
+
+.dialog::backdrop {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(2px);
+}
+
+.dialogResult {
+  max-width: 580px;
+}
+
+.dialogHeader {
+  background: var(--ion-brand-primary);
+  color: #ffffff;
+  padding: 12px 18px;
+}
+
+.dialogTitle {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.dialogBody {
+  padding: 18px;
+}
+
+.dialogWarningText {
+  font-size: 0.95rem;
+  color: #0f172a;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.dialogSummaryGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--ion-border-light);
+  padding: 12px;
+  border-radius: 4px;
+  margin: 12px 0;
+}
+
+.dialogStatRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--ion-text-secondary);
+}
+
+.dialogStatRow strong {
+  color: var(--ion-text-main);
+  font-family: var(--ion-font-mono);
+}
+
+.dialogNote {
+  font-size: 0.78rem;
+  color: var(--ion-text-muted);
+  margin-top: 8px;
+}
+
+.dialogFooter {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 18px;
+  background: #f1f5f9;
+  border-top: 1px solid var(--ion-border-light);
+}
+
+/* Scorecard Result Banner */
+.resultBanner {
+  text-align: center;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--ion-border-light);
+}
+
+.resultBadge {
+  display: inline-block;
+  padding: 4px 16px;
+  border-radius: 9999px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.resultSummary {
+  font-size: 0.84rem;
+  color: var(--ion-text-secondary);
+}
+
+.scoreGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.scoreCard {
+  background: #f8fafc;
+  border: 1px solid var(--ion-border-light);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scoreCardHero {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.scoreCardLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ion-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.scoreCardVal {
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-family: var(--ion-font-mono);
+  color: #0f172a;
+}
+
+.scoreCardSub {
+  font-size: 0.7rem;
+  color: var(--ion-text-muted);
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+  .headerSub,
+  .nodeBadge {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 6px 12px;
+  }
+  .candidateDetails {
+    display: none;
+  }
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .toolbarSection {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .splitScreen {
+    grid-template-rows: auto auto;
+    padding: 8px 10px;
+  }
+  .panel {
+    min-height: 180px;
+  }
+  .scoreGrid {
+    grid-template-columns: 1fr;
+  }
+}
