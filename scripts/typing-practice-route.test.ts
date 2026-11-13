@@ -42,11 +42,20 @@ test('public practice route projects one passage, rejects query and sanitizes fa
   assert.deepEqual(response.json(), {
     error: 'Practice passages are temporarily unavailable. Please try again.',
   });
-  response = await app.inject({
-    method: 'POST',
-    url: '/api/typing/practice-passage',
-    payload: { text: 'private typing' },
-  });
-  assert.equal(response.statusCode, 404);
-  assert.equal(queryCalls, calls + 1);
+  for (const method of [
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS',
+    'HEAD',
+  ] as const) {
+    response = await app.inject({
+      method,
+      url: '/api/typing/practice-passage',
+    });
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(queryCalls, calls + 1);
+  }
 });

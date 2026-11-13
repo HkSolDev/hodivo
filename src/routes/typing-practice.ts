@@ -7,10 +7,13 @@ export function registerTypingPracticeRoutes(
     typeof getRandomPracticePassage
   > = getRandomPracticePassage,
 ) {
-  app.get<{ Querystring: Record<string, unknown> }>(
+  app.all<{ Querystring: Record<string, unknown> }>(
     '/api/typing/practice-passage',
     async (request, reply) => {
       reply.header('cache-control', 'no-store');
+      if (request.method !== 'GET') {
+        return reply.code(404).send({ error: 'Not Found' });
+      }
       if (Object.keys(request.query).length > 0) {
         return reply
           .code(400)
