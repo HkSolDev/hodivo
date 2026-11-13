@@ -327,3 +327,9 @@ remains unfrozen. No S3/S4/S5 runtime writer has been launched.
 AGY follow-up: exact session command grants resolved the headless denial.
 Gemini3.8FlashHigh completed the actual S5 plan review successfully. Auto mode
 is unavailable on this account; no global permission settings were changed.
+
+## Current execution checkpoint — initial simulation approved
+
+Hemant approved runnable simulation without official scoring: 600 seconds, normal corrections, first accepted insertion timing, blocked paste/drop and continued timing through confirmation. Contract exam-v1 and serialized fixtures frozen at e5876be. Importer/editor support d310259; local domain session/input 163d8b3; reviewed/fixed client cc11273. Affected local suite 59/59 passed; strict checks and lint passed. Independent domain review timed out, so final acceptance remains pending.
+
+GLM and DeepSeek larger generation tasks returned no code after length exhaustion. MiniMax client code was recovered from scratch files and corrected by coordinator; its first UI call returned no code. AGY was added at Hemant request, completed static original HTML/CSS fidelity review, then timed out on full UI generation. No backend route or exam page is implemented. UI must still closely follow the original reference across the required responsive matrix. See agent-progress/typing-exam-dispatch-20261113.md for actual ownership, sessions and outcomes. Next tasks must be bounded, one small deliverable per call. No model availability, exit 0 or test claim substitutes for inspected artifacts and manager-run checks.
