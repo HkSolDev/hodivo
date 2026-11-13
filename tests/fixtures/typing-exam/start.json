@@ -1,0 +1,41 @@
+{
+  "snapshot": {
+    "contractRevision": "exam-v1",
+    "version": {
+      "id": "version1",
+      "examId": "exam1",
+      "versionKey": "chsl2025english",
+      "label": "SSC CHSL 2025 LDC/JSA English simulation",
+      "language": "en",
+      "examYear": 2025,
+      "rules": {
+        "durationSeconds": 600,
+        "targetWpm": 35,
+        "targetKeystrokes": null,
+        "maxErrorPercent": null,
+        "backspacePolicy": "UNRESTRICTED",
+        "editingPolicy": "native-correction-v1",
+        "scoringMethod": null,
+        "instructions": "Corrections allowed. Official scoring unavailable.",
+        "ruleSourceUrl": "https://ssc.gov.in/api/attachment/uploads/masterData/NoticeBoards/Notice_of_adv_chsl_2025.pdf",
+        "ruleSourceNote": "Ordinary English profile; see reviewed rule matrix."
+      },
+      "rulesUpdatedAt": "2026-11-13T00:00:00.000Z",
+      "readiness": {
+        "canStart": true,
+        "reasons": [],
+        "scoringAvailable": false
+      }
+    },
+    "passage": {
+      "id": "passage1",
+      "title": "Synthetic acceptance passage",
+      "text": "A careful typist reads.\n\tThen writes  accurately.  ",
+      "contentHash": "b8223b902084003a226f2be3a1644e3f27ea72e151ad06bae6f42d8c5622cd68",
+      "revision": 1,
+      "sourceKind": "PRACTICE",
+      "sourceUrl": null,
+      "sourceNote": "Synthetic test fixture, not an official previous-year passage."
+    }
+  }
+}
