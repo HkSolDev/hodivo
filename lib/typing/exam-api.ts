@@ -113,9 +113,7 @@ export async function loadExamSnapshot(
   signal: AbortSignal,
   passageId?: string,
 ): Promise<ExamStartSnapshot> {
-  const query = passageId
-    ? `?passageId=${encodeURIComponent(passageId)}`
-    : '';
+  const query = passageId ? `?passageId=${encodeURIComponent(passageId)}` : '';
   const payload = await requestJson(
     `/api/typing/exam-versions/${encodeURIComponent(versionId)}/passage${query}`,
     signal,

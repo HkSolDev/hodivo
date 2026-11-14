@@ -169,7 +169,10 @@ function page<T extends { id: string }>(
   };
 }
 
-function eligiblePassageWhere(versionId: string, passageId?: string): Prisma.Sql {
+function eligiblePassageWhere(
+  versionId: string,
+  passageId?: string,
+): Prisma.Sql {
   const compatible = '^[\t\n -~]+$';
   const passageFilter = passageId
     ? Prisma.sql`AND p."id" = ${passageId}`
