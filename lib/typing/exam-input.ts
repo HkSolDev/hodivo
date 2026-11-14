@@ -45,7 +45,21 @@ export function applyExamInput(
   if (text === current.text) return current;
   if (current.phase === 'ready') {
     if (!insertions.has(inputType) || text.length === 0) return current;
-    return { ...current, text, phase: 'running', deadline: now + 600_000 };
+    const durationSeconds = current.snapshot.version.rules.durationSeconds;
+    if (
+      typeof durationSeconds !== 'number' ||
+      !Number.isInteger(durationSeconds) ||
+      durationSeconds < 1 ||
+      durationSeconds > 3600
+    ) {
+      throw new Error('Unsupported exam simulation.');
+    }
+    return {
+      ...current,
+      text,
+      phase: 'running',
+      deadline: now + durationSeconds * 1000,
+    };
   }
   return { ...current, text };
 }

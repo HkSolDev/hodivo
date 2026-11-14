@@ -208,7 +208,7 @@ test('exam client rejects malformed payloads, unknown keys and inconsistent read
     {
       snapshot: {
         ...snapshot,
-        version: { ...version, rules: { ...rules, durationSeconds: 300 } },
+        version: { ...version, rules: { ...rules, durationSeconds: 3601 } },
       },
     },
     {

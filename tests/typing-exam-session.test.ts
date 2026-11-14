@@ -59,3 +59,24 @@ test('unready and unsupported snapshots fail closed; invalid clocks are rejected
       advanceExamSession(createExamSession(fixture.snapshot), now),
     );
 });
+
+test('DB-driven SSC CGL profile (900s / 27 WPM) initializes and expires at 900s', () => {
+  const cglSnapshot: ExamStartSnapshot = {
+    ...fixture.snapshot,
+    version: {
+      ...fixture.snapshot.version,
+      rules: {
+        ...fixture.snapshot.version.rules,
+        durationSeconds: 900,
+        targetWpm: 27,
+        targetKeystrokes: 2000,
+        maxErrorPercent: 20,
+      },
+    },
+  };
+  const ready = createExamSession(cglSnapshot);
+  assert.equal(ready.remainingSeconds, 900);
+  const running = applyExamInput(ready, 'A', 'insertText', 100);
+  assert.equal(running.deadline, 900100);
+  assert.equal(advanceExamSession(running, 1101).remainingSeconds, 899);
+});

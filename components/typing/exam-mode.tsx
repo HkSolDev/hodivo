@@ -413,7 +413,8 @@ export function ExamMode() {
   const typedLength = session?.text.length ?? 0;
   const remainingStrokes = Math.max(0, passageLength - typedLength);
   const wordCount = countWords(session?.text ?? '');
-  const remainingSecs = session?.remainingSeconds ?? 600;
+  const remainingSecs =
+    session?.remainingSeconds ?? versionDetail?.rules.durationSeconds ?? 600;
 
   return (
     <div
