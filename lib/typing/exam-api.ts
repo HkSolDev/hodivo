@@ -1,5 +1,6 @@
 import type {
   ExamPage,
+  ExamPassageSummary,
   ExamReason,
   ExamRules,
   ExamStartSnapshot,
@@ -94,12 +95,29 @@ export async function loadExamVersion(
   return version;
 }
 
+export async function loadExamPassages(
+  versionId: string,
+  signal: AbortSignal,
+): Promise<ExamPassageSummary[]> {
+  const payload = await requestJson(
+    `/api/typing/exam-versions/${encodeURIComponent(versionId)}/passages`,
+    signal,
+  );
+  const raw = requireKeys(payload, ['passages'])['passages'];
+  if (!Array.isArray(raw)) throw invalidPayload();
+  return raw.map(parsePassageSummary);
+}
+
 export async function loadExamSnapshot(
   versionId: string,
   signal: AbortSignal,
+  passageId?: string,
 ): Promise<ExamStartSnapshot> {
+  const query = passageId
+    ? `?passageId=${encodeURIComponent(passageId)}`
+    : '';
   const payload = await requestJson(
-    `/api/typing/exam-versions/${encodeURIComponent(versionId)}/passage`,
+    `/api/typing/exam-versions/${encodeURIComponent(versionId)}/passage${query}`,
     signal,
   );
   const snapshot = parseStartSnapshot(
@@ -267,6 +285,23 @@ function parseStartSnapshot(value: unknown): ExamStartSnapshot {
   if (!version.readiness.canStart || version.readiness.reasons.length > 0)
     throw invalidPayload();
   return { contractRevision: 'exam-v1', version, passage };
+}
+
+function parsePassageSummary(value: unknown): ExamPassageSummary {
+  const v = requireKeys(value, [
+    'id',
+    'title',
+    'sourceKind',
+    'examYear',
+    'shift',
+  ]);
+  return {
+    id: id(v['id']),
+    title: str(v['title'], 200),
+    sourceKind: enumOf(v['sourceKind'], SOURCE_KINDS),
+    examYear: nint(v['examYear'], 1900, 2100),
+    shift: nstr(v['shift'], 100),
+  };
 }
 
 function parsePassage(value: unknown): ExamStartSnapshot['passage'] {

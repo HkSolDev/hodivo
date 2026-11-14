@@ -43,6 +43,14 @@ export interface ExamVersionDetail extends ExamVersionSummary {
   };
 }
 
+export interface ExamPassageSummary {
+  id: string;
+  title: string;
+  sourceKind: 'OFFICIAL_PREVIOUS_YEAR' | 'RECONSTRUCTED' | 'PRACTICE';
+  examYear: number | null;
+  shift: string | null;
+}
+
 export interface ExamStartSnapshot {
   contractRevision: 'exam-v1';
   version: ExamVersionDetail;

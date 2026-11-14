@@ -22,6 +22,7 @@ export function registerTypingExamRoutes(
     '/api/typing/exams/:examId/versions',
     '/api/typing/exam-versions/:versionId',
     '/api/typing/exam-versions/:versionId/passage',
+    '/api/typing/exam-versions/:versionId/passages',
   ];
   for (const [index, path] of paths.entries()) {
     app.all<{ Params: { examId?: string; versionId?: string } }>(
@@ -37,13 +38,10 @@ export function registerTypingExamRoutes(
         try {
           const query = new URL(request.raw.url ?? '', 'http://localhost')
             .searchParams;
-          const listing = index < 2;
+          const allowedKeys =
+            index < 2 ? ['limit', 'cursor'] : index === 3 ? ['passageId'] : [];
           for (const key of query.keys()) {
-            if (
-              !listing ||
-              !['limit', 'cursor'].includes(key) ||
-              query.getAll(key).length !== 1
-            )
+            if (!allowedKeys.includes(key) || query.getAll(key).length !== 1)
               throw new ExamCatalogueError('INVALID_REQUEST');
           }
           const id = request.params.examId ?? request.params.versionId;
@@ -58,6 +56,9 @@ export function registerTypingExamRoutes(
           const limit = limitText === null ? 20 : Number(limitText);
           const cursor = query.get('cursor');
           if (cursor !== null && !identifier.test(cursor))
+            throw new ExamCatalogueError('INVALID_REQUEST');
+          const passageId = query.get('passageId');
+          if (passageId !== null && !identifier.test(passageId))
             throw new ExamCatalogueError('INVALID_REQUEST');
           if (index === 0) {
             const page = await catalogue.listExams(limit, cursor ?? undefined);
@@ -74,7 +75,11 @@ export function registerTypingExamRoutes(
           if (index === 2 && id)
             return { version: await catalogue.getVersion(id) };
           if (index === 3 && id)
-            return { snapshot: await catalogue.getSnapshot(id) };
+            return {
+              snapshot: await catalogue.getSnapshot(id, passageId ?? undefined),
+            };
+          if (index === 4 && id)
+            return { passages: await catalogue.listPassages(id) };
           throw new ExamCatalogueError('INVALID_REQUEST');
         } catch (error) {
           if (error instanceof ExamCatalogueError) {

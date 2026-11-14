@@ -9,6 +9,7 @@ import {
 } from 'react';
 import Link from 'next/link';
 import type {
+  ExamPassageSummary,
   ExamReason,
   ExamSummary,
   ExamVersionSummary,
@@ -28,6 +29,7 @@ import {
 } from '../../lib/typing/exam-input';
 import {
   loadExams,
+  loadExamPassages,
   loadExamVersions,
   loadExamVersion,
   loadExamSnapshot,
@@ -67,6 +69,8 @@ export function ExamMode() {
   const [versionDetail, setVersionDetail] = useState<ExamVersionDetail | null>(
     null,
   );
+  const [passages, setPassages] = useState<ExamPassageSummary[]>([]);
+  const [selectedPassageId, setSelectedPassageId] = useState('');
   const [snapshot, setSnapshot] = useState<ExamStartSnapshot | null>(null);
   const [isLoadingExams, setIsLoadingExams] = useState(true);
   const [isLoadingMoreExams, setIsLoadingMoreExams] = useState(false);
@@ -190,9 +194,15 @@ export function ExamMode() {
     const controller = new AbortController();
     setIsLoadingVersionDetail(true);
     setErrorMessage(null);
-    loadExamVersion(selectedVersionId, controller.signal)
-      .then((detail) => {
-        if (!controller.signal.aborted) setVersionDetail(detail);
+    Promise.all([
+      loadExamVersion(selectedVersionId, controller.signal),
+      loadExamPassages(selectedVersionId, controller.signal).catch(() => []),
+    ])
+      .then(([detail, passageList]) => {
+        if (!controller.signal.aborted) {
+          setVersionDetail(detail);
+          setPassages(passageList);
+        }
       })
       .catch((error) => {
         if (!controller.signal.aborted)
@@ -219,6 +229,7 @@ export function ExamMode() {
       const loaded = await loadExamSnapshot(
         versionDetail.id,
         controller.signal,
+        selectedPassageId || undefined,
       );
       if (controller.signal.aborted) return;
       setSnapshot(loaded);
@@ -242,6 +253,8 @@ export function ExamMode() {
     setIsLoadingSnapshot(false);
     setIsLoadingVersionDetail(false);
     setVersionDetail(null);
+    setPassages([]);
+    setSelectedPassageId('');
     setSelectedVersionId('');
     setSnapshot(null);
     commitSession(null);
@@ -500,6 +513,36 @@ export function ExamMode() {
                 >
                   {isLoadingMoreVersions ? 'Loading...' : 'More Versions'}
                 </button>
+              )}
+
+              {passages.length > 0 && (
+                <>
+                  <label htmlFor="passage-select" className={styles.srOnly}>
+                    Passage
+                  </label>
+                  <select
+                    id="passage-select"
+                    className={styles.selectControl}
+                    value={selectedPassageId}
+                    disabled={isSessionActive || isLoadingVersionDetail}
+                    onChange={(e) => setSelectedPassageId(e.target.value)}
+                  >
+                    <option value="">
+                      Random passage ({passages.length} available)
+                    </option>
+                    {passages.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title} (
+                        {p.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
+                          ? 'Previous Year'
+                          : p.sourceKind === 'RECONSTRUCTED'
+                            ? 'Reconstructed'
+                            : 'Practice'}
+                        )
+                      </option>
+                    ))}
+                  </select>
+                </>
               )}
             </div>
             <span className={styles.headerSub}>

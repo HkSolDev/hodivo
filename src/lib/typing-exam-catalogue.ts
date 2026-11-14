@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import { prisma } from '../db.js';
-import type {
+import {
   Prisma,
-  PrismaClient,
-  TypingExamVersion,
+  type PrismaClient,
+  type TypingExamVersion,
 } from '../../generated/prisma/index.js';
 import type {
   ExamPage,
+  ExamPassageSummary,
   ExamReason,
   ExamRules,
   ExamStartSnapshot,
@@ -32,7 +33,11 @@ export interface ExamCatalogue {
     cursor?: string,
   ): Promise<ExamPage<ExamVersionSummary>>;
   getVersion(versionId: string): Promise<ExamVersionDetail>;
-  getSnapshot(versionId: string): Promise<ExamStartSnapshot>;
+  listPassages(versionId: string): Promise<ExamPassageSummary[]>;
+  getSnapshot(
+    versionId: string,
+    passageId?: string,
+  ): Promise<ExamStartSnapshot>;
 }
 
 const visibleVersion = { status: 'PUBLISHED', language: 'en' } as const;
@@ -164,16 +169,13 @@ function page<T extends { id: string }>(
   };
 }
 
-async function eligiblePassage(
-  tx: Prisma.TransactionClient,
-  versionId: string,
-): Promise<ExamStartSnapshot['passage'] | null> {
+function eligiblePassageWhere(versionId: string, passageId?: string): Prisma.Sql {
   const compatible = '^[\t\n -~]+$';
-  // shortcut: random sorting suits a small catalogue; measure before 10000 published passages.
-  const rows = await tx.$queryRaw<ExamStartSnapshot['passage'][]>`
-    SELECT p."id", p."title", p."text", p."contentHash", p."revision", p."sourceKind", p."sourceUrl", p."sourceNote"
-    FROM "TypingPassage" p
-    WHERE p."examVersionId" = ${versionId} AND p."status" = 'PUBLISHED'
+  const passageFilter = passageId
+    ? Prisma.sql`AND p."id" = ${passageId}`
+    : Prisma.empty;
+  return Prisma.sql`
+    p."examVersionId" = ${versionId} AND p."status" = 'PUBLISHED'
       AND p."reviewedAt" IS NOT NULL AND p."publishedAt" IS NOT NULL
       AND p."revision" > 0 AND char_length(p."text") BETWEEN 1 AND 50000
       AND p."text" ~ ${compatible} AND p."text" ~ '[!-~]'
@@ -181,6 +183,20 @@ async function eligiblePassage(
       AND p."sourceKind" IN ('OFFICIAL_PREVIOUS_YEAR', 'RECONSTRUCTED', 'PRACTICE')
       AND (p."sourceKind" <> 'OFFICIAL_PREVIOUS_YEAR' OR
         (length(btrim(p."sourceUrl")) > 0 AND length(btrim(p."sourceNote")) > 0))
+      ${passageFilter}
+  `;
+}
+
+async function eligiblePassage(
+  tx: Prisma.TransactionClient,
+  versionId: string,
+  passageId?: string,
+): Promise<ExamStartSnapshot['passage'] | null> {
+  // shortcut: random sorting suits a small catalogue; measure before 10000 published passages.
+  const rows = await tx.$queryRaw<ExamStartSnapshot['passage'][]>`
+    SELECT p."id", p."title", p."text", p."contentHash", p."revision", p."sourceKind", p."sourceUrl", p."sourceNote"
+    FROM "TypingPassage" p
+    WHERE ${eligiblePassageWhere(versionId, passageId)}
     ORDER BY random() LIMIT 1
   `;
   const passage = rows[0] ?? null;
@@ -196,14 +212,14 @@ async function eligiblePassage(
 export function createExamCatalogue(
   database: PrismaClient = prisma,
 ): ExamCatalogue {
-  async function read(versionId: string) {
+  async function read(versionId: string, passageId?: string) {
     return database.$transaction(
       async (tx) => {
         const version = await tx.typingExamVersion.findFirst({
           where: { id: versionId, ...visibleVersion },
         });
         if (!version) throw new ExamCatalogueError('NOT_FOUND');
-        const passage = await eligiblePassage(tx, versionId);
+        const passage = await eligiblePassage(tx, versionId, passageId);
         return { version: versionDetail(version, passage !== null), passage };
       },
       { isolationLevel: 'RepeatableRead', timeout: 5000 },
@@ -258,8 +274,21 @@ export function createExamCatalogue(
     async getVersion(versionId) {
       return (await read(versionId)).version;
     },
-    async getSnapshot(versionId) {
-      const { version, passage } = await read(versionId);
+    async listPassages(versionId) {
+      const version = await database.typingExamVersion.findFirst({
+        where: { id: versionId, ...visibleVersion },
+        select: { id: true },
+      });
+      if (!version) throw new ExamCatalogueError('NOT_FOUND');
+      return database.$queryRaw<ExamPassageSummary[]>`
+        SELECT p."id", p."title", p."sourceKind", p."examYear", p."shift"
+        FROM "TypingPassage" p
+        WHERE ${eligiblePassageWhere(versionId)}
+        ORDER BY p."sourceKind" ASC, p."title" ASC, p."id" ASC
+      `;
+    },
+    async getSnapshot(versionId, passageId) {
+      const { version, passage } = await read(versionId, passageId);
       if (!version.readiness.canStart || !passage)
         throw new ExamCatalogueError(
           'EXAM_NOT_READY',
