@@ -459,9 +459,19 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
         await page.emulateMedia({ colorScheme });
         await expect(row.locator('[data-job-title] a')).toHaveCSS(
           'color',
-          colorScheme === 'dark' ? 'rgb(245, 245, 247)' : 'rgb(29, 29, 31)',
+          'rgb(29, 29, 31)',
         );
       }
+      await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+      await expect(row.locator('[data-job-title] a')).toHaveCSS(
+        'color',
+        'rgb(245, 245, 247)',
+      );
+      await page.getByRole('button', { name: 'Switch to light mode' }).click();
+      await expect(row.locator('[data-job-title] a')).toHaveCSS(
+        'color',
+        'rgb(29, 29, 31)',
+      );
       await layouts.getByRole('button', { name: 'Cards', exact: true }).click();
       await expect(page).toHaveURL(/layout=cards/);
       await expect(row.locator('[data-job-extra]')).toBeVisible();

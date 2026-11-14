@@ -83,7 +83,7 @@ test('theme toggle follows device, overrides it, and persists', async (t) => {
       .evaluate((el) => getComputedStyle(el).backgroundColor);
   }
 
-  // 1-2: first visit follows device preference in both directions.
+  // 1-2: first visit defaults to light mode regardless of device preference.
   for (const colorScheme of ['light', 'dark'] as const) {
     const context = await browser.newContext({ colorScheme });
     const page = await context.newPage();
@@ -97,15 +97,12 @@ test('theme toggle follows device, overrides it, and persists', async (t) => {
         errors.push(msg.text());
     });
     await page.goto(origin);
-    const toggle = page.getByRole('button', {
-      name:
-        colorScheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-    });
+    const toggle = page.getByRole('button', { name: 'Switch to dark mode' });
     await expect(toggle).toBeVisible();
     assert.equal(
       await bodyBackground(page),
-      colorScheme === 'dark' ? 'rgb(22, 22, 24)' : 'rgb(245, 245, 247)',
-      `first visit must follow ${colorScheme} device preference`,
+      'rgb(245, 245, 247)',
+      `first visit must default to light mode even with ${colorScheme} device preference`,
     );
     assert.deepEqual(errors, [], 'no console or hydration errors');
     await context.close();
@@ -144,15 +141,17 @@ test('theme toggle follows device, overrides it, and persists', async (t) => {
     await context.close();
   }
 
-  // 3 (reverse): manual light overrides a dark device preference.
+  // 3 (reverse): manual dark toggle works and persists under dark device preference.
   {
     const context = await browser.newContext({ colorScheme: 'dark' });
     const page = await context.newPage();
     await page.goto(origin);
+    assert.equal(await bodyBackground(page), 'rgb(245, 245, 247)');
+    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+    assert.equal(await bodyBackground(page), 'rgb(22, 22, 24)');
+    await page.reload();
     assert.equal(await bodyBackground(page), 'rgb(22, 22, 24)');
     await page.getByRole('button', { name: 'Switch to light mode' }).click();
-    assert.equal(await bodyBackground(page), 'rgb(245, 245, 247)');
-    await page.reload();
     assert.equal(await bodyBackground(page), 'rgb(245, 245, 247)');
     await context.close();
   }
@@ -176,50 +175,27 @@ test('theme toggle follows device, overrides it, and persists', async (t) => {
     await context.close();
   }
 
-  // Device changes without reload: button label/icon stay in sync while
-  // there is no explicit choice; an explicit choice then wins over device.
-  for (const [start, flipped] of [
-    ['light', 'dark'],
-    ['dark', 'light'],
-  ] as const) {
-    const context = await browser.newContext({ colorScheme: start });
+  // Device changes without reload: neither default light mode nor an explicit
+  // dark choice is overridden by OS colorScheme changes.
+  {
+    const context = await browser.newContext({ colorScheme: 'light' });
     const page = await context.newPage();
     await page.goto(origin);
-    const startBg = start === 'dark' ? 'rgb(22, 22, 24)' : 'rgb(245, 245, 247)';
-    const flippedBg =
-      flipped === 'dark' ? 'rgb(22, 22, 24)' : 'rgb(245, 245, 247)';
-    assert.equal(await bodyBackground(page), startBg);
-    await page.emulateMedia({ colorScheme: flipped });
-    await expect(
-      page.getByRole('button', {
-        name:
-          flipped === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-      }),
-    ).toBeVisible();
-    assert.equal(await bodyBackground(page), flippedBg);
-    // Clicking switches away from the currently visible (device) theme.
-    await page
-      .getByRole('button', {
-        name:
-          flipped === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-      })
-      .click();
-    assert.equal(await bodyBackground(page), startBg);
+    assert.equal(await bodyBackground(page), 'rgb(245, 245, 247)');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    assert.equal(await bodyBackground(page), 'rgb(245, 245, 247)');
+    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+    assert.equal(await bodyBackground(page), 'rgb(22, 22, 24)');
     assert.equal(
       await page.evaluate(() =>
         document.documentElement.getAttribute('data-theme'),
       ),
-      start,
+      'dark',
     );
-    // Later device changes must not override the explicit choice.
-    await page.emulateMedia({ colorScheme: start });
-    assert.equal(await bodyBackground(page), startBg);
-    await page.emulateMedia({ colorScheme: flipped });
-    assert.equal(await bodyBackground(page), startBg);
+    await page.emulateMedia({ colorScheme: 'light' });
+    assert.equal(await bodyBackground(page), 'rgb(22, 22, 24)');
     await expect(
-      page.getByRole('button', {
-        name: start === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-      }),
+      page.getByRole('button', { name: 'Switch to light mode' }),
     ).toBeVisible();
     await context.close();
   }
@@ -251,7 +227,7 @@ test('theme toggle follows device, overrides it, and persists', async (t) => {
     await context.close();
   }
 
-  // Without JavaScript, device-based appearance is retained.
+  // Without JavaScript, light mode remains the default.
   {
     const context = await browser.newContext({
       colorScheme: 'dark',
@@ -259,7 +235,7 @@ test('theme toggle follows device, overrides it, and persists', async (t) => {
     });
     const page = await context.newPage();
     await page.goto(origin);
-    assert.equal(await bodyBackground(page), 'rgb(22, 22, 24)');
+    assert.equal(await bodyBackground(page), 'rgb(245, 245, 247)');
     await context.close();
   }
 });

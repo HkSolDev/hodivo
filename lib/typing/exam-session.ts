@@ -7,8 +7,14 @@ export function createExamSession(snapshot: ExamStartSnapshot): ExamSession {
     !readiness.canStart ||
     readiness.reasons.length !== 0 ||
     readiness.scoringAvailable ||
-    rules.durationSeconds !== 600 ||
-    rules.targetWpm !== 35 ||
+    typeof rules.durationSeconds !== 'number' ||
+    !Number.isInteger(rules.durationSeconds) ||
+    rules.durationSeconds < 1 ||
+    rules.durationSeconds > 3600 ||
+    typeof rules.targetWpm !== 'number' ||
+    !Number.isInteger(rules.targetWpm) ||
+    rules.targetWpm < 1 ||
+    rules.targetWpm > 1000 ||
     rules.backspacePolicy !== 'UNRESTRICTED' ||
     rules.editingPolicy !== 'native-correction-v1' ||
     rules.scoringMethod !== null
@@ -19,7 +25,7 @@ export function createExamSession(snapshot: ExamStartSnapshot): ExamSession {
     phase: 'ready',
     text: '',
     deadline: null,
-    remainingSeconds: 600,
+    remainingSeconds: rules.durationSeconds,
     finishReason: null,
   };
 }

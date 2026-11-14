@@ -50,8 +50,20 @@ test('exam HTTP contract validates requests and sanitizes errors before exposing
       check('version', id);
       return snapshot.version;
     },
-    async getSnapshot(id) {
-      check('snapshot', id);
+    async listPassages(id) {
+      check('passages', id);
+      return [
+        {
+          id: snapshot.passage.id,
+          title: snapshot.passage.title,
+          sourceKind: snapshot.passage.sourceKind,
+          examYear: null,
+          shift: null,
+        },
+      ];
+    },
+    async getSnapshot(id, passageId) {
+      check('snapshot', id, passageId);
       return snapshot;
     },
   };
