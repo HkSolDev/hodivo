@@ -17,10 +17,7 @@ function storedTheme(): Theme | null {
 
 function currentTheme(): Theme {
   const explicit = document.documentElement.getAttribute('data-theme');
-  if (explicit === 'light' || explicit === 'dark') return explicit;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? 'dark'
-    : 'light';
+  return explicit === 'dark' ? 'dark' : 'light';
 }
 
 export function ThemeToggle() {
@@ -28,19 +25,11 @@ export function ThemeToggle() {
 
   useEffect(() => {
     const stored = storedTheme();
-    if (stored) document.documentElement.setAttribute('data-theme', stored);
+    document.documentElement.setAttribute(
+      'data-theme',
+      stored === 'dark' ? 'dark' : 'light',
+    );
     setTheme(currentTheme());
-
-    const device = window.matchMedia('(prefers-color-scheme: dark)');
-    function followDevice(event: MediaQueryListEvent) {
-      // An explicit choice (data-theme, set even when storage is
-      // unavailable) must not be overridden by the device.
-      if (document.documentElement.hasAttribute('data-theme')) return;
-      if (storedTheme()) return;
-      setTheme(event.matches ? 'dark' : 'light');
-    }
-    device.addEventListener('change', followDevice);
-    return () => device.removeEventListener('change', followDevice);
   }, []);
 
   function toggleTheme() {
