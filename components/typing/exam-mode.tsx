@@ -35,6 +35,7 @@ import {
   loadExamSnapshot,
   ExamApiError,
 } from '../../lib/typing/exam-api';
+import { evaluateExamAttempt } from '../../lib/typing/exam-evaluator';
 import styles from './exam-mode.module.css';
 
 const REASON_MESSAGES: Record<ExamReason, string> = {
@@ -579,35 +580,18 @@ export function ExamMode() {
     ? splitPassageForHighlight(snapshot.passage.text, localText.length)
     : null;
 
-  // Practice-estimate scorecard metrics for completion dialog
+  // Unified exam evaluation (Full Mistakes = 1.0, Half Mistakes = 0.5, Category Cutoffs)
   const durationProfileSecs = versionDetail?.rules.durationSeconds ?? 600;
   const elapsedSecs = Math.max(0, durationProfileSecs - remainingSecs);
-  const elapsedMins = Math.max(elapsedSecs / 60, 1 / 60);
-  const targetWpm = versionDetail?.rules.targetWpm ?? 35;
-  const maxErrorPct = versionDetail?.rules.maxErrorPercent ?? 7;
-  const masterStr = snapshot?.passage.text ?? '';
-  const typedStr = session?.text ?? '';
-  let correctChars = 0;
-  const compareLen = Math.min(typedLength, masterStr.length);
-  for (let i = 0; i < compareLen; i++) {
-    if (typedStr[i] === masterStr[i]) correctChars++;
-  }
-  const incorrectChars = Math.max(0, typedLength - correctChars);
-  const grossWpm =
-    typedLength > 0 ? Math.round(typedLength / 5 / elapsedMins) : 0;
-  const netWpm =
-    typedLength > 0
-      ? Math.max(
-          0,
-          Math.round((typedLength / 5 - incorrectChars) / elapsedMins),
-        )
-      : 0;
-  const accuracyPct =
-    typedLength > 0 ? Math.round((correctChars / typedLength) * 100) : 100;
-  const errorPct =
-    typedLength > 0
-      ? Number(((incorrectChars / typedLength) * 100).toFixed(1))
-      : 0;
+  const selectedExamSlug =
+    exams.find((ex) => ex.id === selectedExamId)?.slug ?? null;
+  const evaluation = evaluateExamAttempt({
+    masterText: snapshot?.passage.text ?? '',
+    typedText: session?.text ?? '',
+    elapsedSeconds: elapsedSecs,
+    examSlug: selectedExamSlug,
+    rules: versionDetail?.rules ?? null,
+  });
 
   return (
     <div
@@ -1335,49 +1319,65 @@ export function ExamMode() {
           <div className={styles.scoreGrid}>
             <div
               className={`${styles.scoreCard} ${
-                netWpm >= targetWpm
+                evaluation.netWpm >= evaluation.targetWpm
                   ? styles.scoreCardHero
-                  : netWpm >= 27
+                  : evaluation.netWpm >= 27
                     ? styles.scoreCardWarn
                     : styles.scoreCardDanger
               }`}
             >
               <span className={styles.scoreCardLabel}>Net Speed (Est.)</span>
-              <strong className={styles.scoreCardVal}>{netWpm} WPM</strong>
+              <strong className={styles.scoreCardVal}>
+                {evaluation.netWpm} WPM
+              </strong>
               <span className={styles.scoreCardSub}>
-                Target benchmark: {targetWpm} WPM
+                Target benchmark: {evaluation.targetWpm} WPM
               </span>
             </div>
             <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
               <span className={styles.scoreCardLabel}>Gross Speed</span>
-              <strong className={styles.scoreCardVal}>{grossWpm} WPM</strong>
+              <strong className={styles.scoreCardVal}>
+                {evaluation.grossWpm} WPM
+              </strong>
               <span className={styles.scoreCardSub}>Raw keystroke pace</span>
             </div>
             <div
               className={`${styles.scoreCard} ${
-                accuracyPct >= 100 - maxErrorPct
+                evaluation.overallStatus === 'QUALIFIED_ALL'
                   ? styles.scoreCardHero
-                  : accuracyPct >= 90
+                  : evaluation.overallStatus === 'QUALIFIED_RESERVED'
+                    ? styles.scoreCardWarn
+                    : evaluation.accuracyPercent >= 90
+                      ? styles.scoreCardWarn
+                      : styles.scoreCardDanger
+              }`}
+            >
+              <span className={styles.scoreCardLabel}>
+                SSC Mistakes & Accuracy
+              </span>
+              <strong className={styles.scoreCardVal}>
+                {evaluation.accuracyPercent}%
+              </strong>
+              <span className={styles.scoreCardSub}>
+                {evaluation.fullMistakes} Full · {evaluation.halfMistakes} Half (
+                {evaluation.errorPercent}% error)
+              </span>
+            </div>
+            <div
+              className={`${styles.scoreCard} ${
+                evaluation.overallStatus === 'QUALIFIED_ALL'
+                  ? styles.scoreCardHero
+                  : evaluation.overallStatus === 'QUALIFIED_RESERVED'
                     ? styles.scoreCardWarn
                     : styles.scoreCardDanger
               }`}
             >
-              <span className={styles.scoreCardLabel}>Accuracy</span>
-              <strong className={styles.scoreCardVal}>{accuracyPct}%</strong>
-              <span className={styles.scoreCardSub}>
-                {correctChars.toLocaleString()} correct /{' '}
-                {incorrectChars.toLocaleString()} errors ({errorPct}% err)
-              </span>
-            </div>
-            <div className={styles.scoreCard}>
-              <span className={styles.scoreCardLabel}>Time Taken</span>
+              <span className={styles.scoreCardLabel}>Evaluation Status</span>
               <strong className={styles.scoreCardVal}>
-                {versionDetail?.rules.durationSeconds
-                  ? `${Math.max(0, versionDetail.rules.durationSeconds - remainingSecs)}s`
-                  : `${600 - remainingSecs}s`}
+                {evaluation.statusLabel}
               </strong>
               <span className={styles.scoreCardSub}>
-                Duration profile: {versionDetail?.rules.durationSeconds ?? 600}s
+                {evaluation.statusDetail}
               </span>
             </div>
             <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
@@ -1397,14 +1397,7 @@ export function ExamMode() {
                 {wordCount.toLocaleString()}
               </strong>
               <span className={styles.scoreCardSub}>
-                Standard space-separated words
-              </span>
-            </div>
-            <div className={styles.scoreCard}>
-              <span className={styles.scoreCardLabel}>Evaluation Status</span>
-              <strong className={styles.scoreCardVal}>Unavailable</strong>
-              <span className={styles.scoreCardSub}>
-                Official SSC scorer not implemented
+                Time taken: {elapsedSecs}s / {durationProfileSecs}s
               </span>
             </div>
           </div>
