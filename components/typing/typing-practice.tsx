@@ -403,7 +403,7 @@ export function TypingPractice() {
 
   const statusMessage =
     snapshot.status === 'idle'
-      ? 'Timer begins automatically on first keypress'
+      ? 'Timer begins automatically on first keystroke'
       : snapshot.status === 'paused'
         ? 'Session paused — click below to resume'
         : null;

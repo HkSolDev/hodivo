@@ -67,6 +67,8 @@ export function buildSitemapEntries(
   const staticEntries: MetadataRoute.Sitemap = [
     { url: new URL('/', baseOrigin).href },
     { url: new URL('/how-it-works', baseOrigin).href },
+    { url: new URL('/typing', baseOrigin).href },
+    { url: new URL('/typing/exam', baseOrigin).href },
   ];
 
   const seenUrls = new Set<string>(staticEntries.map((entry) => entry.url));

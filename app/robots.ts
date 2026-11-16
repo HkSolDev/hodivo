@@ -40,9 +40,13 @@ export function formatRobotsTxt(origin = process.env.SITE_URL): string {
   const config = buildRobots(origin);
   const lines = [
     '# Content Signals (https://contentsignals.org/)',
+    '# Public pages: Government Job Eligibility (/ , /jobs/*), Typing Practice (/typing), and Real Exam Typing Simulation (/typing/exam)',
     'User-Agent: *',
     `Content-Signal: ${CONTENT_SIGNAL_DIRECTIVE}`,
     'Allow: /',
+    'Allow: /typing',
+    'Allow: /typing/exam',
+    'Allow: /jobs/',
     ...PRIVATE_DISALLOW_PATHS.map((p) => `Disallow: ${p}`),
     '',
     `Sitemap: ${config.sitemap}`,

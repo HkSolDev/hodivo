@@ -109,7 +109,6 @@ function splitPassageForHighlight(
 export function ExamMode() {
   const { accountId, sessionChecked } = useWorkspace();
   const [authGateEnabled, setAuthGateEnabled] = useState(false);
-  const [isLocalDevHost, setIsLocalDevHost] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [exams, setExams] = useState<ExamSummary[]>([]);
   const [examsNextCursor, setExamsNextCursor] = useState<string | null>(null);
@@ -173,13 +172,6 @@ export function ExamMode() {
   }, []);
 
   useEffect(() => {
-    if (
-      typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1')
-    ) {
-      setIsLocalDevHost(true);
-    }
     let active = true;
     fetch('/api/auth/get-session', { credentials: 'same-origin' })
       .then(async (res) => {
@@ -1187,15 +1179,6 @@ export function ExamMode() {
                   </p>
                   <div className={styles.authGateActions}>
                     <AuthBar presentation="signin" />
-                    {isLocalDevHost && (
-                      <button
-                        type="button"
-                        className={`${styles.btn} ${styles.btnSecondary}`}
-                        onClick={() => setAuthGateEnabled(false)}
-                      >
-                        Unlock in Local Dev
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>

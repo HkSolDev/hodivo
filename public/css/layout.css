@@ -237,10 +237,17 @@ h1 em {
 }
 
 /* Zero-scroll 100dvh viewport lock for /typing practice & /typing/exam pages */
+html:has(#typing-title),
+html:has(#typing-exam-title) {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 body:has(#typing-title),
 body:has(#typing-exam-title) {
   height: 100vh;
   height: 100dvh;
+  max-width: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;

@@ -187,33 +187,34 @@ test('public typing practice works in an isolated browser session', async (t) =>
   await t.test(
     'pause excludes time away and duration completes the session',
     async () => {
+      await page.clock.install();
       await setPassage('a long passage for the timer');
-      await page.getByRole('textbox', { name: 'Custom seconds' }).fill('2');
-      await page.getByRole('button', { name: 'Set', exact: true }).click();
+      await page.getByRole('button', { name: '1m', exact: true }).click();
       await input.pressSequentially('a');
-      await page.getByRole('heading', { level: 1 }).click();
-      await expect(
-        page.getByRole('button', { name: 'Resume', exact: true }),
-      ).toBeVisible();
-      await setTimeout(2200);
+      await input.press('Escape');
+      const resumeOverlay = page.getByRole('button', {
+        name: /Session paused — Click here to resume/i,
+      });
+      await expect(resumeOverlay).toBeVisible();
+      await page.clock.fastForward(65000);
       await expect(summary).toHaveCount(0);
-      await page.getByRole('button', { name: 'Resume', exact: true }).click();
+      await resumeOverlay.click();
       await expect(input).toBeFocused();
-      await expect(summary).toBeVisible({ timeout: 4000 });
-      await expect(summary).toContainText('2s');
+      await page.clock.fastForward(61000);
+      await expect(summary).toBeVisible();
+      await expect(summary).toContainText('60s');
       await page.getByRole('button', { name: 'Restart', exact: true }).click();
     },
   );
 
   await t.test(
-    'duration validation remains and server passage markup renders literally',
+    'duration presets, custom minutes stepper and server passage markup work literally',
     async () => {
-      await page.getByRole('textbox', { name: 'Custom seconds' }).fill('1.5');
+      await page
+        .getByRole('button', { name: 'Increase custom minutes', exact: true })
+        .click();
       await page.getByRole('button', { name: 'Set', exact: true }).click();
-      await expect(
-        page.getByText('Enter a whole number of seconds', { exact: false }),
-      ).toBeVisible();
-      await page.getByRole('button', { name: '15s', exact: true }).click();
+      await page.getByRole('button', { name: '1m', exact: true }).click();
       await setPassage('<img src=x onerror=alert(1)>');
       await expect(page.getByLabel('Passage to type')).toHaveText(
         '<img src=x onerror=alert(1)>',
@@ -297,12 +298,12 @@ test('public typing practice works in an isolated browser session', async (t) =>
         false,
       );
       t.diagnostic(`Typing review screenshots: ${screenshots}`);
-      await page
-        .getByRole('link', { name: /How (?:Aptus|Hodivo) works/ })
-        .click();
-      await expect(page).toHaveURL(`${origin}/how-it-works`);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.getByRole('link', { name: 'Sign in', exact: true }).click();
+      await expect(page).toHaveURL(`${origin}/sign-in`);
       await page
         .getByRole('link', { name: 'Typing practice', exact: true })
+        .first()
         .click();
       await expect(page).toHaveURL(`${origin}/typing`);
       await expect(input).toHaveValue('');
@@ -418,7 +419,7 @@ test('public typing practice works in an isolated browser session', async (t) =>
     await expect(noJs.locator('noscript p')).toBeVisible();
     await expect(noJs.locator('noscript p')).toContainText(/JavaScript/);
     await expect(
-      noJs.getByRole('link', { name: /How (?:Aptus|Hodivo) works/ }),
+      noJs.getByRole('link', { name: 'Home', exact: true }),
     ).toBeVisible();
   } finally {
     await plain.close();
