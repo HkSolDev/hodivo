@@ -35,6 +35,19 @@ function groupPassageChars(chars: EvaluatedChar[]): PassageGroup[] {
   return groups;
 }
 
+function getOffsetTopWithin(
+  element: HTMLElement,
+  container: HTMLElement,
+): number {
+  let top = 0;
+  let node: HTMLElement | null = element;
+  while (node && node !== container) {
+    top += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  return top;
+}
+
 export const PassageView = memo(function PassageView({
   target,
   typedText,
@@ -55,14 +68,21 @@ export const PassageView = memo(function PassageView({
     const current = currentRef.current;
     if (!container || !current) return;
 
-    const lineTop = current.offsetTop;
-    if (lastLineTopRef.current === lineTop) return;
+    const lineHeight =
+      Number.parseFloat(getComputedStyle(container).lineHeight) || 36;
+    const lineTop = getOffsetTopWithin(current, container);
+    if (
+      lastLineTopRef.current !== null &&
+      Math.abs(lineTop - lastLineTopRef.current) < lineHeight * 0.5
+    ) {
+      return;
+    }
     lastLineTopRef.current = lineTop;
 
-    const lineHeight =
-      Number.parseFloat(getComputedStyle(container).lineHeight) || 0;
     // Keep 1 completed line above the active line (Monkeytype-style window).
-    const targetTop = Math.max(0, lineTop - container.offsetTop - lineHeight);
+    const firstLinePadding =
+      Number.parseFloat(getComputedStyle(container).paddingTop) || 0;
+    const targetTop = Math.max(0, lineTop - firstLinePadding - lineHeight);
     if (typeof container.scrollTo === 'function') {
       container.scrollTo({ top: targetTop, behavior: 'smooth' });
     } else {
@@ -91,10 +111,38 @@ export const PassageView = memo(function PassageView({
             </span>
           );
         }
+        const hasCurrent =
+          group.kind === 'word' &&
+          group.chars.some((char) => char.state === 'current');
+        const allTyped =
+          group.kind === 'word' &&
+          group.chars.length > 0 &&
+          group.chars.every(
+            (char) => char.state === 'correct' || char.state === 'incorrect',
+          );
+        const hasIncorrect =
+          group.kind === 'word' &&
+          group.chars.some((char) => char.state === 'incorrect');
+
+        const wordStatusClass =
+          group.kind !== 'word'
+            ? ''
+            : hasCurrent
+              ? ` ${styles.wordActive}`
+              : allTyped
+                ? hasIncorrect
+                  ? ` ${styles.wordError}`
+                  : ` ${styles.wordCorrect}`
+                : '';
+
         return (
           <span
             key={groupIndex}
-            className={group.kind === 'space' ? styles.space : styles.word}
+            className={
+              group.kind === 'space'
+                ? styles.space
+                : `${styles.word}${wordStatusClass}`
+            }
           >
             {group.chars.map((char, charIndex) => (
               <span

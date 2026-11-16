@@ -2,7 +2,6 @@
 
 import {
   useEffect,
-  useId,
   useRef,
   useState,
   type CompositionEvent,
@@ -11,11 +10,6 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import {
-  MAX_CUSTOM_DURATION_SECONDS,
-  MIN_CUSTOM_DURATION_SECONDS,
-  parseCustomDuration,
-} from '@/lib/typing/custom-input';
 import {
   loadPracticePassage,
   type PracticePassage,
@@ -28,8 +22,17 @@ import {
 import { PassageView } from './passage-view';
 import styles from './typing-practice.module.css';
 
-const DURATION_PRESETS = [15, 30, 60] as const;
-const DEFAULT_DURATION_SECONDS = 15;
+const DURATION_PRESETS = [
+  { label: '1m', seconds: 60 },
+  { label: '2m', seconds: 120 },
+  { label: '3m', seconds: 180 },
+  { label: '5m', seconds: 300 },
+  { label: '10m', seconds: 600 },
+] as const;
+const DEFAULT_DURATION_SECONDS = 60;
+const DEFAULT_CUSTOM_DURATION_MINUTES = 15;
+const MIN_CUSTOM_DURATION_MINUTES = 1;
+const MAX_CUSTOM_DURATION_MINUTES = 60;
 const TICK_MS = 100;
 const LIVE_STATS_MIN_ELAPSED_MS = 1000;
 type PassageState =
@@ -43,7 +46,7 @@ const COMPOSITION_NOTE =
 
 const REJECTION_NOTES: Record<EditRejection, string> = {
   expired: 'Time is up. Restart to run the session again.',
-  paused: 'The session is paused. Resume to continue typing.',
+  paused: 'Session paused — click the typing box to resume.',
   finished: 'The session has finished. Restart to run it again.',
   unsupported:
     'Only English letters, digits, punctuation and whitespace are scored here. That input was rejected, not recorded.',
@@ -68,9 +71,11 @@ export function TypingPractice() {
   const [durationSeconds, setDurationSeconds] = useState(
     DEFAULT_DURATION_SECONDS,
   );
-  const [durationDraft, setDurationDraft] = useState('');
-  const [durationError, setDurationError] = useState<string | null>(null);
+  const [customMinutes, setCustomMinutes] = useState(
+    DEFAULT_CUSTOM_DURATION_MINUTES,
+  );
   const [note, setNote] = useState<string | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const compositionActiveRef = useRef(false);
@@ -84,8 +89,6 @@ export function TypingPractice() {
     null,
   );
 
-  const durationErrorId = useId();
-
   // Interval only refreshes the display; the deadline itself is enforced by
   // the engine before each edit and inside tick(). Strict Mode cleanup-safe.
   useEffect(() => {
@@ -98,9 +101,10 @@ export function TypingPractice() {
     return () => clearInterval(interval);
   }, [snapshot.status]);
 
-  // Running -> paused on window blur or a hidden tab; idle is untouched.
+  // Running -> paused on window blur or a hidden tab; idle also drops focus.
   useEffect(() => {
     const pauseRunning = () => {
+      setIsFocused(false);
       const session = engineRef.current;
       if (!session) return;
       session.pause();
@@ -245,6 +249,11 @@ export function TypingPractice() {
   const handleTypingKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (compositionActiveRef.current) return;
     if (!event.nativeEvent.isComposing) compositionCommitRef.current = null;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.currentTarget.blur();
+      return;
+    }
     const modifierHeld = event.ctrlKey || event.metaKey;
     if (
       modifierHeld &&
@@ -258,6 +267,17 @@ export function TypingPractice() {
       setNote(
         'Undo and redo are not supported in the typing field. Correct with Backspace or Delete.',
       );
+    }
+  };
+
+  const handleTypingFocus = () => {
+    setIsFocused(true);
+    const session = engineRef.current;
+    if (!session) return;
+    if (session.snapshot().status === 'paused') {
+      session.resume();
+      setNote(null);
+      setSnapshot(session.snapshot());
     }
   };
 
@@ -276,6 +296,7 @@ export function TypingPractice() {
   };
 
   const handleTypingBlur = () => {
+    setIsFocused(false);
     const session = engineRef.current;
     if (!session) return;
     session.pause();
@@ -288,6 +309,16 @@ export function TypingPractice() {
     session.resume();
     setSnapshot(session.snapshot());
     textareaRef.current?.focus();
+    setIsFocused(true);
+  };
+
+  const handleFocusOverlayActivate = () => {
+    if (snapshot.status === 'paused') {
+      handleResume();
+    } else {
+      textareaRef.current?.focus();
+      setIsFocused(true);
+    }
   };
 
   // Every fresh session goes through here so composition state, pending
@@ -304,13 +335,14 @@ export function TypingPractice() {
     pendingInsertionRef.current = null;
     const textarea = textareaRef.current;
     if (textarea) textarea.value = '';
-    setDurationError(null);
     setNote(null);
     setSnapshot(session.snapshot());
   };
 
   const handleRestart = () => {
     restartSession();
+    textareaRef.current?.focus();
+    setIsFocused(true);
   };
 
   const loadPassage = () => {
@@ -352,22 +384,17 @@ export function TypingPractice() {
     return () => requestRef.current?.controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (passageState.status === 'ready') {
+      textareaRef.current?.focus();
+    }
+  }, [passageState]);
+
   const applyDuration = (seconds: number) => {
     restartSession({ durationMs: seconds * 1000 });
     setDurationSeconds(seconds);
-  };
-
-  const handleDurationSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const seconds = parseCustomDuration(durationDraft);
-    if (seconds === null) {
-      setDurationError(
-        `Enter a whole number of seconds between ${MIN_CUSTOM_DURATION_SECONDS} and ${MAX_CUSTOM_DURATION_SECONDS}.`,
-      );
-      return;
-    }
-    setDurationDraft('');
-    applyDuration(seconds);
+    textareaRef.current?.focus();
+    setIsFocused(true);
   };
 
   const showLiveStats =
@@ -376,220 +403,430 @@ export function TypingPractice() {
 
   const statusMessage =
     snapshot.status === 'idle'
-      ? 'The timer starts with your first keystroke. Time away from the field is not counted.'
+      ? 'Timer begins automatically on first keypress'
       : snapshot.status === 'paused'
-        ? 'Paused — the clock is stopped. Resume to continue.'
+        ? 'Session paused — click below to resume'
         : null;
 
   const loading = passageState.status === 'loading';
-  const canNext = snapshot.status === 'idle' || snapshot.status === 'finished';
-  const toggleClass = (active: boolean) =>
-    `button button-secondary${active ? ` ${styles.active}` : ''}`;
+  const showBlurOverlay =
+    passageState.status === 'ready' &&
+    snapshot.status !== 'finished' &&
+    (snapshot.status === 'paused' ||
+      (snapshot.status === 'idle' && !isFocused));
+  const isPresetSelected = DURATION_PRESETS.some(
+    (preset) => preset.seconds === durationSeconds,
+  );
+  const wordCount = snapshot.target
+    ? snapshot.target.trim().split(/\s+/).filter(Boolean).length
+    : 0;
+  const charCount = snapshot.target.length;
 
   return (
     <div className={styles.root}>
-      <div className={styles.controlRow}>
-        <fieldset
-          className={styles.controlGroup}
-          disabled={settingsLocked || loading}
-          aria-label="Session duration"
-        >
-          <legend className={styles.legend}>Duration</legend>
-          <div className={styles.buttonRow}>
-            {DURATION_PRESETS.map((seconds) => (
+      {/* Upper Control & HUD Strip (Single Line) */}
+      <div className={styles.controlHudStrip}>
+        <div className={styles.controlHudInner}>
+          {/* Left: Next / Restart Buttons */}
+          <div className={styles.metaCluster}>
+            <div className={styles.actions}>
+              {passageState.status === 'loading' && (
+                <span className={styles.loadingTag} role="status">
+                  Loading passage…
+                </span>
+              )}
+              {passageState.status === 'empty' && (
+                <span className={styles.errorInline} role="status">
+                  No passages available.
+                </span>
+              )}
+              {passageState.status === 'error' && (
+                <span className={styles.errorInline} role="alert">
+                  Passages unavailable.
+                </span>
+              )}
+              {(passageState.status === 'empty' ||
+                passageState.status === 'error') && (
+                <button
+                  type="button"
+                  className={styles.hudBtn}
+                  onClick={loadPassage}
+                >
+                  Retry
+                </button>
+              )}
               <button
-                key={seconds}
                 type="button"
-                className={toggleClass(durationSeconds === seconds)}
-                aria-pressed={durationSeconds === seconds}
-                onClick={() => applyDuration(seconds)}
+                className={styles.hudBtn}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={loadPassage}
+                disabled={loading || passageState.status !== 'ready'}
+                title="Load next passage"
               >
-                {seconds}s
+                <svg
+                  className={styles.hudIcon}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                  />
+                </svg>
+                <span>Next passage</span>
               </button>
-            ))}
+              <button
+                type="button"
+                className={styles.hudBtn}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={handleRestart}
+                disabled={loading || passageState.status !== 'ready'}
+                title="Reset test"
+              >
+                <svg
+                  className={styles.hudIcon}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                  />
+                </svg>
+                <span>Restart</span>
+              </button>
+            </div>
           </div>
-          <form className={styles.inlineForm} onSubmit={handleDurationSubmit}>
-            <label className={styles.customLabel}>
-              Custom seconds
-              <input
-                className={styles.durationInput}
-                inputMode="numeric"
-                value={durationDraft}
-                placeholder={`${MIN_CUSTOM_DURATION_SECONDS}–${MAX_CUSTOM_DURATION_SECONDS}`}
-                aria-describedby={durationErrorId}
-                aria-invalid={durationError ? true : undefined}
-                onChange={(event) => {
-                  setDurationDraft(event.target.value);
-                  setDurationError(null);
-                }}
-              />
-            </label>
-            <button type="submit" className="button button-secondary">
-              Set
-            </button>
-            {durationError && (
-              <p className={styles.error} id={durationErrorId} role="alert">
-                {durationError}
-              </p>
-            )}
-          </form>
-        </fieldset>
-      </div>
 
-      {passageState.status === 'ready' && (
-        <p className={styles.statusLine}>
-          Passage: {passageState.passage.title}
-        </p>
-      )}
-      {passageState.status === 'loading' && (
-        <p className={styles.statusLine} role="status">
-          Loading a practice passage…
-        </p>
-      )}
-      {passageState.status === 'empty' && (
-        <p className={styles.error} role="status">
-          No practice passages are available yet. Try again later.{' '}
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={loadPassage}
+          {/* Center: Segmented Duration Controller (Minutes + Stepper) */}
+          <fieldset
+            className={styles.durationSegment}
+            disabled={settingsLocked || loading}
+            aria-label="Session duration"
           >
-            Retry
-          </button>
-        </p>
-      )}
-      {passageState.status === 'error' && (
-        <p className={styles.error} role="alert">
-          Practice passages are temporarily unavailable.{' '}
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={loadPassage}
-          >
-            Retry
-          </button>
-        </p>
-      )}
-
-      <dl className={styles.stats} aria-label="Live statistics">
-        <div className={styles.stat}>
-          <dt>Time</dt>
-          <dd>{Math.ceil(snapshot.remainingMs / 1000)}s</dd>
-        </div>
-        <div className={styles.stat}>
-          <dt>Net WPM</dt>
-          <dd>{showLiveStats ? formatSpeed(snapshot.score.netWpm) : '—'}</dd>
-        </div>
-        <div className={styles.stat}>
-          <dt>Accuracy</dt>
-          <dd>
-            {showLiveStats ? formatPercent(snapshot.score.accuracy) : '—'}
-          </dd>
-        </div>
-      </dl>
-
-      <PassageView target={snapshot.target} typedText={snapshot.typedText} />
-
-      <label className={styles.typingLabel}>
-        Type the passage here
-        <textarea
-          ref={textareaRef}
-          className={styles.typingInput}
-          rows={3}
-          value={snapshot.typedText}
-          onInput={handleTypingInput}
-          onBlur={handleTypingBlur}
-          onKeyDown={handleTypingKeyDown}
-          onPaste={handleTypingPaste}
-          onDrop={handleTypingDrop}
-          onDragOver={(event) => event.preventDefault()}
-          onCompositionStart={handleCompositionStart}
-          onCompositionEnd={handleCompositionEnd}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          disabled={passageState.status !== 'ready'}
-        />
-      </label>
-
-      <p className={styles.statusLine} role="status">
-        {note ?? statusMessage ?? ''}
-        {snapshot.status === 'finished' &&
-          (snapshot.finishedReason === 'target'
-            ? ' Passage completed.'
-            : ' Time is up.')}
-      </p>
-
-      <div className={styles.actions}>
-        {snapshot.status === 'paused' && (
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={handleResume}
-          >
-            Resume
-          </button>
-        )}
-        <button
-          type="button"
-          className="button button-secondary"
-          // Keep blur-triggered layout changes from interrupting this click.
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={handleRestart}
-          disabled={loading || passageState.status !== 'ready'}
-        >
-          Restart
-        </button>
-        <button
-          type="button"
-          className="button button-secondary"
-          onClick={loadPassage}
-          disabled={loading || !canNext}
-        >
-          Next passage
-        </button>
-      </div>
-
-      {snapshot.status === 'finished' && (
-        <section className={styles.summary} aria-label="Session summary">
-          <h2>Session summary</h2>
-          <dl className={styles.summaryGrid}>
-            <div>
-              <dt>Net speed</dt>
-              <dd>{formatSpeed(snapshot.score.netWpm)} WPM</dd>
+            <legend className={styles.legend}>Duration</legend>
+            <span className={styles.durationTag} aria-hidden="true">
+              Duration
+            </span>
+            <div className={styles.presetPillGroup}>
+              {DURATION_PRESETS.map((preset) => {
+                const active = durationSeconds === preset.seconds;
+                return (
+                  <button
+                    key={preset.seconds}
+                    type="button"
+                    className={`${styles.segBtn}${active ? ` ${styles.segBtnActive}` : ''}`}
+                    aria-pressed={active}
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => applyDuration(preset.seconds)}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
             </div>
-            <div>
-              <dt>Gross speed</dt>
-              <dd>{formatSpeed(snapshot.score.grossWpm)} WPM</dd>
+            <div className={styles.segDivider} aria-hidden="true" />
+            <div className={styles.stepperGroup}>
+              <button
+                type="button"
+                className={styles.stepperBtn}
+                title="Decrease minutes"
+                aria-label="Decrease custom minutes"
+                disabled={customMinutes <= MIN_CUSTOM_DURATION_MINUTES}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() =>
+                  setCustomMinutes((prev) =>
+                    Math.max(MIN_CUSTOM_DURATION_MINUTES, prev - 1),
+                  )
+                }
+              >
+                -
+              </button>
+              <span
+                className={`${styles.customVal}${!isPresetSelected ? ` ${styles.customValActive}` : ''}`}
+                aria-live="polite"
+              >
+                {customMinutes}m
+              </span>
+              <button
+                type="button"
+                className={styles.stepperBtn}
+                title="Increase minutes"
+                aria-label="Increase custom minutes"
+                disabled={customMinutes >= MAX_CUSTOM_DURATION_MINUTES}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() =>
+                  setCustomMinutes((prev) =>
+                    Math.min(MAX_CUSTOM_DURATION_MINUTES, prev + 1),
+                  )
+                }
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className={styles.setBtn}
+                title="Set custom duration"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => applyDuration(customMinutes * 60)}
+              >
+                Set
+              </button>
             </div>
-            <div>
+          </fieldset>
+
+          {/* Right: Real-time Live HUD Metrics */}
+          <dl className={styles.stats} aria-label="Live statistics">
+            <div className={styles.stat}>
+              <dt>Time</dt>
+              <dd className={styles.statTime}>
+                {formatRemainingTime(snapshot.remainingMs)}
+              </dd>
+            </div>
+            <div className={styles.statDivider} aria-hidden="true" />
+            <div className={styles.stat}>
+              <dt>Net WPM</dt>
+              <dd>{showLiveStats ? formatSpeed(snapshot.score.netWpm) : '—'}</dd>
+            </div>
+            <div className={styles.statDivider} aria-hidden="true" />
+            <div className={styles.stat}>
               <dt>Accuracy</dt>
-              <dd>{formatPercent(snapshot.score.accuracy)}</dd>
-            </div>
-            <div>
-              <dt>Active time</dt>
-              <dd>
-                {snapshot.elapsedMs === null
-                  ? '—'
-                  : `${Math.round(snapshot.elapsedMs / 1000)}s`}
+              <dd className={styles.statAccuracy}>
+                {showLiveStats ? formatPercent(snapshot.score.accuracy) : '—'}
               </dd>
             </div>
-            <div>
-              <dt>Keystrokes</dt>
-              <dd>
-                {snapshot.correctAttempts} correct /{' '}
-                {snapshot.incorrectAttempts} incorrect
-              </dd>
+            <div className={styles.statDivider} aria-hidden="true" />
+            <div className={styles.stat}>
+              <dt>Errors</dt>
+              <dd className={styles.statErrors}>{snapshot.incorrectAttempts}</dd>
             </div>
           </dl>
-          <p className={`muted ${styles.disclaimer}`}>
-            Practice estimate from this session only — not an official
-            qualification result.
-          </p>
-        </section>
-      )}
+        </div>
+      </div>
+
+      {/* Main Non-Scrolling Workspace */}
+      <div className={styles.workspace}>
+        {/* Upper Block: Scrollable Passage Card */}
+        <div
+          className={`${styles.passageCard}${showBlurOverlay ? ` ${styles.passageCardBlurred}` : ''}`}
+          onClick={() => {
+            if (showBlurOverlay) {
+              handleFocusOverlayActivate();
+            }
+          }}
+        >
+          <div className={styles.passageHeader}>
+            <div className={styles.passageHeaderLeft}>
+              <span className={styles.pulseDot} aria-hidden="true" />
+              <span className={styles.viewerLabel}>Exam Passage Viewer</span>
+              <span className={styles.viewerSep} aria-hidden="true">
+                •
+              </span>
+              <span className={styles.viewerSub}>Original Text Stream</span>
+            </div>
+            <div className={styles.passageHeaderRight}>
+              <span>
+                Words: <strong>{wordCount}</strong>
+              </span>
+              <span className={styles.viewerSub}>
+                Chars: <strong>{charCount}</strong>
+              </span>
+            </div>
+          </div>
+
+          <PassageView
+            target={snapshot.target}
+            typedText={snapshot.typedText}
+          />
+
+          {snapshot.status === 'finished' && (
+            <section className={styles.summary} aria-label="Session summary">
+              <div className={styles.summaryHeader}>
+                <h2>
+                  Session summary —{' '}
+                  {snapshot.finishedReason === 'target'
+                    ? 'Passage completed'
+                    : 'Time is up'}
+                </h2>
+                <span className={`muted ${styles.disclaimer}`}>
+                  Practice estimate only — not an official qualification result.
+                </span>
+              </div>
+              <dl className={styles.summaryGrid}>
+                <div>
+                  <dt>Net speed</dt>
+                  <dd>{formatSpeed(snapshot.score.netWpm)} WPM</dd>
+                </div>
+                <div>
+                  <dt>Gross speed</dt>
+                  <dd>{formatSpeed(snapshot.score.grossWpm)} WPM</dd>
+                </div>
+                <div>
+                  <dt>Accuracy</dt>
+                  <dd>{formatPercent(snapshot.score.accuracy)}</dd>
+                </div>
+                <div>
+                  <dt>Active time</dt>
+                  <dd>
+                    {snapshot.elapsedMs === null
+                      ? '—'
+                      : `${Math.round(snapshot.elapsedMs / 1000)}s`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Keystrokes</dt>
+                  <dd>
+                    {snapshot.correctAttempts} correct /{' '}
+                    {snapshot.incorrectAttempts} incorrect
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          )}
+        </div>
+
+        {/* Lower Block: Pinned Compact Typing Input Console */}
+        <div
+          className={styles.inputCard}
+          onClick={() => {
+            if (showBlurOverlay) {
+              handleFocusOverlayActivate();
+            }
+          }}
+        >
+          <div className={styles.inputHeader}>
+            <span className={styles.inputLabelVisual} aria-hidden="true">
+              <span className={styles.readyDot} />
+              <span>Ready</span>
+            </span>
+            <p className={note ? styles.note : styles.statusLine} role="status">
+              {note ?? statusMessage ?? ''}
+              {snapshot.status === 'finished' &&
+                (snapshot.finishedReason === 'target'
+                  ? 'Passage completed — press Restart or Next passage.'
+                  : 'Time is up — press Restart or Next passage.')}
+            </p>
+          </div>
+
+          <div className={styles.typingFieldWrap}>
+            <div
+              className={`${styles.typingBlurTarget}${showBlurOverlay ? ` ${styles.typingBlurred}` : ''}`}
+            >
+              <label className={styles.typingLabel}>
+                Type the passage here
+                <textarea
+                  ref={textareaRef}
+                  className={styles.typingInput}
+                  rows={3}
+                  placeholder="Start typing the passage here... (Timer starts automatically on first keypress)"
+                  value={snapshot.typedText}
+                  onInput={handleTypingInput}
+                  onFocus={handleTypingFocus}
+                  onBlur={handleTypingBlur}
+                  onKeyDown={handleTypingKeyDown}
+                  onPaste={handleTypingPaste}
+                  onDrop={handleTypingDrop}
+                  onDragOver={(event) => event.preventDefault()}
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  disabled={passageState.status !== 'ready'}
+                />
+              </label>
+            </div>
+
+            {showBlurOverlay && (
+              <button
+                type="button"
+                className={styles.focusOverlay}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleFocusOverlayActivate();
+                }}
+              >
+                <span className={styles.focusOverlayPill}>
+                  {snapshot.status === 'paused' ? (
+                    <svg
+                      className={styles.focusOverlayIcon}
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d="M8 5.14v14l11-7-11-7z" />
+                    </svg>
+                  ) : (
+                    <svg
+                      className={styles.focusOverlayIcon}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M13 3L4 14h7l-1 7 9-11h-7l1-7z" />
+                    </svg>
+                  )}
+                  <span>
+                    {snapshot.status === 'paused'
+                      ? 'Session paused — Click here to resume'
+                      : 'Click here to start typing'}
+                  </span>
+                </span>
+              </button>
+            )}
+          </div>
+
+          <div className={styles.consoleFooter}>
+            <div className={styles.shortcutList}>
+              <span className={styles.shortcutItem}>
+                <kbd className={styles.kbd}>Click box</kbd>
+                <span>Resume when paused</span>
+              </span>
+              <span className={styles.viewerSep} aria-hidden="true">
+                •
+              </span>
+              <span className={styles.shortcutItem}>
+                <kbd className={styles.kbd}>Esc</kbd>
+                <span>Pause test</span>
+              </span>
+            </div>
+            <div className={styles.consoleStatusRight}>
+              <span className={styles.liveBadge}>
+                <span className={styles.readyDot} aria-hidden="true" />
+                Live Keystroke Detection Active
+              </span>
+              <span className={styles.viewerSep} aria-hidden="true">
+                |
+              </span>
+              <span className={styles.viewerSub}>Client-side Isolated</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
+}
+
+function formatRemainingTime(remainingMs: number): string {
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  if (mins > 0) {
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${totalSeconds}s`;
 }
 
 function formatSpeed(value: number | null): string {

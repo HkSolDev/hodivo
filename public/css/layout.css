@@ -235,3 +235,38 @@ h1 em {
     flex-wrap: wrap;
   }
 }
+
+/* Zero-scroll 100dvh viewport lock for /typing practice page */
+body:has(#typing-title) {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+body:has(#typing-title) > footer,
+body:has(#typing-title) .site-footer {
+  display: none;
+}
+
+body:has(#typing-title) > main {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body:has(#typing-title) .typing-page-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+

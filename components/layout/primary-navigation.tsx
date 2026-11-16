@@ -2,13 +2,27 @@
 
 import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState, type FocusEvent, type ReactNode } from 'react';
 import { useWorkspace } from '@/components/providers/workspace-provider';
-import type { ReactNode } from 'react';
+
+const TYPING_MODES = [
+  {
+    href: '/typing',
+    label: 'Practice Mode',
+    description: 'Timed 1m, 2m, 3m speed & accuracy practice',
+  },
+  {
+    href: '/typing/exam',
+    label: 'Exam Mode',
+    description: 'Official SSC / Govt benchmark simulation',
+  },
+] as const;
 
 const destinations = [
   {
     href: '/',
     label: 'Home',
+    wideSuffix: '',
     icon: (
       <>
         <path d="m3 10 9-7 9 7v10H3z" />
@@ -16,10 +30,27 @@ const destinations = [
       </>
     ),
   },
-  { href: '/saved', label: 'Saved', icon: <path d="M6 3h12v18l-6-4-6 4z" /> },
+  {
+    href: '/saved',
+    label: 'Saved',
+    wideSuffix: ' jobs',
+    icon: <path d="M6 3h12v18l-6-4-6 4z" />,
+  },
+  {
+    href: '/typing',
+    label: 'Typing',
+    wideSuffix: ' practice',
+    icon: (
+      <>
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M8 13h8" />
+      </>
+    ),
+  },
   {
     href: '/profile',
     label: 'Profile',
+    wideSuffix: '',
     icon: (
       <>
         <circle cx="12" cy="8" r="4" />
@@ -31,12 +62,14 @@ const destinations = [
 
 function NavLinkContent({
   label,
+  wideSuffix,
   icon,
-  isSaved,
+  hasDropdown,
 }: {
   label: string;
+  wideSuffix?: string;
   icon: ReactNode;
-  isSaved: boolean;
+  hasDropdown?: boolean;
 }) {
   const { pending } = useLinkStatus();
   return (
@@ -54,8 +87,24 @@ function NavLinkContent({
       </svg>
       <span>
         {label}
-        {isSaved && <span className="navigation-wide-label"> jobs</span>}
+        {wideSuffix && (
+          <span className="navigation-wide-label">{wideSuffix}</span>
+        )}
       </span>
+      {hasDropdown && (
+        <svg
+          className="nav-dropdown-chevron"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
+      )}
       <span
         className="nav-pending-dot"
         data-pending={pending}
@@ -65,9 +114,101 @@ function NavLinkContent({
   );
 }
 
+export function HeaderModeBreadcrumb() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  const isTypingRoute =
+    pathname === '/typing' || pathname.startsWith('/typing/');
+  if (!isTypingRoute) return null;
+
+  const isExamMode = pathname.startsWith('/typing/exam');
+  const currentLabel = isExamMode ? 'Exam Mode' : 'Practice Mode';
+
+  const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="header-mode-switcher">
+      <span className="header-breadcrumb-divider" aria-hidden="true">
+        |
+      </span>
+      <span className="header-portal-label">Exam Simulation Portal</span>
+      <span className="header-breadcrumb-chevron" aria-hidden="true">
+        ›
+      </span>
+      <div
+        className="mode-switcher-wrap"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onBlur={handleBlur}
+      >
+        <button
+          type="button"
+          className="mode-switcher-pill"
+          aria-expanded={open}
+          aria-haspopup="true"
+          onClick={() => setOpen((prev) => !prev)}
+        >
+          <span className="mode-switcher-dot" aria-hidden="true" />
+          <span>{currentLabel}</span>
+          <svg
+            className={`mode-switcher-chevron${open ? ' mode-switcher-chevron-open' : ''}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+
+        {open && (
+          <div
+            className="mode-switcher-menu"
+            aria-label="Switch typing mode"
+          >
+            {TYPING_MODES.map((mode) => {
+              const selected =
+                mode.href === '/typing/exam' ? isExamMode : !isExamMode;
+              return (
+                <Link
+                  key={mode.href}
+                  href={mode.href}
+                  className={`mode-switcher-option${selected ? ' mode-switcher-option-active' : ''}`}
+                  onClick={() => setOpen(false)}
+                >
+                  <div className="mode-switcher-option-top">
+                    <span className="mode-switcher-option-title">
+                      {mode.label}
+                    </span>
+                    {selected && (
+                      <span className="mode-switcher-active-tag">Active</span>
+                    )}
+                  </div>
+                  <span className="mode-switcher-option-desc">
+                    {mode.description}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function PrimaryNavigation() {
   const pathname = usePathname();
   const { accountName } = useWorkspace();
+  const [typingDropdownOpen, setTypingDropdownOpen] = useState(false);
   const signedIn = accountName !== null;
   const active =
     pathname === '/sign-in'
@@ -82,27 +223,107 @@ export function PrimaryNavigation() {
               (pathname === href || pathname.startsWith(`${href}/`)),
           )?.href;
 
+  const isExamMode = pathname.startsWith('/typing/exam');
+
+  const openTypingDropdownDesktop = () => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 760) {
+      setTypingDropdownOpen(true);
+    }
+  };
+
+  const handleTypingBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setTypingDropdownOpen(false);
+    }
+  };
+
   return (
     <nav className="primary-navigation" aria-label="Main navigation">
-      {destinations.map(({ href: destination, label: title, icon }) => {
-        const href =
-          destination === '/profile' && !signedIn ? '/sign-in' : destination;
-        const label =
-          destination === '/profile' && !signedIn ? 'Sign in' : title;
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active === href ? 'page' : undefined}
-          >
-            <NavLinkContent
-              label={label}
-              icon={icon}
-              isSaved={href === '/saved'}
-            />
-          </Link>
-        );
-      })}
+      {destinations.map(
+        ({ href: destination, label: title, wideSuffix, icon }) => {
+          const href =
+            destination === '/profile' && !signedIn ? '/sign-in' : destination;
+          const label =
+            destination === '/profile' && !signedIn ? 'Sign in' : title;
+
+          if (destination === '/typing') {
+            return (
+              <div
+                key={href}
+                className="nav-typing-group"
+                onMouseEnter={openTypingDropdownDesktop}
+                onMouseLeave={() => setTypingDropdownOpen(false)}
+                onFocus={openTypingDropdownDesktop}
+                onBlur={handleTypingBlur}
+              >
+                <Link
+                  href={href}
+                  aria-current={active === href ? 'page' : undefined}
+                >
+                  <NavLinkContent
+                    label={label}
+                    wideSuffix={wideSuffix}
+                    icon={icon}
+                    hasDropdown
+                  />
+                </Link>
+                {typingDropdownOpen && (
+                  <div
+                    className="nav-typing-dropdown"
+                    aria-label="Typing modes"
+                  >
+                    {TYPING_MODES.map((mode) => {
+                      const isCurrentMode =
+                        pathname === '/typing' ||
+                        pathname.startsWith('/typing/')
+                          ? mode.href === '/typing/exam'
+                            ? isExamMode
+                            : !isExamMode
+                          : false;
+                      return (
+                        <Link
+                          key={mode.href}
+                          href={mode.href}
+                          className={`nav-typing-dropdown-item${isCurrentMode ? ' nav-typing-dropdown-item-active' : ''}`}
+                          onClick={() => setTypingDropdownOpen(false)}
+                        >
+                          <div className="mode-switcher-option-top">
+                            <span className="mode-switcher-option-title">
+                              {mode.label}
+                            </span>
+                            {isCurrentMode && (
+                              <span className="mode-switcher-active-tag">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <span className="mode-switcher-option-desc">
+                            {mode.description}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active === href ? 'page' : undefined}
+            >
+              <NavLinkContent
+                label={label}
+                wideSuffix={wideSuffix}
+                icon={icon}
+              />
+            </Link>
+          );
+        },
+      )}
     </nav>
   );
 }
