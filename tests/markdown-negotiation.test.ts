@@ -56,10 +56,7 @@ test('md route handler returns text/markdown with Vary: Accept', async () => {
     params: Promise.resolve({}),
   });
   assert.equal(res.status, 200);
-  assert.equal(
-    res.headers.get('content-type'),
-    'text/markdown; charset=utf-8',
-  );
+  assert.equal(res.headers.get('content-type'), 'text/markdown; charset=utf-8');
   assert.equal(res.headers.get('vary'), 'Accept');
   const body = await res.text();
   assert.match(body, /^# Aptus/m);
