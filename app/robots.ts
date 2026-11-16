@@ -14,8 +14,7 @@ export const PRIVATE_DISALLOW_PATHS = [
   '/api/',
 ] as const;
 
-export const CONTENT_SIGNAL_DIRECTIVE =
-  'ai-train=no, search=yes, ai-input=yes';
+export const CONTENT_SIGNAL_DIRECTIVE = 'ai-train=no, search=yes, ai-input=yes';
 
 export function buildRobots(
   origin = process.env.SITE_URL,

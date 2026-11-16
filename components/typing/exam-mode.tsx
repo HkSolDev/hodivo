@@ -372,7 +372,8 @@ export function ExamMode() {
 
   useEffect(() => {
     if (!selectedVersionId || sessionRef.current) return;
-    const cachedDetail = cacheRef.current.detailByVersion.get(selectedVersionId);
+    const cachedDetail =
+      cacheRef.current.detailByVersion.get(selectedVersionId);
     const cachedPassages =
       cacheRef.current.passagesByVersion.get(selectedVersionId);
     if (cachedDetail && cachedPassages) {
@@ -1444,8 +1445,8 @@ export function ExamMode() {
                 {evaluation.accuracyPercent}%
               </strong>
               <span className={styles.scoreCardSub}>
-                {evaluation.fullMistakes} Full · {evaluation.halfMistakes} Half (
-                {evaluation.errorPercent}% error)
+                {evaluation.fullMistakes} Full · {evaluation.halfMistakes} Half
+                ({evaluation.errorPercent}% error)
               </span>
             </div>
             <div

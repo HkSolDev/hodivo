@@ -72,10 +72,8 @@ test('SSC CHSL vs SSC CGL DEST profiles apply their respective WPM and category 
   assert.equal(EXAM_EVALUATION_PROFILES['ssc-cgl']?.defaultTargetWpm, 27);
 
   // 10-word passage with 1 full mistake = 10% error rate
-  const masterText =
-    'One two three four five six seven eight nine ten.';
-  const typedText =
-    'One two three four five six seven eight nine wrong.';
+  const masterText = 'One two three four five six seven eight nine ten.';
+  const typedText = 'One two three four five six seven eight nine wrong.';
 
   const chslResult = evaluateExamAttempt({
     masterText,

@@ -170,10 +170,7 @@ export function HeaderModeBreadcrumb() {
         </button>
 
         {open && (
-          <div
-            className="mode-switcher-menu"
-            aria-label="Switch typing mode"
-          >
+          <div className="mode-switcher-menu" aria-label="Switch typing mode">
             {TYPING_MODES.map((mode) => {
               const selected =
                 mode.href === '/typing/exam' ? isExamMode : !isExamMode;

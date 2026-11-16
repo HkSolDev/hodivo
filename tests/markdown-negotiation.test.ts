@@ -66,9 +66,12 @@ test('md route handler returns text/markdown with Vary: Accept and Content-Signa
   const body = await res.text();
   assert.match(body, /^# Aptus/m);
 
-  const typingRes = await mdGet(new Request('http://localhost:8080/md/typing'), {
-    params: Promise.resolve({ slug: ['typing'] }),
-  });
+  const typingRes = await mdGet(
+    new Request('http://localhost:8080/md/typing'),
+    {
+      params: Promise.resolve({ slug: ['typing'] }),
+    },
+  );
   assert.equal(typingRes.status, 200);
   const typingBody = await typingRes.text();
   assert.match(typingBody, /Government Exam Typing Practice/);

@@ -594,7 +594,9 @@ export function TypingPractice() {
             <div className={styles.statDivider} aria-hidden="true" />
             <div className={styles.stat}>
               <dt>Net WPM</dt>
-              <dd>{showLiveStats ? formatSpeed(snapshot.score.netWpm) : '—'}</dd>
+              <dd>
+                {showLiveStats ? formatSpeed(snapshot.score.netWpm) : '—'}
+              </dd>
             </div>
             <div className={styles.statDivider} aria-hidden="true" />
             <div className={styles.stat}>
@@ -606,7 +608,9 @@ export function TypingPractice() {
             <div className={styles.statDivider} aria-hidden="true" />
             <div className={styles.stat}>
               <dt>Errors</dt>
-              <dd className={styles.statErrors}>{snapshot.incorrectAttempts}</dd>
+              <dd className={styles.statErrors}>
+                {snapshot.incorrectAttempts}
+              </dd>
             </div>
           </dl>
         </div>
@@ -685,7 +689,10 @@ export function TypingPractice() {
                     : styles.summaryBadgeGood;
 
               return (
-                <section className={styles.summary} aria-label="Session summary">
+                <section
+                  className={styles.summary}
+                  aria-label="Session summary"
+                >
                   <div className={styles.summaryHeader}>
                     <div className={styles.summaryTitleGroup}>
                       <h2>

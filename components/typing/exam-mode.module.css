@@ -27,8 +27,22 @@
   --exam-error-text: #93000a;
   --exam-amber: #b45309;
   --exam-amber-soft: #fef3c7;
-  --exam-font-ui: var(--sans, 'Inter', -apple-system, BlinkMacSystemFont, sans-serif);
-  --exam-font-mono: var(--mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  --exam-font-ui: var(
+    --sans,
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif
+  );
+  --exam-font-mono: var(
+    --mono,
+    'JetBrains Mono',
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace
+  );
   --passage-font-size: 15px;
   --passage-line-height: 1.82;
 

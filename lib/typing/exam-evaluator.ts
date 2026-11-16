@@ -137,7 +137,10 @@ function tokenizeWords(text: string): string[] {
  * - 0.5 (Half Mistake): case-only mismatch OR punctuation-only mismatch on the same core word
  * - 1.0 (Full Mistake): spelling / substitution error
  */
-function wordMismatchPenalty(masterWord: string, typedWord: string): 0 | 0.5 | 1 {
+function wordMismatchPenalty(
+  masterWord: string,
+  typedWord: string,
+): 0 | 0.5 | 1 {
   if (masterWord === typedWord) return 0;
 
   if (masterWord.toLowerCase() === typedWord.toLowerCase()) {
@@ -183,10 +186,7 @@ export function evaluateExamAttempt(params: {
       ? 0
       : Math.min(
           masterWords.length,
-          Math.max(
-            typedWords.length,
-            Math.ceil(typedLen / strokesPerWord),
-          ),
+          Math.max(typedWords.length, Math.ceil(typedLen / strokesPerWord)),
         );
   const mWords = masterWords.slice(0, compareMasterCount);
   const tWords = typedWords;
@@ -284,9 +284,7 @@ export function evaluateExamAttempt(params: {
           ).toFixed(1),
         );
   const accuracyPercent =
-    typedLen === 0
-      ? 0
-      : Number(Math.max(0, 100 - errorPercent).toFixed(1));
+    typedLen === 0 ? 0 : Number(Math.max(0, 100 - errorPercent).toFixed(1));
 
   const elapsedMins = Math.max(elapsedSeconds / 60, 1 / 60);
   const grossWpm =

@@ -1,9 +1,6 @@
 import Link from 'next/link';
 import { AuthBar } from '@/components/auth/auth-bar';
-import {
-  HeaderModeBreadcrumb,
-  PrimaryNavigation,
-} from './primary-navigation';
+import { HeaderModeBreadcrumb, PrimaryNavigation } from './primary-navigation';
 import { ThemeToggle } from './theme-toggle';
 
 export function Header() {
