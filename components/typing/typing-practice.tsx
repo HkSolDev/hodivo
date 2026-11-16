@@ -647,50 +647,168 @@ export function TypingPractice() {
             typedText={snapshot.typedText}
           />
 
-          {snapshot.status === 'finished' && (
-            <section className={styles.summary} aria-label="Session summary">
-              <div className={styles.summaryHeader}>
-                <h2>
-                  Session summary —{' '}
-                  {snapshot.finishedReason === 'target'
-                    ? 'Passage completed'
-                    : 'Time is up'}
-                </h2>
-                <span className={`muted ${styles.disclaimer}`}>
-                  Practice estimate only — not an official qualification result.
-                </span>
-              </div>
-              <dl className={styles.summaryGrid}>
-                <div>
-                  <dt>Net speed</dt>
-                  <dd>{formatSpeed(snapshot.score.netWpm)} WPM</dd>
-                </div>
-                <div>
-                  <dt>Gross speed</dt>
-                  <dd>{formatSpeed(snapshot.score.grossWpm)} WPM</dd>
-                </div>
-                <div>
-                  <dt>Accuracy</dt>
-                  <dd>{formatPercent(snapshot.score.accuracy)}</dd>
-                </div>
-                <div>
-                  <dt>Active time</dt>
-                  <dd>
-                    {snapshot.elapsedMs === null
-                      ? '—'
-                      : `${Math.round(snapshot.elapsedMs / 1000)}s`}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Keystrokes</dt>
-                  <dd>
-                    {snapshot.correctAttempts} correct /{' '}
-                    {snapshot.incorrectAttempts} incorrect
-                  </dd>
-                </div>
-              </dl>
-            </section>
-          )}
+          {snapshot.status === 'finished' &&
+            (() => {
+              const netWpm = snapshot.score.netWpm ?? 0;
+              const accuracy = snapshot.score.accuracy ?? 0;
+              const speedTier: 'Good' | 'Warn' | 'Bad' =
+                netWpm >= 35 ? 'Good' : netWpm >= 27 ? 'Warn' : 'Bad';
+              const accuracyTier: 'Good' | 'Warn' | 'Bad' =
+                accuracy >= 95 ? 'Good' : accuracy >= 90 ? 'Warn' : 'Bad';
+              const speedHint =
+                speedTier === 'Good'
+                  ? '35+ target met'
+                  : speedTier === 'Warn'
+                    ? '27+ avg pace'
+                    : 'Below 27 WPM';
+              const accuracyHint =
+                accuracyTier === 'Good'
+                  ? 'Clean typing'
+                  : accuracyTier === 'Warn'
+                    ? 'Watch typos'
+                    : 'Needs work';
+              const coachingText =
+                speedTier === 'Bad' && accuracyTier === 'Bad'
+                  ? 'Needs work: slow down to reduce errors, then build past 27 WPM'
+                  : speedTier === 'Bad'
+                    ? 'Speed needs work: build steady rhythm toward 27+ WPM'
+                    : accuracyTier === 'Bad'
+                      ? 'Accuracy needs work: cut typos to raise your Net WPM'
+                      : speedTier === 'Warn' || accuracyTier === 'Warn'
+                        ? 'Good average pace: push toward 35 WPM & 95%+ accuracy'
+                        : 'Strong session: 35+ WPM with high accuracy';
+              const coachingBadgeClass =
+                speedTier === 'Bad' || accuracyTier === 'Bad'
+                  ? styles.summaryBadgeBad
+                  : speedTier === 'Warn' || accuracyTier === 'Warn'
+                    ? styles.summaryBadgeWarn
+                    : styles.summaryBadgeGood;
+
+              return (
+                <section className={styles.summary} aria-label="Session summary">
+                  <div className={styles.summaryHeader}>
+                    <div className={styles.summaryTitleGroup}>
+                      <h2>
+                        Session summary —{' '}
+                        {snapshot.finishedReason === 'target'
+                          ? 'Passage completed'
+                          : 'Time is up'}
+                      </h2>
+                      <span
+                        className={`${styles.summaryCoachingBadge} ${coachingBadgeClass}`}
+                      >
+                        {coachingText}
+                      </span>
+                    </div>
+                    <span className={`muted ${styles.disclaimer}`}>
+                      Practice estimate only — not an official qualification
+                      result.
+                    </span>
+                  </div>
+                  <dl className={styles.summaryGrid}>
+                    <div
+                      className={
+                        speedTier === 'Good'
+                          ? styles.summaryCardGood
+                          : speedTier === 'Warn'
+                            ? styles.summaryCardWarn
+                            : styles.summaryCardBad
+                      }
+                    >
+                      <dt>
+                        <span>Net speed</span>
+                        <span className={styles.summaryHintTag}>
+                          {speedHint}
+                        </span>
+                      </dt>
+                      <dd
+                        className={
+                          speedTier === 'Good'
+                            ? styles.summaryValGood
+                            : speedTier === 'Warn'
+                              ? styles.summaryValWarn
+                              : styles.summaryValBad
+                        }
+                      >
+                        {formatSpeed(snapshot.score.netWpm)} WPM
+                      </dd>
+                    </div>
+                    <div className={styles.summaryCardInfo}>
+                      <dt>
+                        <span>Gross speed</span>
+                        <span className={styles.summaryHintTag}>Raw pace</span>
+                      </dt>
+                      <dd className={styles.summaryValInfo}>
+                        {formatSpeed(snapshot.score.grossWpm)} WPM
+                      </dd>
+                    </div>
+                    <div
+                      className={
+                        accuracyTier === 'Good'
+                          ? styles.summaryCardGood
+                          : accuracyTier === 'Warn'
+                            ? styles.summaryCardWarn
+                            : styles.summaryCardBad
+                      }
+                    >
+                      <dt>
+                        <span>Accuracy</span>
+                        <span className={styles.summaryHintTag}>
+                          {accuracyHint}
+                        </span>
+                      </dt>
+                      <dd
+                        className={
+                          accuracyTier === 'Good'
+                            ? styles.summaryValGood
+                            : accuracyTier === 'Warn'
+                              ? styles.summaryValWarn
+                              : styles.summaryValBad
+                        }
+                      >
+                        {formatPercent(snapshot.score.accuracy)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Active time</dt>
+                      <dd className={styles.summaryValNeutral}>
+                        {snapshot.elapsedMs === null
+                          ? '—'
+                          : `${Math.round(snapshot.elapsedMs / 1000)}s`}
+                      </dd>
+                    </div>
+                    <div
+                      className={
+                        snapshot.incorrectAttempts > 10
+                          ? styles.summaryCardBad
+                          : snapshot.incorrectAttempts > 0
+                            ? styles.summaryCardWarn
+                            : styles.summaryCardGood
+                      }
+                    >
+                      <dt>Keystrokes</dt>
+                      <dd className={styles.summaryKeystrokes}>
+                        <span className={styles.summaryValGood}>
+                          {snapshot.correctAttempts} correct
+                        </span>
+                        <span className={styles.summarySlash}> / </span>
+                        <span
+                          className={
+                            snapshot.incorrectAttempts > 10
+                              ? styles.summaryValBad
+                              : snapshot.incorrectAttempts > 0
+                                ? styles.summaryValWarn
+                                : styles.summaryValGood
+                          }
+                        >
+                          {snapshot.incorrectAttempts} incorrect
+                        </span>
+                      </dd>
+                    </div>
+                  </dl>
+                </section>
+              );
+            })()}
         </div>
 
         {/* Lower Block: Pinned Compact Typing Input Console */}
