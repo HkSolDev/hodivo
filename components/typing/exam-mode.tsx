@@ -36,6 +36,8 @@ import {
   ExamApiError,
 } from '../../lib/typing/exam-api';
 import { evaluateExamAttempt } from '../../lib/typing/exam-evaluator';
+import { useWorkspace } from '../providers/workspace-provider';
+import { AuthBar } from '../auth/auth-bar';
 import styles from './exam-mode.module.css';
 
 const REASON_MESSAGES: Record<ExamReason, string> = {
@@ -105,6 +107,9 @@ function splitPassageForHighlight(
 }
 
 export function ExamMode() {
+  const { accountId, sessionChecked } = useWorkspace();
+  const [authGateEnabled, setAuthGateEnabled] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const [exams, setExams] = useState<ExamSummary[]>([]);
   const [examsNextCursor, setExamsNextCursor] = useState<string | null>(null);
   const [selectedExamId, setSelectedExamId] = useState('');
@@ -133,6 +138,7 @@ export function ExamMode() {
     'normal',
   );
   const sessionRef = useRef<ExamSession | null>(null);
+  const requiresSignInRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isComposingRef = useRef(false);
   const lastFocusedElementRef = useRef<HTMLElement | null>(null);
@@ -164,6 +170,42 @@ export function ExamMode() {
     if (!isComposingRef.current || !next || next.phase === 'finished')
       setLocalText(next?.text ?? '');
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/auth/get-session', { credentials: 'same-origin' })
+      .then(async (res) => {
+        if (!active) return;
+        if (res.status === 401) {
+          setAuthGateEnabled(true);
+          return;
+        }
+        const data: unknown = await res.json().catch(() => null);
+        if (!active) return;
+        if (
+          typeof data === 'object' &&
+          data !== null &&
+          'enabled' in data &&
+          (data as { enabled?: unknown }).enabled === false
+        ) {
+          setAuthGateEnabled(false);
+        } else {
+          setAuthGateEnabled(true);
+        }
+      })
+      .catch(() => {
+        if (active) setAuthGateEnabled(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const requiresSignIn =
+    authGateEnabled && sessionChecked && accountId === null;
+  useEffect(() => {
+    requiresSignInRef.current = requiresSignIn;
+  }, [requiresSignIn]);
 
   const passageContainerRef = useRef<HTMLDivElement | null>(null);
   const passageCursorRef = useRef<HTMLSpanElement | null>(null);
@@ -403,7 +445,7 @@ export function ExamMode() {
     if (!textarea) return;
     const beforeInput = (event: InputEvent) => {
       const current = sessionRef.current;
-      if (!current) {
+      if (!current || requiresSignInRef.current) {
         event.preventDefault();
         return;
       }
@@ -475,7 +517,7 @@ export function ExamMode() {
 
   const handleTextareaChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const current = sessionRef.current;
-    if (!current) return;
+    if (!current || requiresSignInRef.current) return;
     const native = event.nativeEvent;
     const inputType = native instanceof InputEvent ? native.inputType : '';
     if (isComposingRef.current) {
@@ -1100,7 +1142,14 @@ export function ExamMode() {
             <textarea
               ref={textareaRef}
               id="typing-textarea"
-              className={styles.typingTextarea}
+              className={`${styles.typingTextarea} ${
+                requiresSignIn ||
+                (session?.phase === 'ready' &&
+                  !isInputFocused &&
+                  localText.length === 0)
+                  ? styles.typingTextareaBlurred
+                  : ''
+              }`}
               placeholder="Click here and begin typing the official master passage exactly as displayed above. Your test begins immediately upon keystroke..."
               spellCheck={false}
               autoComplete="off"
@@ -1108,10 +1157,55 @@ export function ExamMode() {
               autoCapitalize="off"
               aria-label="Your answer"
               disabled={!session}
-              readOnly={session?.phase === 'finished'}
+              readOnly={session?.phase === 'finished' || requiresSignIn}
               value={localText}
               onChange={handleTextareaChange}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setIsInputFocused(false)}
             />
+            {requiresSignIn ? (
+              <div
+                className={styles.authGateOverlay}
+                role="region"
+                aria-label="Sign in required to start examination"
+              >
+                <div className={styles.authGateCard}>
+                  <span className={styles.authGateBadge}>
+                    Candidate Authentication Required
+                  </span>
+                  <h3 className={styles.authGateTitle}>
+                    Sign in to start Exam Simulation
+                  </h3>
+                  <p className={styles.authGateCopy}>
+                    Sign in to unlock the candidate input console and start the
+                    official examination timer.
+                  </p>
+                  <div className={styles.authGateActions}>
+                    <AuthBar presentation="signin" />
+                  </div>
+                  <Link
+                    href="/typing"
+                    className={styles.authGateSecondaryLink}
+                  >
+                    ← Practice without signing in
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              session?.phase === 'ready' &&
+              !isInputFocused &&
+              localText.length === 0 && (
+                <div className={styles.startReadyOverlay} aria-hidden="true">
+                  <div className={styles.startReadyPill}>
+                    <span className={styles.startReadyDot} />
+                    <span>
+                      Click here to start typing · Timer begins on first
+                      keystroke
+                    </span>
+                  </div>
+                </div>
+              )
+            )}
             <div className={styles.focusGuidePill} aria-hidden="true">
               Strict Exam Mode · Copy-Paste Prohibited
             </div>
