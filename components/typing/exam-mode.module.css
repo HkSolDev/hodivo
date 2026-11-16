@@ -728,6 +728,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .sessionStatusRunning {
@@ -852,12 +853,11 @@
   inset: 0;
   z-index: 10;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
+  padding: 8px 12px;
   background: rgba(239, 244, 255, 0.72);
   backdrop-filter: blur(4px);
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 :global(html[data-theme='dark']) .authGateOverlay {
@@ -865,49 +865,48 @@
 }
 
 .authGateCard {
-  max-width: 440px;
+  margin: auto;
+  max-width: 480px;
   width: 100%;
   background: var(--exam-surface-lowest);
   border: 1px solid var(--exam-border-strong);
-  border-radius: 12px;
-  padding: 14px 18px;
-  box-shadow: 0 10px 25px -6px rgba(11, 28, 48, 0.18);
+  border-radius: 10px;
+  padding: 10px 16px;
+  box-shadow: 0 8px 20px -6px rgba(11, 28, 48, 0.16);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 6px;
-}
-
-.authGateBadge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--exam-accent-blue-soft);
-  color: var(--exam-accent-blue);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  gap: 4px;
+  box-sizing: border-box;
 }
 
 .authGateTitle {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
+  line-height: 1.25;
   color: var(--exam-text-main);
 }
 
 .authGateCopy {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 11.5px;
+  line-height: 1.35;
   color: var(--exam-text-secondary);
 }
 
 .authGateActions {
   margin-top: 4px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.authGateActions :global(.signin-actions) {
+  margin: 0;
+  width: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -915,16 +914,25 @@
   gap: 8px;
 }
 
-.authGateSecondaryLink {
-  margin-top: 2px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--exam-accent-blue);
-  text-decoration: none;
+.authGateActions :global(.signin-actions .passkeys-section) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: contents;
 }
 
-.authGateSecondaryLink:hover {
-  text-decoration: underline;
+.authGateActions :global(.signin-actions .passkeys-section > p) {
+  display: none;
+}
+
+.authGateActions :global(.signin-actions .button) {
+  width: auto;
+  min-height: 34px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 7px;
+  margin: 0;
 }
 
 .startReadyOverlay {
@@ -1424,20 +1432,43 @@
   .panelHeader {
     padding: 4px 10px;
     gap: 4px;
+    flex-wrap: nowrap;
   }
 
   .panelTitle {
     font-size: 11px;
   }
 
-  .panelHint {
+  .panelHint,
+  .prohibitedPill {
     display: none;
   }
 
-  .prohibitedPill {
-    display: inline-flex;
-    font-size: 9px;
-    padding: 1px 5px;
+  .authGateOverlay {
+    padding: 6px 8px;
+  }
+
+  .authGateCard {
+    padding: 8px 12px;
+    gap: 3px;
+  }
+
+  .authGateTitle {
+    font-size: 13px;
+  }
+
+  .authGateCopy {
+    font-size: 11px;
+  }
+
+  .authGateActions :global(.signin-actions) {
+    gap: 6px;
+  }
+
+  .authGateActions :global(.signin-actions .button) {
+    min-height: 30px;
+    padding: 4px 10px;
+    font-size: 11.5px;
   }
 
   .passageContent,

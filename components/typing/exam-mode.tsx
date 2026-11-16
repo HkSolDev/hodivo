@@ -1170,9 +1170,6 @@ export function ExamMode() {
                 aria-label="Sign in required to start examination"
               >
                 <div className={styles.authGateCard}>
-                  <span className={styles.authGateBadge}>
-                    Candidate Authentication Required
-                  </span>
                   <h3 className={styles.authGateTitle}>
                     Sign in to start Exam Simulation
                   </h3>
@@ -1183,12 +1180,6 @@ export function ExamMode() {
                   <div className={styles.authGateActions}>
                     <AuthBar presentation="signin" />
                   </div>
-                  <Link
-                    href="/typing"
-                    className={styles.authGateSecondaryLink}
-                  >
-                    ← Practice without signing in
-                  </Link>
                 </div>
               </div>
             ) : (
