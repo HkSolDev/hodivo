@@ -57,6 +57,52 @@ function countWords(str: string): number {
   return trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
 }
 
+function getOffsetTopWithin(
+  element: HTMLElement,
+  ancestor: HTMLElement,
+): number {
+  let top = 0;
+  let node: HTMLElement | null = element;
+  while (node && node !== ancestor) {
+    top += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  return top;
+}
+
+function splitPassageForHighlight(
+  passageText: string,
+  typedLength: number,
+): { completed: string; active: string; remaining: string } {
+  const clamped = Math.max(0, Math.min(typedLength, passageText.length));
+  if (clamped >= passageText.length) {
+    return { completed: passageText, active: '', remaining: '' };
+  }
+  // Find whole-word boundaries around the current cursor position
+  let start = clamped;
+  let end = clamped + 1;
+  if (/\s/.test(passageText[clamped] ?? '')) {
+    while (end < passageText.length && /\s/.test(passageText[end] ?? '')) {
+      end++;
+    }
+    while (end < passageText.length && !/\s/.test(passageText[end] ?? '')) {
+      end++;
+    }
+  } else {
+    while (start > 0 && !/\s/.test(passageText[start - 1] ?? '')) {
+      start--;
+    }
+    while (end < passageText.length && !/\s/.test(passageText[end] ?? '')) {
+      end++;
+    }
+  }
+  return {
+    completed: passageText.slice(0, start),
+    active: passageText.slice(start, end),
+    remaining: passageText.slice(end),
+  };
+}
+
 export function ExamMode() {
   const [exams, setExams] = useState<ExamSummary[]>([]);
   const [examsNextCursor, setExamsNextCursor] = useState<string | null>(null);
@@ -113,13 +159,18 @@ export function ExamMode() {
     const cursor = passageCursorRef.current;
     if (!container || !cursor) return;
 
-    const lineTop = cursor.offsetTop;
-    if (lastPassageLineTopRef.current === lineTop) return;
+    const lineHeight =
+      Number.parseFloat(getComputedStyle(container).lineHeight) || 26;
+    const lineTop = getOffsetTopWithin(cursor, container);
+    if (
+      lastPassageLineTopRef.current !== null &&
+      Math.abs(lineTop - lastPassageLineTopRef.current) < lineHeight * 0.5
+    ) {
+      return;
+    }
     lastPassageLineTopRef.current = lineTop;
 
-    const lineHeight =
-      Number.parseFloat(getComputedStyle(container).lineHeight) || 0;
-    const targetTop = Math.max(0, lineTop - container.offsetTop - lineHeight);
+    const targetTop = Math.max(0, lineTop - lineHeight * 1.15);
     if (typeof container.scrollTo === 'function') {
       container.scrollTo({ top: targetTop, behavior: 'smooth' });
     } else {
@@ -257,6 +308,8 @@ export function ExamMode() {
     setSelectedPassageId('');
     setSelectedVersionId('');
     setSnapshot(null);
+    lastPassageLineTopRef.current = null;
+    if (passageContainerRef.current) passageContainerRef.current.scrollTop = 0;
     commitSession(null);
   };
 
@@ -403,6 +456,8 @@ export function ExamMode() {
     restartDialogRef.current?.close();
     resultDialogRef.current?.close();
     isComposingRef.current = false;
+    lastPassageLineTopRef.current = null;
+    if (passageContainerRef.current) passageContainerRef.current.scrollTop = 0;
     commitSession(resetExamSession(advanced));
     textareaRef.current?.focus();
   };
@@ -426,261 +481,336 @@ export function ExamMode() {
   const typedLength = session?.text.length ?? 0;
   const remainingStrokes = Math.max(0, passageLength - typedLength);
   const wordCount = countWords(session?.text ?? '');
-  const remainingSecs =
-    session?.remainingSeconds ?? versionDetail?.rules.durationSeconds ?? 600;
+  const configuredDurationSecs =
+    session?.remainingSeconds ?? versionDetail?.rules.durationSeconds ?? null;
+  const remainingSecs = configuredDurationSecs ?? 600;
+  const highlightedPassage = snapshot?.passage.text
+    ? splitPassageForHighlight(snapshot.passage.text, localText.length)
+    : null;
 
   return (
     <div
       className={`${
         styles.examLayout
       } ${fontSize === 'small' ? styles.fontSizeSmall : fontSize === 'large' ? styles.fontSizeLarge : styles.fontSizeNormal}`}
+      data-typing-exam-viewport="true"
     >
-      {/* Reference-style simulation header */}
-      <header className={styles.header}>
-        <div className={styles.headerLeft}>
-          <div className={styles.brandBadge}>EXAM</div>
-          <div className={styles.headerMeta}>
-            <div className={styles.selectorRow}>
-              <label htmlFor="exam-select" className={styles.srOnly}>
-                Exam
-              </label>
-              <select
-                id="exam-select"
-                className={styles.selectControl}
-                value={selectedExamId}
-                disabled={
-                  isSessionActive || isLoadingExams || exams.length === 0
-                }
-                onChange={(e) => {
-                  if (e.target.value === selectedExamId) return;
-                  clearSelection();
-                  setSelectedVersionId('');
-                  setVersions([]);
-                  setVersionsNextCursor(null);
-                  setSelectedExamId(e.target.value);
-                }}
-              >
-                <option value="">Select an exam</option>
-                {exams.map((ex) => (
-                  <option key={ex.id} value={ex.id}>
-                    {ex.name} {ex.organization ? `(${ex.organization})` : ''}
-                  </option>
-                ))}
-              </select>
-              {examsNextCursor && (
-                <button
-                  type="button"
-                  className={styles.btnInline}
-                  disabled={isSessionActive || isLoadingMoreExams}
-                  onClick={() => void fetchExams(examsNextCursor)}
-                >
-                  {isLoadingMoreExams ? 'Loading...' : 'More Exams'}
-                </button>
-              )}
-
-              <label htmlFor="version-select" className={styles.srOnly}>
-                Version
-              </label>
-              <select
-                id="version-select"
-                className={styles.selectControl}
-                value={selectedVersionId}
-                disabled={
-                  isSessionActive || isLoadingVersions || versions.length === 0
-                }
-                onChange={(e) => {
-                  if (e.target.value === selectedVersionId) return;
-                  clearSelection();
-                  setSelectedVersionId(e.target.value);
-                }}
-              >
-                <option value="">Select a version</option>
-                {versions.map((ver) => (
-                  <option key={ver.id} value={ver.id}>
-                    {ver.label} {ver.examYear ? `(${ver.examYear})` : ''}
-                  </option>
-                ))}
-              </select>
-              {versionsNextCursor && (
-                <button
-                  type="button"
-                  className={styles.btnInline}
-                  disabled={isSessionActive || isLoadingMoreVersions}
-                  onClick={() =>
-                    selectedExamId &&
-                    void fetchVersions(selectedExamId, versionsNextCursor)
+      {/* Top Consolidated Exam HUD Toolbar */}
+      <section className={styles.hudSection}>
+        <div className={styles.hudContainer}>
+          {/* Upper HUD Row: Exam Badge, Selectors, Instructions Trigger & Master Timer */}
+          <div className={styles.hudUpperRow}>
+            <div className={styles.headerLeft}>
+              <div className={styles.brandBadge}>
+                <span className={styles.brandPulse} aria-hidden="true" />
+                Official Exam
+              </div>
+              <div className={styles.selectorRow}>
+                <label htmlFor="exam-select" className={styles.srOnly}>
+                  Exam
+                </label>
+                <select
+                  id="exam-select"
+                  className={styles.selectControl}
+                  value={selectedExamId}
+                  disabled={
+                    isSessionActive || isLoadingExams || exams.length === 0
                   }
+                  onChange={(e) => {
+                    if (e.target.value === selectedExamId) return;
+                    clearSelection();
+                    setSelectedVersionId('');
+                    setVersions([]);
+                    setVersionsNextCursor(null);
+                    setSelectedExamId(e.target.value);
+                  }}
                 >
-                  {isLoadingMoreVersions ? 'Loading...' : 'More Versions'}
-                </button>
-              )}
-
-              {passages.length > 0 && (
-                <>
-                  <label htmlFor="passage-select" className={styles.srOnly}>
-                    Passage
-                  </label>
-                  <select
-                    id="passage-select"
-                    className={styles.selectControl}
-                    value={selectedPassageId}
-                    disabled={isSessionActive || isLoadingVersionDetail}
-                    onChange={(e) => setSelectedPassageId(e.target.value)}
-                  >
-                    <option value="">
-                      Random passage ({passages.length} available)
+                  <option value="">Select an exam</option>
+                  {exams.map((ex) => (
+                    <option key={ex.id} value={ex.id}>
+                      {ex.name} {ex.organization ? `(${ex.organization})` : ''}
                     </option>
-                    {passages.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.title} (
-                        {p.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
-                          ? 'Previous Year'
-                          : p.sourceKind === 'RECONSTRUCTED'
-                            ? 'Reconstructed'
-                            : 'Practice'}
-                        )
+                  ))}
+                </select>
+                {examsNextCursor && (
+                  <button
+                    type="button"
+                    className={styles.btnInline}
+                    disabled={isSessionActive || isLoadingMoreExams}
+                    onClick={() => void fetchExams(examsNextCursor)}
+                  >
+                    {isLoadingMoreExams ? 'Loading...' : 'More Exams'}
+                  </button>
+                )}
+
+                <label htmlFor="version-select" className={styles.srOnly}>
+                  Version
+                </label>
+                <select
+                  id="version-select"
+                  className={styles.selectControl}
+                  value={selectedVersionId}
+                  disabled={
+                    isSessionActive ||
+                    isLoadingVersions ||
+                    versions.length === 0
+                  }
+                  onChange={(e) => {
+                    if (e.target.value === selectedVersionId) return;
+                    clearSelection();
+                    setSelectedVersionId(e.target.value);
+                  }}
+                >
+                  <option value="">Select a version</option>
+                  {versions.map((ver) => (
+                    <option key={ver.id} value={ver.id}>
+                      {ver.label} {ver.examYear ? `(${ver.examYear})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {versionsNextCursor && (
+                  <button
+                    type="button"
+                    className={styles.btnInline}
+                    disabled={isSessionActive || isLoadingMoreVersions}
+                    onClick={() =>
+                      selectedExamId &&
+                      void fetchVersions(selectedExamId, versionsNextCursor)
+                    }
+                  >
+                    {isLoadingMoreVersions ? 'Loading...' : 'More Versions'}
+                  </button>
+                )}
+
+                {passages.length > 0 && (
+                  <>
+                    <label htmlFor="passage-select" className={styles.srOnly}>
+                      Passage
+                    </label>
+                    <select
+                      id="passage-select"
+                      className={styles.selectControl}
+                      value={selectedPassageId}
+                      disabled={isSessionActive || isLoadingVersionDetail}
+                      onChange={(e) => setSelectedPassageId(e.target.value)}
+                    >
+                      <option value="">
+                        Random passage ({passages.length} available)
                       </option>
-                    ))}
-                  </select>
-                </>
-              )}
+                      {passages.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title} (
+                          {p.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
+                            ? 'Previous Year'
+                            : p.sourceKind === 'RECONSTRUCTED'
+                              ? 'Reconstructed'
+                              : 'Practice'}
+                          )
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </div>
             </div>
-            <span className={styles.headerSub}>
-              {versionDetail
-                ? `${versionDetail.rules.durationSeconds ?? 'Unspecified'} seconds | ${versionDetail.rules.targetWpm ?? 'Unspecified'} WPM target`
-                : 'Select an exam version to inspect its rules'}{' '}
-              | Simulation
-            </span>
-          </div>
-        </div>
 
-        <div className={styles.headerCenter}>
-          <div className={styles.nodeBadge}>
-            <span>Node:</span>
-            <strong className={styles.nodeVal}>LOCAL SIMULATION</strong>
-          </div>
-        </div>
+            <div className={styles.headerRight}>
+              <span className={styles.headerSub}>
+                {versionDetail
+                  ? `${versionDetail.rules.durationSeconds ?? 'Unspecified'}s · ${versionDetail.rules.targetWpm ?? 'Standard'} WPM target`
+                  : 'Select an exam version to inspect rules'}
+              </span>
 
-        <div className={styles.headerRight}>
-          {/* Candidate Card */}
-          <div className={styles.candidateCard}>
-            <div className={styles.candidateAvatar}>
-              <svg
-                viewBox="0 0 24 24"
-                fill="#94a3b8"
-                width="28"
-                height="34"
-                aria-hidden="true"
+              {/* Digital High-Contrast Precision Timer */}
+              <div
+                className={`${
+                  styles.timer
+                } ${configuredDurationSecs === null ? styles.timerIdle : remainingSecs <= 60 ? styles.timerCritical : remainingSecs <= 120 ? styles.timerWarning : styles.timerSafe}`}
               >
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-              </svg>
-            </div>
-            <div className={styles.candidateDetails}>
-              <div className={styles.candidateName}>SIMULATION CANDIDATE</div>
-              <div className={styles.candidateMeta}>
-                Mode: <strong>Local session</strong>
-              </div>
-              <div className={styles.candidateMeta}>
-                Medium: <strong>English</strong>
+                <div className={styles.timerMetaCol}>
+                  <span className={styles.timerLabel}>Time Left</span>
+                  <span className={styles.timerSubStatus}>
+                    {session?.phase === 'running'
+                      ? 'Active Session'
+                      : session?.phase === 'finished'
+                        ? 'Ended'
+                        : configuredDurationSecs !== null
+                          ? 'Ready'
+                          : 'Select Exam'}
+                  </span>
+                </div>
+                <span className={styles.timerDivider} aria-hidden="true" />
+                <span
+                  className={styles.timerDigits}
+                  aria-label="Time remaining"
+                  aria-live="off"
+                >
+                  {configuredDurationSecs !== null
+                    ? formatRemainingTime(configuredDurationSecs)
+                    : '--:--'}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Countdown Timer */}
-          <div
-            className={`${
-              styles.timer
-            } ${remainingSecs <= 60 ? styles.timerCritical : remainingSecs <= 120 ? styles.timerWarning : styles.timerSafe}`}
+          {/* Lower HUD Parameter Ribbon: Scale, Backspace Protocol & Real-time Telemetry */}
+          <nav
+            className={styles.toolbar}
+            aria-label="Controls and Counters Bar"
           >
-            <span className={styles.timerLabel}>Time Left</span>
-            <span
-              className={styles.timerDigits}
-              aria-label="Time remaining"
-              aria-live="off"
+            <div className={styles.toolbarSection}>
+              {/* Font Zoom Controls */}
+              <div className={styles.zoomControls}>
+                <span className={styles.toolbarLabel}>Scale</span>
+                <div className={styles.zoomPillGroup}>
+                  <button
+                    type="button"
+                    className={`${styles.btnZoom} ${fontSize === 'small' ? styles.btnZoomActive : ''}`}
+                    onClick={() => setFontSize('small')}
+                    title="Decrease Font Size"
+                  >
+                    A-
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.btnZoom} ${fontSize === 'normal' ? styles.btnZoomActive : ''}`}
+                    onClick={() => setFontSize('normal')}
+                    title="Normal Font Size"
+                  >
+                    A
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.btnZoom} ${fontSize === 'large' ? styles.btnZoomActive : ''}`}
+                    onClick={() => setFontSize('large')}
+                    title="Increase Font Size"
+                  >
+                    A+
+                  </button>
+                </div>
+              </div>
+
+              {/* Backspace Constraint Pill */}
+              <div className={styles.rulePill}>
+                <span className={styles.ruleDot} />
+                <span>
+                  Rule:{' '}
+                  <strong>
+                    Backspace:{' '}
+                    {versionDetail?.rules.backspacePolicy ?? 'Unspecified'}
+                  </strong>
+                </span>
+              </div>
+
+              <span className={styles.passageTitlePill}>
+                <span className={styles.toolbarLabel}>Passage:</span>
+                <strong>
+                  {snapshot?.passage.title ?? 'No passage selected'}
+                </strong>
+              </span>
+            </div>
+
+            {/* Telemetry Stroke / Character Counter Matrix */}
+            <div className={styles.telemetryMatrix}>
+              <div className={styles.statPill}>
+                <span>Total Strokes:</span>
+                <strong className={styles.statValue}>
+                  {passageLength.toLocaleString()}
+                </strong>
+              </div>
+              <span className={styles.statDivider} aria-hidden="true" />
+              <div className={styles.statPill}>
+                <span>Typed:</span>
+                <strong className={`${styles.statValue} ${styles.statTyped}`}>
+                  {typedLength.toLocaleString()}
+                </strong>
+              </div>
+              <span className={styles.statDivider} aria-hidden="true" />
+              <div className={styles.statPill}>
+                <span>Remaining:</span>
+                <strong
+                  className={`${styles.statValue} ${styles.statRemaining}`}
+                >
+                  {remainingStrokes.toLocaleString()}
+                </strong>
+              </div>
+              <span className={styles.statDivider} aria-hidden="true" />
+              <div className={styles.statPill}>
+                <span>Words:</span>
+                <strong className={styles.statValue}>
+                  {wordCount.toLocaleString()}
+                </strong>
+              </div>
+            </div>
+          </nav>
+
+          {/* Compact Instructions & Session Launch Strip */}
+          {versionDetail && (
+            <section
+              className={styles.instructionsBar}
+              aria-label="Exam instructions"
             >
-              {formatRemainingTime(remainingSecs)}
-            </span>
-          </div>
+              <details className={styles.instructionsDetails} open={!session}>
+                <summary className={styles.instructionsSummary}>
+                  Instructions and passage source
+                </summary>
+                <div className={styles.instructionsBody}>
+                  <strong>{versionDetail.label}</strong>
+                  <p>
+                    {versionDetail.rules.instructions ??
+                      'Read the passage and type it in the answer field.'}
+                  </p>
+                  <p>
+                    Typing starts the clock. Corrections are allowed in the
+                    supported simulation. Paste and drop are blocked.
+                    Confirmation does not pause the clock. Official scoring is
+                    unavailable.
+                  </p>
+                  {snapshot && (
+                    <p>
+                      Passage source:{' '}
+                      {snapshot.passage.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
+                        ? 'Official previous-year'
+                        : snapshot.passage.sourceKind === 'RECONSTRUCTED'
+                          ? 'Reconstructed'
+                          : 'Practice'}
+                      {snapshot.passage.sourceNote
+                        ? ` — ${snapshot.passage.sourceNote}`
+                        : ''}
+                    </p>
+                  )}
+                </div>
+              </details>
+              <div className={styles.instructionsAction}>
+                {!session && (
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    onClick={() => void loadPassage()}
+                    disabled={
+                      !versionDetail.readiness.canStart || isLoadingSnapshot
+                    }
+                  >
+                    {isLoadingSnapshot ? 'Loading passage...' : 'Load passage'}
+                  </button>
+                )}
+                {session && (
+                  <button
+                    type="button"
+                    className={`${styles.btn} ${styles.btnSecondary}`}
+                    onClick={() => {
+                      rememberFocus();
+                      changeVersionDialogRef.current?.showModal();
+                    }}
+                  >
+                    Choose another version
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
         </div>
-      </header>
-
-      {/* 2. Controls & Counters Bar */}
-      <nav className={styles.toolbar} aria-label="Controls and Counters Bar">
-        <div className={styles.toolbarSection}>
-          <span className={styles.toolbarLabel}>Passage:</span>
-          <strong style={{ fontSize: '0.82rem' }}>
-            {snapshot?.passage.title ?? 'No passage selected'}
-          </strong>
-
-          {/* Font Zoom Controls */}
-          <div className={styles.zoomControls}>
-            <span className={styles.toolbarLabel}>Text Size:</span>
-            <button
-              type="button"
-              className={`${styles.btnZoom} ${fontSize === 'small' ? styles.btnZoomActive : ''}`}
-              onClick={() => setFontSize('small')}
-              title="Decrease Font Size"
-            >
-              A-
-            </button>
-            <button
-              type="button"
-              className={`${styles.btnZoom} ${fontSize === 'normal' ? styles.btnZoomActive : ''}`}
-              onClick={() => setFontSize('normal')}
-              title="Normal Font Size"
-            >
-              A
-            </button>
-            <button
-              type="button"
-              className={`${styles.btnZoom} ${fontSize === 'large' ? styles.btnZoomActive : ''}`}
-              onClick={() => setFontSize('large')}
-              title="Increase Font Size"
-            >
-              A+
-            </button>
-          </div>
-
-          {/* Backspace Pill */}
-          <div className={styles.rulePill}>
-            <span className={styles.ruleDot} />
-            <span>
-              Backspace:{' '}
-              <strong>
-                {versionDetail?.rules.backspacePolicy ?? 'Unspecified'}
-              </strong>
-            </span>
-          </div>
-        </div>
-
-        {/* Counters */}
-        <div className={styles.toolbarSection}>
-          <div className={styles.statPill}>
-            <span>Passage characters:</span>
-            <strong className={styles.statValue}>
-              {passageLength.toLocaleString()}
-            </strong>
-          </div>
-          <div className={styles.statPill}>
-            <span>Typed characters:</span>
-            <strong className={styles.statValue}>
-              {typedLength.toLocaleString()}
-            </strong>
-          </div>
-          <div className={styles.statPill}>
-            <span>Remaining:</span>
-            <strong className={styles.statValue}>
-              {remainingStrokes.toLocaleString()}
-            </strong>
-          </div>
-          <div className={styles.statPill}>
-            <span>Words:</span>
-            <strong className={styles.statValue}>
-              {wordCount.toLocaleString()}
-            </strong>
-          </div>
-        </div>
-      </nav>
+      </section>
 
       {/* Error / Readiness Banner */}
       {errorMessage && (
@@ -714,138 +844,179 @@ export function ExamMode() {
         </div>
       )}
 
-      {isLoadingExams && <p role="status">Loading exams...</p>}
+      {isLoadingExams && (
+        <p className={styles.statusNotice} role="status">
+          Loading exams...
+        </p>
+      )}
       {!isLoadingExams && !errorMessage && exams.length === 0 && (
-        <p role="status">No published exams are available.</p>
+        <p className={styles.statusNotice} role="status">
+          No published exams are available.
+        </p>
       )}
       {selectedExamId && !isLoadingVersions && versions.length === 0 && (
-        <p role="status">No published versions are available.</p>
+        <p className={styles.statusNotice} role="status">
+          No published versions are available.
+        </p>
       )}
-      {versionDetail && (
-        <section className={styles.toolbar} aria-label="Exam instructions">
-          <details open={!session}>
-            <summary>Instructions and passage source</summary>
-            <strong>{versionDetail.label}</strong>
-            <p>
-              {versionDetail.rules.instructions ??
-                'Read the passage and type it in the answer field.'}
-            </p>
-            <p>
-              Typing starts the clock. Corrections are allowed in the supported
-              simulation. Paste and drop are blocked. Confirmation does not
-              pause the clock. Official scoring is unavailable.
-            </p>
-            {snapshot && (
-              <p>
-                Passage source:{' '}
-                {snapshot.passage.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
-                  ? 'Official previous-year'
-                  : snapshot.passage.sourceKind === 'RECONSTRUCTED'
-                    ? 'Reconstructed'
-                    : 'Practice'}
-                {snapshot.passage.sourceNote
-                  ? ` — ${snapshot.passage.sourceNote}`
-                  : ''}
-              </p>
-            )}
-          </details>
-          {!session && (
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnPrimary}`}
-              onClick={() => void loadPassage()}
-              disabled={!versionDetail.readiness.canStart || isLoadingSnapshot}
-            >
-              {isLoadingSnapshot ? 'Loading passage...' : 'Load passage'}
-            </button>
-          )}
-          {session && (
-            <button
-              type="button"
-              className={`${styles.btn} ${styles.btnSecondary}`}
-              onClick={() => {
-                rememberFocus();
-                changeVersionDialogRef.current?.showModal();
-              }}
-            >
-              Choose another version
-            </button>
-          )}
-        </section>
-      )}
-      {/* 3. Split Screen: Master Passage & Candidate Input */}
+
+      {/* Dual-Pane Viewport-Locked Split Workspace (Strict internal auto-scroll only) */}
       <div className={styles.splitScreen}>
-        {/* Master Passage */}
+        {/* PANE 1: Official Master Passage (Top Half) */}
         <section className={styles.panel} aria-labelledby="passage-heading">
           <div className={styles.panelHeader}>
-            <h2 id="passage-heading" className={styles.panelTitle}>
-              Master Text Passage
-            </h2>
-            <span className={styles.panelHint}>
-              Read-only master passage. Auto-scrolls as you type; manual scroll
-              also available.
-            </span>
+            <div className={styles.panelHeaderLeft}>
+              <span className={styles.panelIcon} aria-hidden="true">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                </svg>
+              </span>
+              <h2 id="passage-heading" className={styles.panelTitle}>
+                Official Master Passage
+              </h2>
+              <span className={styles.panelBadge}>
+                Read-only Examination Script
+              </span>
+            </div>
+            <div className={styles.panelHeaderRight}>
+              <span className={styles.syncBadge}>
+                <span className={styles.syncDot} aria-hidden="true" />
+                Auto-scrolls synchronously
+              </span>
+              {versionDetail?.rules.targetWpm && (
+                <span className={styles.targetSpeedPill}>
+                  Target: {versionDetail.rules.targetWpm} WPM
+                </span>
+              )}
+            </div>
           </div>
           <div ref={passageContainerRef} className={styles.passageContent}>
             {isLoadingVersionDetail || isLoadingSnapshot ? (
-              <p style={{ color: '#64748b' }}>Loading master passage...</p>
-            ) : snapshot?.passage.text ? (
+              <p className={styles.passagePlaceholder}>
+                Loading master passage...
+              </p>
+            ) : highlightedPassage ? (
               <>
-                {snapshot.passage.text.slice(
-                  0,
-                  Math.min(localText.length, snapshot.passage.text.length),
-                )}
-                <span ref={passageCursorRef} aria-hidden="true" />
-                {snapshot.passage.text.slice(
-                  Math.min(localText.length, snapshot.passage.text.length),
-                )}
+                <span className={styles.passageCompleted}>
+                  {highlightedPassage.completed}
+                </span>
+                <span
+                  ref={passageCursorRef}
+                  className={styles.passageActiveWord}
+                >
+                  {highlightedPassage.active}
+                </span>
+                <span className={styles.passageRemaining}>
+                  {highlightedPassage.remaining}
+                </span>
               </>
             ) : (
-              'Select a ready exam version to load passage.'
+              <span className={styles.passagePlaceholder}>
+                Select a ready exam version to load passage.
+              </span>
             )}
           </div>
         </section>
 
-        {/* Typing Input Area */}
-        <section className={styles.panel} aria-labelledby="input-heading">
+        {/* PANE 2: Candidate Real-time Interactive Typing Console (Bottom Half) */}
+        <section
+          className={`${styles.panel} ${styles.inputPanel}`}
+          aria-labelledby="input-heading"
+        >
           <div className={styles.panelHeader}>
-            <h2 id="input-heading" className={styles.panelTitle}>
-              Candidate Typing Area
-            </h2>
-            <span className={styles.panelHint}>
-              {session?.phase === 'running'
-                ? 'Test in progress. Editing and navigation permitted.'
-                : session?.phase === 'finished'
-                  ? 'Test submitted / expired. Typing box is read-only.'
-                  : 'Click below and type. Timer begins on your first accepted text insertion.'}
-            </span>
+            <div className={styles.panelHeaderLeft}>
+              <span
+                className={`${styles.panelIcon} ${styles.panelIconConsole}`}
+                aria-hidden="true"
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10" />
+                </svg>
+              </span>
+              <h2 id="input-heading" className={styles.panelTitle}>
+                Candidate Input Console
+              </h2>
+              <span
+                className={`${styles.sessionStatusTag} ${
+                  session?.phase === 'running'
+                    ? styles.sessionStatusRunning
+                    : session?.phase === 'finished'
+                      ? styles.sessionStatusFinished
+                      : ''
+                }`}
+              >
+                {session?.phase === 'running'
+                  ? 'Session Active'
+                  : session?.phase === 'finished'
+                    ? 'Completed'
+                    : 'Awaiting Keystroke'}
+              </span>
+            </div>
+            <div className={styles.panelHeaderRight}>
+              <span className={styles.panelHint}>
+                {session?.phase === 'running'
+                  ? 'Test in progress · Editing permitted'
+                  : session?.phase === 'finished'
+                    ? 'Test submitted / expired · Read-only'
+                    : 'Clock starts automatically on first keystroke'}
+              </span>
+              <span className={styles.prohibitedPill}>
+                Copy-Paste Prohibited
+              </span>
+            </div>
           </div>
-          <textarea
-            ref={textareaRef}
-            id="typing-textarea"
-            className={styles.typingTextarea}
-            placeholder="Click here and begin typing according to the master passage above..."
-            spellCheck={false}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            aria-label="Your answer"
-            disabled={!session}
-            readOnly={session?.phase === 'finished'}
-            value={localText}
-            onChange={handleTextareaChange}
-          />
+          <div className={styles.textareaWrap}>
+            <textarea
+              ref={textareaRef}
+              id="typing-textarea"
+              className={styles.typingTextarea}
+              placeholder="Click here and begin typing the official master passage exactly as displayed above. Your test begins immediately upon keystroke..."
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              aria-label="Your answer"
+              disabled={!session}
+              readOnly={session?.phase === 'finished'}
+              value={localText}
+              onChange={handleTextareaChange}
+            />
+            <div className={styles.focusGuidePill} aria-hidden="true">
+              Strict Exam Mode · Copy-Paste Prohibited
+            </div>
+          </div>
         </section>
       </div>
 
-      {/* 4. Footer Action Bar */}
+      {/* Pinned Bottom Simulation Action & Integrity Bar */}
       <footer className={styles.footer}>
         <div className={styles.footerLeft}>
           <Link href="/typing" className={styles.exitLink}>
             ← Return to Practice Mode
           </Link>
           <span className={styles.footerWarning}>
-            Reloading or leaving this page discards your local session.
+            Exiting or reloading will immediately forfeit this simulation
+            attempt.
           </span>
         </div>
 
