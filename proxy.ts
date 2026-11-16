@@ -1,8 +1,22 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { formatRobotsTxt } from './app/robots';
 import { prefersMarkdown } from './lib/markdown-negotiation';
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  if (
+    (request.method === 'GET' || request.method === 'HEAD') &&
+    pathname === '/robots.txt'
+  ) {
+    return new NextResponse(formatRobotsTxt(process.env.SITE_URL), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'public, max-age=3600',
+      },
+    });
+  }
 
   if (
     (request.method === 'GET' || request.method === 'HEAD') &&

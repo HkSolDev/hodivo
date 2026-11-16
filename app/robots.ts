@@ -14,6 +14,8 @@ export const PRIVATE_DISALLOW_PATHS = [
   '/api/',
 ] as const;
 
+export const CONTENT_SIGNAL_DIRECTIVE = 'ai-train=no, search=yes, ai-input=yes';
+
 export function buildRobots(
   origin = process.env.SITE_URL,
 ): MetadataRoute.Robots {
@@ -31,6 +33,25 @@ export function buildRobots(
     },
     sitemap: new URL('/sitemap.xml', baseOrigin).href,
   };
+}
+
+export function formatRobotsTxt(origin = process.env.SITE_URL): string {
+  const config = buildRobots(origin);
+  const lines = [
+    '# Content Signals (https://contentsignals.org/)',
+    '# Public pages: Government Job Eligibility (/ , /jobs/*), Typing Practice (/typing), and Real Exam Typing Simulation (/typing/exam)',
+    'User-Agent: *',
+    `Content-Signal: ${CONTENT_SIGNAL_DIRECTIVE}`,
+    'Allow: /',
+    'Allow: /typing',
+    'Allow: /typing/exam',
+    'Allow: /jobs/',
+    ...PRIVATE_DISALLOW_PATHS.map((p) => `Disallow: ${p}`),
+    '',
+    `Sitemap: ${config.sitemap}`,
+    '',
+  ];
+  return lines.join('\n');
 }
 
 export default function robots(): MetadataRoute.Robots {

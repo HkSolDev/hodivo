@@ -51,15 +51,41 @@ test('proxy rewrites Accept: text/markdown to /md and passes through text/html',
   assert.equal(htmlRes.headers.get('vary'), 'Accept');
 });
 
-test('md route handler returns text/markdown with Vary: Accept', async () => {
+test('md route handler returns text/markdown with Vary: Accept and Content-Signal', async () => {
   const res = await mdGet(new Request('http://localhost:8080/md'), {
     params: Promise.resolve({}),
   });
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-type'), 'text/markdown; charset=utf-8');
   assert.equal(res.headers.get('vary'), 'Accept');
+  assert.equal(
+    res.headers.get('content-signal'),
+    'ai-train=no, search=yes, ai-input=yes',
+  );
+  assert.ok(Number(res.headers.get('x-markdown-tokens')) > 0);
   const body = await res.text();
   assert.match(body, /^# Aptus/m);
+
+  const typingRes = await mdGet(
+    new Request('http://localhost:8080/md/typing'),
+    {
+      params: Promise.resolve({ slug: ['typing'] }),
+    },
+  );
+  assert.equal(typingRes.status, 200);
+  const typingBody = await typingRes.text();
+  assert.match(typingBody, /Government Exam Typing Practice/);
+  assert.match(typingBody, /https:\/\/hodivo\.app\/typing/);
+
+  const examRes = await mdGet(
+    new Request('http://localhost:8080/md/typing/exam'),
+    {
+      params: Promise.resolve({ slug: ['typing', 'exam'] }),
+    },
+  );
+  assert.equal(examRes.status, 200);
+  const examBody = await examRes.text();
+  assert.match(examBody, /Government Exam Typing Simulation/);
 
   const notFoundRes = await mdGet(
     new Request('http://localhost:8080/md/does-not-exist'),
@@ -71,6 +97,24 @@ test('md route handler returns text/markdown with Vary: Accept', async () => {
     'text/markdown; charset=utf-8',
   );
   assert.equal(notFoundRes.headers.get('vary'), 'Accept');
+});
+
+test('proxy serves /robots.txt with Content-Signal directives', async () => {
+  const robotsReq = new NextRequest('http://localhost:8080/robots.txt');
+  const robotsRes = proxy(robotsReq);
+  assert.equal(robotsRes.status, 200);
+  assert.equal(
+    robotsRes.headers.get('content-type'),
+    'text/plain; charset=utf-8',
+  );
+  const robotsBody = await robotsRes.text();
+  assert.match(robotsBody, /User-Agent: \*/);
+  assert.match(
+    robotsBody,
+    /Content-Signal: ai-train=no, search=yes, ai-input=yes/,
+  );
+  assert.match(robotsBody, /Disallow: \/api\//);
+  assert.match(robotsBody, /Sitemap: https:\/\/hodivo\.app\/sitemap\.xml/);
 });
 
 test('renderMarkdownForPath formats job details from backend response', async () => {

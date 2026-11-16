@@ -1,4 +1,9 @@
+import { CONTENT_SIGNAL_DIRECTIVE } from '../../robots';
 import { renderMarkdownForPath } from '../../../lib/markdown-negotiation';
+
+function estimateMarkdownTokens(markdown: string): number {
+  return Math.max(1, Math.ceil(markdown.length / 4));
+}
 
 export async function GET(
   _request: Request,
@@ -13,6 +18,19 @@ export async function GET(
     headers: {
       'Content-Type': 'text/markdown; charset=utf-8',
       Vary: 'Accept',
+      'Content-Signal': CONTENT_SIGNAL_DIRECTIVE,
+      'x-markdown-tokens': String(estimateMarkdownTokens(markdown)),
     },
+  });
+}
+
+export async function HEAD(
+  request: Request,
+  context: { params: Promise<{ slug?: string[] }> },
+) {
+  const res = await GET(request, context);
+  return new Response(null, {
+    status: res.status,
+    headers: res.headers,
   });
 }

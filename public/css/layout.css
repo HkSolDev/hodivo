@@ -235,3 +235,62 @@ h1 em {
     flex-wrap: wrap;
   }
 }
+
+/* Zero-scroll 100dvh viewport lock for /typing practice & /typing/exam pages */
+html:has(#typing-title),
+html:has(#typing-exam-title) {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+body:has(#typing-title),
+body:has(#typing-exam-title) {
+  height: 100vh;
+  height: 100dvh;
+  max-width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+body:has(#typing-title) > footer,
+body:has(#typing-title) .site-footer,
+body:has(#typing-exam-title) > footer,
+body:has(#typing-exam-title) .site-footer {
+  display: none;
+}
+
+body:has(#typing-title) > main,
+body:has(#typing-exam-title) > main {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body:has(#typing-title) .typing-page-shell,
+body:has(#typing-exam-title) .typing-exam-page-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Fallback for ultra-short landscape viewports or 200% browser zoom */
+@media (max-height: 600px) {
+  body:has(#typing-exam-title) {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+  body:has(#typing-exam-title) > main,
+  body:has(#typing-exam-title) .typing-exam-page-shell {
+    overflow: visible;
+  }
+}
