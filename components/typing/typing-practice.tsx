@@ -821,16 +821,14 @@ export function TypingPractice() {
           }}
         >
           <div className={styles.inputHeader}>
-            <span className={styles.inputLabelVisual} aria-hidden="true">
-              <span className={styles.readyDot} />
-              <span>Ready</span>
-            </span>
             <p className={note ? styles.note : styles.statusLine} role="status">
-              {note ?? statusMessage ?? ''}
-              {snapshot.status === 'finished' &&
-                (snapshot.finishedReason === 'target'
-                  ? 'Passage completed — press Restart or Next passage.'
-                  : 'Time is up — press Restart or Next passage.')}
+              {note ??
+                statusMessage ??
+                (snapshot.status === 'finished'
+                  ? snapshot.finishedReason === 'target'
+                    ? 'Passage completed — press Restart or Next passage.'
+                    : 'Time is up — press Restart or Next passage.'
+                  : '')}
             </p>
           </div>
 
