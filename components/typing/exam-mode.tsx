@@ -142,6 +142,20 @@ export function ExamMode() {
   const examsAbortRef = useRef<AbortController | null>(null);
   const versionsAbortRef = useRef<AbortController | null>(null);
   const snapshotAbortRef = useRef<AbortController | null>(null);
+  const cacheRef = useRef<{
+    versionsByExam: Map<
+      string,
+      { items: ExamVersionSummary[]; nextCursor: string | null }
+    >;
+    detailByVersion: Map<string, ExamVersionDetail>;
+    passagesByVersion: Map<string, ExamPassageSummary[]>;
+    snapshotByKey: Map<string, ExamStartSnapshot>;
+  }>({
+    versionsByExam: new Map(),
+    detailByVersion: new Map(),
+    passagesByVersion: new Map(),
+    snapshotByKey: new Map(),
+  });
 
   const commitSession = useCallback((next: ExamSession | null) => {
     sessionRef.current = next;
@@ -211,6 +225,17 @@ export function ExamMode() {
 
   const fetchVersions = useCallback(async (examId: string, cursor?: string) => {
     versionsAbortRef.current?.abort();
+    if (!cursor) {
+      const cached = cacheRef.current.versionsByExam.get(examId);
+      if (cached) {
+        setVersions(cached.items);
+        setVersionsNextCursor(cached.nextCursor);
+        setIsLoadingVersions(false);
+        setIsLoadingMoreVersions(false);
+        setErrorMessage(null);
+        return;
+      }
+    }
     const controller = new AbortController();
     versionsAbortRef.current = controller;
     if (cursor) setIsLoadingMoreVersions(true);
@@ -219,6 +244,12 @@ export function ExamMode() {
     try {
       const page = await loadExamVersions(examId, controller.signal, cursor);
       if (controller.signal.aborted) return;
+      if (!cursor) {
+        cacheRef.current.versionsByExam.set(examId, {
+          items: page.items,
+          nextCursor: page.nextCursor,
+        });
+      }
       setVersions((prev) => (cursor ? [...prev, ...page.items] : page.items));
       setVersionsNextCursor(page.nextCursor);
     } catch (error) {
@@ -240,8 +271,77 @@ export function ExamMode() {
     return () => versionsAbortRef.current?.abort();
   }, [selectedExamId, fetchVersions, retry]);
 
+  const loadPassageForVersion = useCallback(
+    async (targetVersion: ExamVersionDetail, passageIdOverride?: string) => {
+      if (
+        !targetVersion.readiness.canStart ||
+        (sessionRef.current && sessionRef.current.phase !== 'ready')
+      )
+        return;
+      const targetPassageId =
+        passageIdOverride !== undefined ? passageIdOverride : selectedPassageId;
+      if (targetPassageId) {
+        const cachedSnapshot = cacheRef.current.snapshotByKey.get(
+          `${targetVersion.id}:${targetPassageId}`,
+        );
+        if (cachedSnapshot) {
+          snapshotAbortRef.current?.abort();
+          setIsLoadingSnapshot(false);
+          setErrorMessage(null);
+          setSnapshot(cachedSnapshot);
+          setVersionDetail(cachedSnapshot.version);
+          commitSession(createExamSession(cachedSnapshot));
+          return;
+        }
+      }
+      snapshotAbortRef.current?.abort();
+      const controller = new AbortController();
+      snapshotAbortRef.current = controller;
+      setIsLoadingSnapshot(true);
+      setErrorMessage(null);
+      try {
+        const loaded = await loadExamSnapshot(
+          targetVersion.id,
+          controller.signal,
+          targetPassageId || undefined,
+        );
+        if (controller.signal.aborted) return;
+        cacheRef.current.snapshotByKey.set(
+          `${targetVersion.id}:${loaded.passage.id}`,
+          loaded,
+        );
+        setSnapshot(loaded);
+        setVersionDetail(loaded.version);
+        commitSession(createExamSession(loaded));
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setErrorMessage(
+            error instanceof ExamApiError
+              ? error.message
+              : 'Unable to prepare this exam. Please retry.',
+          );
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingSnapshot(false);
+      }
+    },
+    [selectedPassageId, commitSession],
+  );
+
   useEffect(() => {
     if (!selectedVersionId || sessionRef.current) return;
+    const cachedDetail = cacheRef.current.detailByVersion.get(selectedVersionId);
+    const cachedPassages =
+      cacheRef.current.passagesByVersion.get(selectedVersionId);
+    if (cachedDetail && cachedPassages) {
+      setVersionDetail(cachedDetail);
+      setPassages(cachedPassages);
+      setIsLoadingVersionDetail(false);
+      setErrorMessage(null);
+      if (cachedDetail.readiness.canStart && cachedPassages.length > 0) {
+        void loadPassageForVersion(cachedDetail, '');
+      }
+      return;
+    }
     const controller = new AbortController();
     setIsLoadingVersionDetail(true);
     setErrorMessage(null);
@@ -251,8 +351,16 @@ export function ExamMode() {
     ])
       .then(([detail, passageList]) => {
         if (!controller.signal.aborted) {
+          cacheRef.current.detailByVersion.set(selectedVersionId, detail);
+          cacheRef.current.passagesByVersion.set(
+            selectedVersionId,
+            passageList,
+          );
           setVersionDetail(detail);
           setPassages(passageList);
+          if (detail.readiness.canStart && passageList.length > 0) {
+            void loadPassageForVersion(detail, '');
+          }
         }
       })
       .catch((error) => {
@@ -267,35 +375,11 @@ export function ExamMode() {
         if (!controller.signal.aborted) setIsLoadingVersionDetail(false);
       });
     return () => controller.abort();
-  }, [selectedVersionId, retry]);
+  }, [selectedVersionId, retry, loadPassageForVersion]);
 
-  const loadPassage = async () => {
-    if (!versionDetail?.readiness.canStart || sessionRef.current) return;
-    snapshotAbortRef.current?.abort();
-    const controller = new AbortController();
-    snapshotAbortRef.current = controller;
-    setIsLoadingSnapshot(true);
-    setErrorMessage(null);
-    try {
-      const loaded = await loadExamSnapshot(
-        versionDetail.id,
-        controller.signal,
-        selectedPassageId || undefined,
-      );
-      if (controller.signal.aborted) return;
-      setSnapshot(loaded);
-      setVersionDetail(loaded.version);
-      commitSession(createExamSession(loaded));
-    } catch (error) {
-      if (!controller.signal.aborted)
-        setErrorMessage(
-          error instanceof ExamApiError
-            ? error.message
-            : 'Unable to prepare this exam. Please retry.',
-        );
-    } finally {
-      if (!controller.signal.aborted) setIsLoadingSnapshot(false);
-    }
+  const loadPassage = async (passageIdOverride?: string) => {
+    if (!versionDetail) return;
+    await loadPassageForVersion(versionDetail, passageIdOverride);
   };
   useEffect(() => () => snapshotAbortRef.current?.abort(), []);
 
@@ -476,7 +560,14 @@ export function ExamMode() {
       document.getElementById('version-select')?.focus(),
     );
   };
-  const isSessionActive = session !== null || isLoadingSnapshot;
+  const isSessionActive =
+    (session !== null &&
+      (session.phase !== 'ready' || passages.length === 0)) ||
+    isLoadingSnapshot;
+  const isPassageSelectLocked =
+    (session !== null && session.phase !== 'ready') ||
+    isLoadingVersionDetail ||
+    isLoadingSnapshot;
   const passageLength = snapshot?.passage.text.length ?? 0;
   const typedLength = session?.text.length ?? 0;
   const remainingStrokes = Math.max(0, passageLength - typedLength);
@@ -487,6 +578,36 @@ export function ExamMode() {
   const highlightedPassage = snapshot?.passage.text
     ? splitPassageForHighlight(snapshot.passage.text, localText.length)
     : null;
+
+  // Practice-estimate scorecard metrics for completion dialog
+  const durationProfileSecs = versionDetail?.rules.durationSeconds ?? 600;
+  const elapsedSecs = Math.max(0, durationProfileSecs - remainingSecs);
+  const elapsedMins = Math.max(elapsedSecs / 60, 1 / 60);
+  const targetWpm = versionDetail?.rules.targetWpm ?? 35;
+  const maxErrorPct = versionDetail?.rules.maxErrorPercent ?? 7;
+  const masterStr = snapshot?.passage.text ?? '';
+  const typedStr = session?.text ?? '';
+  let correctChars = 0;
+  const compareLen = Math.min(typedLength, masterStr.length);
+  for (let i = 0; i < compareLen; i++) {
+    if (typedStr[i] === masterStr[i]) correctChars++;
+  }
+  const incorrectChars = Math.max(0, typedLength - correctChars);
+  const grossWpm =
+    typedLength > 0 ? Math.round(typedLength / 5 / elapsedMins) : 0;
+  const netWpm =
+    typedLength > 0
+      ? Math.max(
+          0,
+          Math.round((typedLength / 5 - incorrectChars) / elapsedMins),
+        )
+      : 0;
+  const accuracyPct =
+    typedLength > 0 ? Math.round((correctChars / typedLength) * 100) : 100;
+  const errorPct =
+    typedLength > 0
+      ? Number(((incorrectChars / typedLength) * 100).toFixed(1))
+      : 0;
 
   return (
     <div
@@ -591,8 +712,14 @@ export function ExamMode() {
                       id="passage-select"
                       className={styles.selectControl}
                       value={selectedPassageId}
-                      disabled={isSessionActive || isLoadingVersionDetail}
-                      onChange={(e) => setSelectedPassageId(e.target.value)}
+                      disabled={isPassageSelectLocked}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setSelectedPassageId(nextId);
+                        if (versionDetail?.readiness.canStart) {
+                          void loadPassageForVersion(versionDetail, nextId);
+                        }
+                      }}
                     >
                       <option value="">
                         Random passage ({passages.length} available)
@@ -750,7 +877,7 @@ export function ExamMode() {
               className={styles.instructionsBar}
               aria-label="Exam instructions"
             >
-              <details className={styles.instructionsDetails} open={!session}>
+              <details className={styles.instructionsDetails}>
                 <summary className={styles.instructionsSummary}>
                   Instructions and passage source
                 </summary>
@@ -1206,6 +1333,53 @@ export function ExamMode() {
           </div>
 
           <div className={styles.scoreGrid}>
+            <div
+              className={`${styles.scoreCard} ${
+                netWpm >= targetWpm
+                  ? styles.scoreCardHero
+                  : netWpm >= 27
+                    ? styles.scoreCardWarn
+                    : styles.scoreCardDanger
+              }`}
+            >
+              <span className={styles.scoreCardLabel}>Net Speed (Est.)</span>
+              <strong className={styles.scoreCardVal}>{netWpm} WPM</strong>
+              <span className={styles.scoreCardSub}>
+                Target benchmark: {targetWpm} WPM
+              </span>
+            </div>
+            <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
+              <span className={styles.scoreCardLabel}>Gross Speed</span>
+              <strong className={styles.scoreCardVal}>{grossWpm} WPM</strong>
+              <span className={styles.scoreCardSub}>Raw keystroke pace</span>
+            </div>
+            <div
+              className={`${styles.scoreCard} ${
+                accuracyPct >= 100 - maxErrorPct
+                  ? styles.scoreCardHero
+                  : accuracyPct >= 90
+                    ? styles.scoreCardWarn
+                    : styles.scoreCardDanger
+              }`}
+            >
+              <span className={styles.scoreCardLabel}>Accuracy</span>
+              <strong className={styles.scoreCardVal}>{accuracyPct}%</strong>
+              <span className={styles.scoreCardSub}>
+                {correctChars.toLocaleString()} correct /{' '}
+                {incorrectChars.toLocaleString()} errors ({errorPct}% err)
+              </span>
+            </div>
+            <div className={styles.scoreCard}>
+              <span className={styles.scoreCardLabel}>Time Taken</span>
+              <strong className={styles.scoreCardVal}>
+                {versionDetail?.rules.durationSeconds
+                  ? `${Math.max(0, versionDetail.rules.durationSeconds - remainingSecs)}s`
+                  : `${600 - remainingSecs}s`}
+              </strong>
+              <span className={styles.scoreCardSub}>
+                Duration profile: {versionDetail?.rules.durationSeconds ?? 600}s
+              </span>
+            </div>
             <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
               <span className={styles.scoreCardLabel}>
                 Final answer characters
@@ -1224,17 +1398,6 @@ export function ExamMode() {
               </strong>
               <span className={styles.scoreCardSub}>
                 Standard space-separated words
-              </span>
-            </div>
-            <div className={styles.scoreCard}>
-              <span className={styles.scoreCardLabel}>Time Taken</span>
-              <strong className={styles.scoreCardVal}>
-                {versionDetail?.rules.durationSeconds
-                  ? `${Math.max(0, versionDetail.rules.durationSeconds - remainingSecs)}s`
-                  : `${600 - remainingSecs}s`}
-              </strong>
-              <span className={styles.scoreCardSub}>
-                Duration profile: {versionDetail?.rules.durationSeconds ?? 600}s
               </span>
             </div>
             <div className={styles.scoreCard}>
