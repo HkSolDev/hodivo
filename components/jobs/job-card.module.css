@@ -223,6 +223,10 @@
     min-width: 0;
   }
 
+  :global(.home-page) .card:nth-child(even) {
+    background: var(--surface-2, var(--bg));
+  }
+
   .card {
     gap: var(--space-3);
     padding: 16px;
