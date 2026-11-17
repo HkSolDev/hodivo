@@ -42,7 +42,7 @@ test('unknown core facts are explicit without inventing optional facts or open s
     }),
   );
   assert.match(html, /Organization: <\/span>Not specified/);
-  assert.match(html, /Appointment: <\/span>Not specified/);
+  assert.doesNotMatch(html, /Appointment:/);
   assert.match(html, /Deadline not specified/);
   assert.doesNotMatch(html, /Apply by|Qualification|vacancies|Open/);
   assert.match(html, /View details/);

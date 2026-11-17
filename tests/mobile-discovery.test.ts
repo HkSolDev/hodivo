@@ -261,9 +261,7 @@ test('Mobile discovery: compact layouts, accessible filters, truth in fields, an
         await expect(card2.locator('[data-job-org]')).toContainText(
           'Not specified',
         );
-        await expect(card2.locator('[data-job-appointment]')).toContainText(
-          'Not specified',
-        );
+        await expect(card2.locator('[data-job-appointment]')).toHaveCount(0);
         await expect(card2.locator('[data-job-deadline]')).toContainText(
           'Deadline not specified',
         );
