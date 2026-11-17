@@ -224,7 +224,7 @@
   }
 
   :global(.home-page) .card:nth-child(even) {
-    background: var(--surface-2, var(--bg));
+    background: color-mix(in srgb, var(--ink) 4%, var(--surface));
   }
 
   .card {
