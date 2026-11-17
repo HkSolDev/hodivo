@@ -159,7 +159,7 @@ await test('public jobs HTTP contract', async (t) => {
         assert.equal(response.status, 200);
         assert.deepEqual(await response.json(), {
           data: [],
-          pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
+          pagination: { page: 1, pageSize: 30, totalItems: 0, totalPages: 0 },
         });
       } finally {
         transaction.restore();

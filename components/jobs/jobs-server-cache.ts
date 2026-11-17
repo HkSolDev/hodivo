@@ -15,7 +15,7 @@ export const JOBS_CACHE_TAG = 'jobs';
 // fails the previous entry is served marked `freshnessUnconfirmed`.
 // Default is two hours (7200 seconds), measured from a successful fetch.
 export const JOBS_REVALIDATE_SECONDS = 7200;
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 10;
 
 function getJobsRevalidateSeconds(): number {
   const raw = (

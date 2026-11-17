@@ -223,6 +223,11 @@
     min-width: 0;
   }
 
+  :global(.home-page) .card:nth-child(even),
+  .card:nth-child(even) {
+    background: color-mix(in srgb, var(--ink) 10%, var(--surface));
+  }
+
   .card {
     gap: var(--space-3);
     padding: 16px;
@@ -261,8 +266,18 @@
 
   .open {
     flex: 1;
-    min-height: var(--target);
-    padding: var(--space-2) var(--space-3);
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 12px;
+    border: 1px solid var(--ink);
+    border-radius: 7px;
+    background: var(--ink);
+    color: var(--surface);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
   }
 
   .secondaryActions,
@@ -294,6 +309,10 @@
     box-shadow: none;
   }
 
+  :global(.home-page) :global(.home-layout-rows) .card:nth-child(even) {
+    background: color-mix(in srgb, var(--ink) 10%, var(--surface));
+  }
+
   :global(.home-page) :global(.home-layout-rows) .card:last-child {
     border-bottom: 0;
   }
@@ -323,23 +342,31 @@
   }
 
   :global(.home-page) :global(.home-layout-rows) .open {
-    justify-content: flex-start;
-    padding: var(--space-1) 0;
-    border: 0;
-    background: transparent;
-    color: var(--ink);
-    text-decoration: underline;
-    text-underline-offset: var(--space-1);
-    min-height: var(--target);
+    flex: 0 0 auto;
+    justify-content: center;
+    padding: 5px 12px;
+    border: 1px solid var(--ink);
+    border-radius: 7px;
+    background: var(--ink);
+    color: var(--surface);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    min-height: 34px;
   }
 
   :global(.home-page)
     :global(.home-layout-rows)
     .secondaryActions
     > :is(a, button) {
-    border: 0;
-    background: transparent;
-    text-decoration: underline;
-    padding: var(--space-1) 0;
+    padding: 5px 12px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    min-height: 34px;
   }
 }

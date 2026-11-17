@@ -45,7 +45,9 @@ export function JobCard({
   const hasQualification =
     qualification && !/^not specified$/i.test(qualification);
   const organization = job.organization?.trim() || 'Not specified';
-  const appointmentType = job.appointmentType?.trim() || 'Not specified';
+  const appointmentType = job.appointmentType?.trim();
+  const hasAppointmentType =
+    Boolean(appointmentType) && !/^not specified$/i.test(appointmentType!);
 
   return (
     <article
@@ -63,10 +65,15 @@ export function JobCard({
             <span className={styles.metaLabel}>Organization: </span>
             {organization}
           </p>
-          <p className={`muted ${styles.appointmentType}`} data-job-appointment>
-            <span className={styles.metaLabel}>Appointment: </span>
-            {appointmentType}
-          </p>
+          {hasAppointmentType && (
+            <p
+              className={`muted ${styles.appointmentType}`}
+              data-job-appointment
+            >
+              <span className={styles.metaLabel}>Appointment: </span>
+              {appointmentType}
+            </p>
+          )}
         </div>
         <p className={styles.deadline} data-job-deadline>
           {applyBy ? `Apply by ${applyBy}` : 'Deadline not specified'}

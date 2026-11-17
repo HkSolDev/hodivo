@@ -298,7 +298,7 @@ test('does not render unsafe recruitment links or empty-field placeholders', () 
     markup,
     /Age requirements unavailable here\. Verify in the recruitment notice\./,
   );
-  assert.match(
+  assert.doesNotMatch(
     markup,
     /Applicant requirement details unavailable here\. Verify in the recruitment notice\./,
   );

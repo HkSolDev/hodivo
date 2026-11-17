@@ -189,7 +189,7 @@ test('public typing practice works in an isolated browser session', async (t) =>
     async () => {
       await page.clock.install();
       await setPassage('a long passage for the timer');
-      await page.getByRole('button', { name: '1m', exact: true }).click();
+      await page.getByRole('button', { name: '2m', exact: true }).click();
       await input.pressSequentially('a');
       await input.press('Escape');
       const resumeOverlay = page.getByRole('button', {
@@ -200,9 +200,9 @@ test('public typing practice works in an isolated browser session', async (t) =>
       await expect(summary).toHaveCount(0);
       await resumeOverlay.click();
       await expect(input).toBeFocused();
-      await page.clock.fastForward(61000);
+      await page.clock.fastForward(121000);
       await expect(summary).toBeVisible();
-      await expect(summary).toContainText('60s');
+      await expect(summary).toContainText('120s');
       await page.getByRole('button', { name: 'Restart', exact: true }).click();
     },
   );
@@ -214,7 +214,7 @@ test('public typing practice works in an isolated browser session', async (t) =>
         .getByRole('button', { name: 'Increase custom minutes', exact: true })
         .click();
       await page.getByRole('button', { name: 'Set', exact: true }).click();
-      await page.getByRole('button', { name: '1m', exact: true }).click();
+      await page.getByRole('button', { name: '2m', exact: true }).click();
       await setPassage('<img src=x onerror=alert(1)>');
       await expect(page.getByLabel('Passage to type')).toHaveText(
         '<img src=x onerror=alert(1)>',

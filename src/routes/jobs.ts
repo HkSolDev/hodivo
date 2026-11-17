@@ -22,7 +22,7 @@ export async function handleJobs(
   database?: Parameters<typeof listPublicJobs>[3],
 ): Promise<void> {
   const page = readPageNumber(params, 'page', 1, 10_000);
-  const pageSize = readPageNumber(params, 'pageSize', 20, 100);
+  const pageSize = readPageNumber(params, 'pageSize', 30, 100);
   const filters = readJobFilters(params);
   if (!filters) {
     sendJson(res, 400, {

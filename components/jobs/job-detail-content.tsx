@@ -736,9 +736,9 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
             </p>
           </JobDetailSection>
 
-          <section className={styles.card}>
-            <h2>Applicant requirements</h2>
-            {hasApplicantRequirements ? (
+          {hasApplicantRequirements ? (
+            <section className={styles.card}>
+              <h2>Applicant requirements</h2>
               <dl className={styles.factList}>
                 {rules?.gender_requirement ? (
                   <Fact label="Gender">{rules.gender_requirement}</Fact>
@@ -752,17 +752,8 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
                   <Fact label="Nationality">{nationality}</Fact>
                 ) : null}
               </dl>
-            ) : (
-              <Unavailable
-                source={source}
-                reviewedDetails={reviewed}
-                previewOnly={previewOnly}
-              >
-                Applicant requirement details unavailable here. Verify in the
-                recruitment notice.
-              </Unavailable>
-            )}
-          </section>
+            </section>
+          ) : null}
 
           {hasVacanciesPay ? (
             <section className={styles.card}>
@@ -949,15 +940,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
                   Source listing
                 </ExternalLink>
               </div>
-            ) : (
-              <Unavailable
-                source={source}
-                reviewedDetails={reviewed}
-                previewOnly={previewOnly}
-              >
-                Recruitment links unavailable.
-              </Unavailable>
-            )}
+            ) : null}
             {source?.fetchedAt ? (
               <p className="small muted">
                 Collected {source.fetchedAt}. Collection date is not a
