@@ -23,13 +23,12 @@ import { PassageView } from './passage-view';
 import styles from './typing-practice.module.css';
 
 const DURATION_PRESETS = [
-  { label: '1m', seconds: 60 },
   { label: '2m', seconds: 120 },
   { label: '3m', seconds: 180 },
   { label: '5m', seconds: 300 },
   { label: '10m', seconds: 600 },
 ] as const;
-const DEFAULT_DURATION_SECONDS = 60;
+const DEFAULT_DURATION_SECONDS = 120;
 const DEFAULT_CUSTOM_DURATION_MINUTES = 15;
 const MIN_CUSTOM_DURATION_MINUTES = 1;
 const MAX_CUSTOM_DURATION_MINUTES = 60;
