@@ -9,4 +9,5 @@ outputs
 next-env.d.ts
 claude.md
 public/index.html
+public/prepare-file/
 *.prisma

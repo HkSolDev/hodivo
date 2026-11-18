@@ -9,10 +9,12 @@ COPY next.config.ts tsconfig.next.json ./
 COPY app ./app
 COPY components ./components
 COPY lib/typing ./lib/typing
+COPY lib/prepare-file ./lib/prepare-file
 COPY lib/markdown-negotiation.ts ./lib/markdown-negotiation.ts
 COPY proxy.ts ./proxy.ts
 COPY frontend ./frontend
 COPY public/css ./public/css
+COPY public/prepare-file ./public/prepare-file
 
 # Next serializes API rewrites at build time; use the stable private API alias.
 ARG BACKEND_INTERNAL_URL=http://aptus-api:8080

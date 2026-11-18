@@ -261,6 +261,7 @@ test('sitemap includes only verified live jobs with IST deadline cutoff and fail
       'https://hodivo.app/how-it-works',
       'https://hodivo.app/typing',
       'https://hodivo.app/typing/exam',
+      'https://hodivo.app/tools/prepare-file',
       'https://hodivo.app/jobs/live-today-ist',
     ],
   );
@@ -295,6 +296,7 @@ test('sitemap includes only verified live jobs with IST deadline cutoff and fail
       'https://hodivo.app/how-it-works',
       'https://hodivo.app/typing',
       'https://hodivo.app/typing/exam',
+      'https://hodivo.app/tools/prepare-file',
     ],
   );
 

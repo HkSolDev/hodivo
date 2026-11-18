@@ -1,11 +1,12 @@
-import type { Metadata } from 'next';
+import { publicPageMetadata } from '@/components/jobs/job-sharing';
 import { TypingPractice } from '@/components/typing/typing-practice';
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Typing practice',
   description:
     'Practice typing speed and accuracy with published exam passages. Time away from the field is not counted.',
-};
+  pathname: '/typing',
+});
 
 export default function TypingPage() {
   return (

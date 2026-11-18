@@ -48,6 +48,17 @@ const destinations = [
     ),
   },
   {
+    href: '/tools/prepare-file',
+    label: 'Resize',
+    wideSuffix: ' files',
+    icon: (
+      <>
+        <path d="M6 3h8l4 4v14H6zM14 3v5h4" />
+        <path d="M9 13h6m-6 4h6" />
+      </>
+    ),
+  },
+  {
     href: '/profile',
     label: 'Profile',
     wideSuffix: '',
@@ -310,6 +321,9 @@ export function PrimaryNavigation() {
             <Link
               key={href}
               href={href}
+              prefetch={
+                destination === '/tools/prepare-file' ? false : undefined
+              }
               aria-current={active === href ? 'page' : undefined}
             >
               <NavLinkContent

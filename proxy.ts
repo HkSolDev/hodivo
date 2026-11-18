@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { formatRobotsTxt } from './app/robots';
-import { prefersMarkdown } from './lib/markdown-negotiation';
+import { hasPublicMarkdown, prefersMarkdown } from './lib/markdown-negotiation';
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -20,6 +20,7 @@ export function proxy(request: NextRequest) {
 
   if (
     (request.method === 'GET' || request.method === 'HEAD') &&
+    hasPublicMarkdown(pathname) &&
     prefersMarkdown(request.headers.get('accept'))
   ) {
     const targetPath = pathname === '/' ? '/md' : `/md${pathname}`;

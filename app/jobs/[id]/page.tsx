@@ -2,6 +2,7 @@ import { cache } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import {
+  DEFAULT_PRODUCTION_ORIGIN,
   isSafeJobId,
   jobMetadata,
   trustedPublicOrigin,
@@ -72,7 +73,10 @@ export async function generateMetadata(props: {
   }
   const metadata = jobMetadata(
     result.job,
-    trustedPublicOrigin(process.env.SITE_URL),
+    trustedPublicOrigin(process.env.SITE_URL, {
+      allowLocalhost: false,
+      fallbackOrigin: DEFAULT_PRODUCTION_ORIGIN,
+    }),
   );
   if (result.job.designReview) {
     return {

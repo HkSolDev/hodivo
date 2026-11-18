@@ -31,6 +31,7 @@ test('crawler previews and public sharing controls', async (t) => {
   const address = api.address();
   assert(address && typeof address !== 'string');
   const origin = 'http://localhost:18884';
+  const canonicalJobUrl = 'https://hodivo.app/jobs/share-fixture';
   const server = spawn(
     process.execPath,
     ['node_modules/next/dist/bin/next', 'start', '-p', '18884'],
@@ -66,7 +67,12 @@ test('crawler previews and public sharing controls', async (t) => {
   ).text();
   const head = html.split('</head>')[0];
   assert.match(head, /property="og:title" content="Example Researcher/);
-  assert.match(head, /http:\/\/localhost:18884\/share-image/);
+  assert.ok(head.includes(`<link rel="canonical" href="${canonicalJobUrl}"`));
+  assert.ok(
+    head.includes(
+      '<meta property="og:image" content="https://hodivo.app/share-image"',
+    ),
+  );
   const image = await fetch(`${origin}/share-image`);
   assert.match(image.headers.get('content-type')!, /image\/png/);
   assert((await image.arrayBuffer()).byteLength > 1000);
@@ -90,7 +96,7 @@ test('crawler previews and public sharing controls', async (t) => {
   assert.equal(
     JSON.parse((await page.locator('body').getAttribute('data-shared')) ?? '{}')
       .url,
-    `${origin}/jobs/share-fixture`,
+    canonicalJobUrl,
   );
   await page.evaluate(() => {
     Object.defineProperty(navigator, 'share', {
@@ -116,7 +122,7 @@ test('crawler previews and public sharing controls', async (t) => {
   await expect(page.getByRole('status')).toHaveText('Link copied.');
   assert.equal(
     await page.locator('body').getAttribute('data-copied'),
-    `${origin}/jobs/share-fixture`,
+    canonicalJobUrl,
   );
   await page.evaluate(() => {
     Object.defineProperty(navigator, 'share', {
@@ -131,7 +137,7 @@ test('crawler previews and public sharing controls', async (t) => {
   await page.getByRole('button', { name: 'Share', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('textbox', { name: 'Job link' })).toHaveValue(
-    `${origin}/jobs/share-fixture`,
+    canonicalJobUrl,
   );
   assert(
     await page.evaluate(

@@ -1,3 +1,11 @@
+import { isSafeJobId } from '../components/jobs/job-sharing';
+import {
+  RESIZE_DESCRIPTION,
+  RESIZE_PATH,
+  RESIZE_TITLE,
+} from './prepare-file/seo';
+import type { JobDetailData } from '../components/jobs/job-detail-content';
+
 interface MediaRange {
   type: string;
   q: number;
@@ -45,15 +53,20 @@ export function prefersMarkdown(
   return false;
 }
 
-interface JobSummary {
-  id?: string;
-  postName?: string;
-  organization?: string | null;
-  educationRequired?: string | null;
-  applicationDeadline?: string | null;
-  officialUrl?: string | null;
-  minAge?: number | null;
-  maxAge?: number | null;
+function publicLink(value: string | null | undefined): string | undefined {
+  if (!value) return;
+  try {
+    const url = new URL(value);
+    if (
+      ['https:', 'http:'].includes(url.protocol) &&
+      !url.username &&
+      !url.password
+    ) {
+      return url.href.replace(/[<>]/g, encodeURIComponent);
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 async function fetchJobMarkdown(
@@ -61,46 +74,50 @@ async function fetchJobMarkdown(
   backendUrl: string,
   fetchImpl: typeof fetch,
 ): Promise<{ status: number; markdown: string }> {
+  const notFound = { status: 404, markdown: '# Job Not Found\n' };
+  const unavailable = {
+    status: 503,
+    markdown: '# Job details temporarily unavailable\n',
+  };
   try {
     const res = await fetchImpl(
       `${backendUrl}/api/jobs/${encodeURIComponent(id)}`,
-      { headers: { Accept: 'application/json' } },
+      { headers: { Accept: 'application/json' }, next: { revalidate: 60 } },
     );
-    if (res.status === 404) {
-      return {
-        status: 404,
-        markdown: `# Job Not Found\n\nNo job notification was found for \`${id}\`.\n`,
-      };
-    }
-    if (!res.ok) {
-      return {
-        status: 200,
-        markdown: `# Job Details (${id})\n\nUnable to load full job details right now. Visit \`/jobs/${id}\` in a browser.\n`,
-      };
-    }
-    const job = (await res.json()) as JobSummary;
+    if (res.status === 404 || res.status === 400) return notFound;
+    if (!res.ok) return unavailable;
+    const job = (await res.json()) as JobDetailData;
+    if (!job || typeof job.postName !== 'string' || !job.postName.trim())
+      return unavailable;
+    if (job.designReview) return notFound;
+    const reviewed = job.reviewedDetails;
+    const employer = job.organization || reviewed?.recruiting_body;
+    const education = job.educationRequired ?? reviewed?.education_required;
+    const deadline = job.applicationLastDate ?? reviewed?.application_last_date;
+    const vacancies = reviewed?.vacancies ?? job.vacancies;
+    const minAge = job.minAge ?? reviewed?.min_age;
+    const maxAge = job.maxAge ?? reviewed?.max_age;
+    const notice =
+      publicLink(job.source?.notificationPdfUrl) ??
+      publicLink(job.source?.url) ??
+      publicLink(reviewed?.official_site_url);
+    const apply =
+      publicLink(reviewed?.apply_url) ?? publicLink(job.source?.applyUrl);
     const lines = [
-      `# ${job.postName ?? `Job ${id}`}`,
+      `# ${job.postName}`,
       '',
-      job.organization ? `- **Organization**: ${job.organization}` : null,
-      job.educationRequired
-        ? `- **Education**: ${job.educationRequired}`
-        : null,
-      job.minAge != null || job.maxAge != null
-        ? `- **Age Limit**: ${job.minAge ?? '—'} to ${job.maxAge ?? '—'}`
-        : null,
-      job.applicationDeadline
-        ? `- **Application Deadline**: ${job.applicationDeadline}`
-        : null,
-      job.officialUrl ? `- **Official URL**: ${job.officialUrl}` : null,
-      '',
-    ].filter((line): line is string => line !== null);
-    return { status: 200, markdown: lines.join('\n') };
+      employer && `- **Organization**: ${employer}`,
+      education && `- **Education**: ${education}`,
+      deadline && `- **Application deadline**: ${deadline.slice(0, 10)}`,
+      vacancies != null && `- **Vacancies**: ${vacancies}`,
+      (minAge != null || maxAge != null) &&
+        `- **Age limit**: ${minAge ?? '—'} to ${maxAge ?? '—'}`,
+      notice && `- [Official recruitment notice](<${notice}>)`,
+      apply && `- [Official application link](<${apply}>)`,
+    ].filter((line): line is string => typeof line === 'string');
+    return { status: 200, markdown: lines.join('\n') + '\n' };
   } catch {
-    return {
-      status: 200,
-      markdown: `# Job Details (${id})\n\nUnable to reach the backend service right now.\n`,
-    };
+    return unavailable;
   }
 }
 
@@ -113,9 +130,10 @@ const STATIC_PAGES: Record<string, string> = {
     '## Key Features & Pages',
     '',
     '- **Live Job Eligibility Directory (`/`)**: Browse and filter verified Indian government job notifications by education, category, and age limit.',
-    '- **Government Exam Typing Practice (`/typing`)**: Distraction-free, zero-scroll typing practice built for SSC CHSL, SSC CGL Tier-II (DEST), RRB NTPC, Banking, State PSC, and Ministerial skill tests.',
-    '- **Exam Typing Simulation (`/typing/exam`)**: Full government exam simulation mode with strict timing and official backspace/editing rules.',
+    '- **Government Exam Typing Practice (`/typing`)**: Timed typing practice with published passages and speed and accuracy feedback.',
+    '- **Exam Typing Simulation (`/typing/exam`)**: Practice with reviewed duration and editing rules for available exams.',
     '- **How It Works (`/how-it-works`)**: Learn how deterministic eligibility matching and source-grounded extraction work.',
+    `- [Resize files](${RESIZE_PATH}): Resize a photo or signature and compress PDFs to fit an upload limit on your device.`,
     '- **Applicant Profile (`/profile`)**: Save education qualifications, category, and date of birth for instant eligibility checks.',
     '- **Matched Results (`/results`) & Saved Jobs (`/saved`)**: Track live notifications you qualify for.',
     '',
@@ -129,74 +147,50 @@ const STATIC_PAGES: Record<string, string> = {
     '',
   ].join('\n'),
   '/typing': [
-    '# Hodivo — Government Exam Typing Practice (`https://hodivo.app/typing`)',
+    '# Government Exam Typing Practice',
     '',
-    'A distraction-free, zero-scroll (`100dvh`) typing practice workspace engineered for Indian government typing and skill tests, including **SSC CHSL**, **SSC CGL Tier-II Data Entry Speed Test (DEST)**, **RRB NTPC**, **IBPS/SBI Banking**, **State PSC**, and **High Court / Ministerial Clerk** exams.',
+    'Canonical page: https://hodivo.app/typing',
     '',
-    '## Why Practice Typing on Hodivo (`https://hodivo.app/typing`)',
+    'Practice typing speed and accuracy with published passages or your own text. Choose a session duration and follow the highlighted passage. The practice view shows your time, net words per minute, accuracy and errors.',
     '',
-    '- **Exam-Length Passages**: Practice with full-length passages modeled after official government typing skill tests.',
-    '- **Live Word & Character Tracing**: Active word highlighting with real-time character-level accuracy feedback.',
-    '- **Flexible Session Durations**: Quick presets (`1m`, `2m`, `3m`, `5m`, `10m`) plus an inline custom duration stepper (`1m` to `60m`).',
-    '- **Real-Time HUD Metrics**: Live countdown timer, Net WPM, Gross WPM, Accuracy %, and Error count.',
-    '- **Smart Pause & Resume**: Press `Esc` or click outside to pause (time away is not counted in Practice Mode); click the blurred workspace to resume immediately.',
-    '- **Benchmark Coaching Summary**: Post-session breakdown color-coded against the **27 WPM** average floor and **35 WPM** government exam qualifying standard.',
-    '',
-    '## Related Typing Modes',
-    '',
-    '- **Practice Mode**: `https://hodivo.app/typing` (untimed pause support, customizable durations, instant error feedback)',
-    '- **Exam Simulation Mode**: `https://hodivo.app/typing/exam` (strict exam countdown and reviewed editing rules)',
+    '- [Typing exam simulation](/typing/exam)',
+    '- [Resize files](/tools/prepare-file)',
     '',
   ].join('\n'),
   '/typing/exam': [
-    '# Hodivo — Real Government Exam Typing Simulation (`https://hodivo.app/typing/exam`)',
+    '# Government Exam Typing Simulation',
     '',
-    'Experience a real exam-hall typing simulation (`100dvh` zero-scroll dual-pane console) modeled after **TCS iON / SSC / RRB** skill test terminals for Indian government exams.',
+    'Choose a ready exam and passage to practise under its reviewed duration and editing rules. Available options depend on the published exam catalogue. Official scoring is unavailable.',
     '',
-    '## Supported Exam Profiles & Official Rules',
-    '',
-    '- **SSC CHSL Skill Test (LDC/JSA)**: `10 minutes (600s)` · `35 WPM` target (`~1,750 keystrokes`) · Qualifying error cutoffs: `UR ≤7%`, `OBC/EWS/SC/ST/PwD ≤10%`.',
-    '- **SSC CGL Tier-II Data Entry Speed Test (DEST)**: `15 minutes (900s)` · `27 WPM` target (`~2,000 keystrokes`) · Qualifying error cutoffs: `UR ≤20%`, `OBC/EWS ≤25%`, `SC/ST/PwD ≤30%`.',
-    '- **RRB NTPC & Ministerial Clerk Typing Tests**: `10 minutes (600s)` · `30 WPM` target · `≤5%` error cutoff.',
-    '',
-    '## Authentic Exam Hall Features',
-    '',
-    '- **Dual-Pane Split Console**: Read-only Official Master Passage on top with synchronous auto-scrolling and active word tracking; Candidate Input Console below.',
-    '- **SSC Full & Half Mistake Evaluation**: Evaluates word-level **Full Mistakes (`1.0`)** (omissions, substitutions, extra words) and **Half Mistakes (`0.5`)** (capitalization, punctuation, spacing merges/splits) with category-wise qualification status.',
-    '- **Strict Exam Integrity**: Copy, paste, and drag-and-drop are blocked; unpausable countdown clock starts automatically on the first keystroke.',
-    '',
-    '## Explore All Hodivo Tools',
-    '',
-    '- **Exam Simulation Mode**: `https://hodivo.app/typing/exam` (strict real-exam interface & SSC Full/Half mistake scorecard)',
-    '- **Typing Practice Mode**: `https://hodivo.app/typing` (customizable `1m`–`60m` sessions, pause/resume, live character tracing)',
-    '- **Live Indian Government Jobs & Eligibility Matcher**: `https://hodivo.app/` (browse verified SSC, Banking, Railways, Defence, PSU & State PSC notifications)',
+    '- [Typing practice](/typing)',
+    '- [Resize files](/tools/prepare-file)',
     '',
   ].join('\n'),
-  '/profile': [
-    '# Applicant Profile',
+  [RESIZE_PATH]: [
+    `# ${RESIZE_TITLE}`,
     '',
-    'Enter your education qualifications, category, and date of birth to check eligibility against live notifications.',
+    RESIZE_DESCRIPTION,
     '',
-  ].join('\n'),
-  '/results': [
-    '# Eligibility Results',
+    '1. Choose a JPG, PNG, WebP, HEIC, HEIF or PDF. The input limit is 50 MB total.',
+    '2. Choose JPG or PDF and enter the form’s maximum file size. One KB is 1,000 bytes. JPG also supports optional exact pixel dimensions and a minimum size.',
+    '3. Check the preview and the measured size before downloading.',
     '',
-    'View government job notifications matched against your applicant profile.',
-    '',
-  ].join('\n'),
-  '/saved': [
-    '# Saved Jobs',
-    '',
-    'View and manage your saved government job notifications.',
-    '',
-  ].join('\n'),
-  '/sign-in': [
-    '# Sign In',
-    '',
-    'Sign in to save your applicant profile and track job notifications.',
+    'Compressing an existing PDF rasterizes its pages. Small text may become less sharp, and selectable text and links are lost. If the result exceeds the limit, the tool shows the smallest result found and disables download for that limit.',
     '',
   ].join('\n'),
 };
+
+function publicJobId(pathname: string): string | undefined {
+  const match = /^\/jobs\/([^/]+)$/.exec(pathname);
+  return match && isSafeJobId(match[1]) ? match[1] : undefined;
+}
+
+export function hasPublicMarkdown(pathname: string): boolean {
+  const normalized = pathname.replace(/\/$/, '') || '/';
+  return (
+    Object.hasOwn(STATIC_PAGES, normalized) || Boolean(publicJobId(normalized))
+  );
+}
 
 export async function renderMarkdownForPath(
   pathname: string,
@@ -207,18 +201,18 @@ export async function renderMarkdownForPath(
       ? pathname.slice(0, -1)
       : pathname;
 
-  if (normalized in STATIC_PAGES) {
+  if (Object.hasOwn(STATIC_PAGES, normalized)) {
     return { status: 200, markdown: STATIC_PAGES[normalized] };
   }
 
-  const jobMatch = /^\/jobs\/([^/]+)$/.exec(normalized);
-  if (jobMatch) {
+  const jobId = publicJobId(normalized);
+  if (jobId) {
     const backendUrl =
       options?.backendUrl ??
       process.env.BACKEND_INTERNAL_URL ??
       'http://127.0.0.1:8081';
     const fetchImpl = options?.fetchImpl ?? fetch;
-    return fetchJobMarkdown(jobMatch[1], backendUrl, fetchImpl);
+    return fetchJobMarkdown(jobId, backendUrl, fetchImpl);
   }
 
   return {

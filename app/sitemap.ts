@@ -1,3 +1,4 @@
+import { RESIZE_PATH } from '../lib/prepare-file/seo';
 import { connection } from 'next/server';
 import type { MetadataRoute } from 'next';
 import type { JobsApiResponse } from '../components/jobs/catalogue-grid';
@@ -11,6 +12,7 @@ import {
 
 const SITEMAP_PAGE_SIZE = 100;
 const SITEMAP_MAX_PAGES = 100;
+const SITEMAP_PAGE_BATCH = 3;
 const ISO_DATE_PREFIX_PATTERN = /^(\d{4}-\d{2}-\d{2})/;
 
 const indiaFormatter = new Intl.DateTimeFormat('en-CA', {
@@ -69,6 +71,7 @@ export function buildSitemapEntries(
     { url: new URL('/how-it-works', baseOrigin).href },
     { url: new URL('/typing', baseOrigin).href },
     { url: new URL('/typing/exam', baseOrigin).href },
+    { url: new URL(RESIZE_PATH, baseOrigin).href },
   ];
 
   const seenUrls = new Set<string>(staticEntries.map((entry) => entry.url));
@@ -145,12 +148,20 @@ export async function generateSitemap(
     SITEMAP_MAX_PAGES,
   );
 
-  for (let page = 2; page <= totalPages; page += 1) {
-    const nextPage = await fetchSitemapJobsPage(backendUrl, page, fetchImpl);
-    if (nextPage.designReview) {
-      break;
+  for (let page = 2; page <= totalPages; page += SITEMAP_PAGE_BATCH) {
+    const length = Math.min(SITEMAP_PAGE_BATCH, totalPages - page + 1);
+    const pages = await Promise.all(
+      Array.from({ length }, (_, offset) =>
+        fetchSitemapJobsPage(backendUrl, page + offset, fetchImpl),
+      ),
+    );
+    if (pages.some((entry) => entry.designReview)) {
+      return buildSitemapEntries([], {
+        origin: options.origin,
+        now: options.now,
+      });
     }
-    allJobs.push(...nextPage.data);
+    for (const entry of pages) allJobs.push(...entry.data);
   }
 
   return buildSitemapEntries(allJobs, {
