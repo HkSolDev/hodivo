@@ -16,6 +16,7 @@ import {
 } from '@/lib/typing/practice-api';
 import {
   createTypingSession,
+  type ActualInsertion,
   type EditRejection,
   type SessionSnapshot,
 } from '@/lib/typing/session';
@@ -40,15 +41,12 @@ type PassageState =
   | { status: 'empty' }
   | { status: 'error' };
 
-const COMPOSITION_NOTE =
-  'IME composition and dead keys are not supported in the typing field. Type plain keys instead.';
-
 const REJECTION_NOTES: Record<EditRejection, string> = {
   expired: 'Time is up. Restart to run the session again.',
   paused: 'Session paused — click the typing box to resume.',
   finished: 'The session has finished. Restart to run it again.',
   unsupported:
-    'Only English letters, digits, punctuation and whitespace are scored here. That input was rejected, not recorded.',
+    'That character couldn’t be added. Use English letters, numbers, or standard punctuation.',
 };
 
 export function TypingPractice() {
@@ -75,10 +73,15 @@ export function TypingPractice() {
   );
   const [note, setNote] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [keyboardViewport, setKeyboardViewport] = useState<{
+    height: number;
+    top: number;
+  } | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const compositionActiveRef = useRef(false);
-  const compositionCommitRef = useRef<string | null>(null);
+  const compositionRangeRef = useRef<{ start: number; end: number } | null>(
+    null,
+  );
   // Native beforeinput metadata for the pending insertion, if any.
   const pendingInsertionRef = useRef<{
     text: string;
@@ -87,6 +90,39 @@ export function TypingPractice() {
   const requestRef = useRef<{ controller: AbortController; id: number } | null>(
     null,
   );
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const mobile = window.matchMedia(
+      '(max-width: 760px) and (pointer: coarse)',
+    );
+    if (!isFocused || !viewport) {
+      setKeyboardViewport(null);
+      return;
+    }
+
+    const update = () => {
+      // Ignore zoom and small changes from the browser toolbar.
+      const keyboardOpen =
+        mobile.matches &&
+        viewport.scale === 1 &&
+        window.innerHeight - viewport.height > 100;
+      setKeyboardViewport(
+        keyboardOpen
+          ? { height: viewport.height, top: viewport.offsetTop }
+          : null,
+      );
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    mobile.addEventListener('change', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+      mobile.removeEventListener('change', update);
+    };
+  }, [isFocused]);
 
   // Interval only refreshes the display; the deadline itself is enforced by
   // the engine before each edit and inside tick(). Strict Mode cleanup-safe.
@@ -138,12 +174,10 @@ export function TypingPractice() {
         return;
       }
       if (
-        compositionActiveRef.current ||
+        compositionRangeRef.current !== null ||
         event.isComposing ||
         event.inputType.toLowerCase().includes('composition')
       ) {
-        if (event.cancelable) event.preventDefault();
-        setNote(COMPOSITION_NOTE);
         return;
       }
       if (event.inputType.startsWith('insert') && event.data) {
@@ -197,17 +231,13 @@ export function TypingPractice() {
       return;
     }
     if (
-      compositionActiveRef.current ||
+      compositionRangeRef.current !== null ||
       ('isComposing' in native && native.isComposing) ||
-      inputType.toLowerCase().includes('composition') ||
-      (compositionCommitRef.current !== null &&
-        data === compositionCommitRef.current)
+      (inputType.toLowerCase().includes('composition') &&
+        event.currentTarget.value === session.snapshot().typedText)
     ) {
-      if (!compositionActiveRef.current) compositionCommitRef.current = null;
-      revertTypingField(COMPOSITION_NOTE);
       return;
     }
-    compositionCommitRef.current = null;
     const insertion =
       pending ??
       (inputType.startsWith('insert') && data
@@ -219,7 +249,13 @@ export function TypingPractice() {
             ),
           }
         : undefined);
-    const result = session.applyEdit(event.currentTarget.value, insertion);
+    applyTypingEdit(event.currentTarget.value, insertion);
+  };
+
+  const applyTypingEdit = (value: string, insertion?: ActualInsertion) => {
+    const session = engineRef.current;
+    if (!session) return;
+    const result = session.applyEdit(value, insertion);
     setSnapshot(session.snapshot());
     if (result.accepted) {
       setNote(null);
@@ -228,26 +264,43 @@ export function TypingPractice() {
     }
   };
 
-  const handleCompositionStart = () => {
-    compositionActiveRef.current = true;
-    compositionCommitRef.current = null;
+  const handleCompositionStart = (
+    event: CompositionEvent<HTMLTextAreaElement>,
+  ) => {
+    const { selectionStart, selectionEnd } = event.currentTarget;
+    compositionRangeRef.current = { start: selectionStart, end: selectionEnd };
     pendingInsertionRef.current = null;
   };
 
   const handleCompositionEnd = (
     event: CompositionEvent<HTMLTextAreaElement>,
   ) => {
-    compositionActiveRef.current = false;
-    // A canceled composition has no commit to reject. A subsequent real key
-    // clears this marker, so rejection never depends on a timing window.
-    compositionCommitRef.current = event.data || null;
+    const range = compositionRangeRef.current;
+    compositionRangeRef.current = null;
     pendingInsertionRef.current = null;
-    revertTypingField(COMPOSITION_NOTE);
+    const session = engineRef.current;
+    if (!session) return;
+    const textarea = event.currentTarget;
+    const { typedText } = session.snapshot();
+    if (range === null || !event.data) {
+      if (textarea.value !== typedText) textarea.value = typedText;
+      return;
+    }
+    // Supply insertion metadata only when it describes the final DOM edit.
+    const expected =
+      typedText.slice(0, range.start) + event.data + typedText.slice(range.end);
+    if (textarea.value === expected) {
+      applyTypingEdit(textarea.value, {
+        text: event.data,
+        position: range.start,
+      });
+    } else if (textarea.value !== typedText) {
+      applyTypingEdit(textarea.value);
+    }
   };
 
   const handleTypingKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (compositionActiveRef.current) return;
-    if (!event.nativeEvent.isComposing) compositionCommitRef.current = null;
+    if (compositionRangeRef.current !== null) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.currentTarget.blur();
@@ -329,8 +382,7 @@ export function TypingPractice() {
     const session = engineRef.current;
     if (!session) return;
     session.restart(settings);
-    compositionActiveRef.current = false;
-    compositionCommitRef.current = null;
+    compositionRangeRef.current = null;
     pendingInsertionRef.current = null;
     const textarea = textareaRef.current;
     if (textarea) textarea.value = '';
@@ -422,7 +474,14 @@ export function TypingPractice() {
   const charCount = snapshot.target.length;
 
   return (
-    <div className={styles.root}>
+    <div
+      className={
+        keyboardViewport
+          ? `${styles.root} ${styles.keyboardLayout}`
+          : styles.root
+      }
+      style={keyboardViewport ?? undefined}
+    >
       {/* Upper Control & HUD Strip (Single Line) */}
       <div className={styles.controlHudStrip}>
         <div className={styles.controlHudInner}>
@@ -648,6 +707,7 @@ export function TypingPractice() {
           <PassageView
             target={snapshot.target}
             typedText={snapshot.typedText}
+            keyboardHeight={keyboardViewport?.height}
           />
 
           {snapshot.status === 'finished' &&
@@ -826,18 +886,6 @@ export function TypingPractice() {
             }
           }}
         >
-          <div className={styles.inputHeader}>
-            <p className={note ? styles.note : styles.statusLine} role="status">
-              {note ??
-                statusMessage ??
-                (snapshot.status === 'finished'
-                  ? snapshot.finishedReason === 'target'
-                    ? 'Passage completed — press Restart or Next passage.'
-                    : 'Time is up — press Restart or Next passage.'
-                  : '')}
-            </p>
-          </div>
-
           <div className={styles.typingFieldWrap}>
             <div
               className={`${styles.typingBlurTarget}${showBlurOverlay ? ` ${styles.typingBlurred}` : ''}`}
@@ -849,7 +897,6 @@ export function TypingPractice() {
                   className={styles.typingInput}
                   rows={3}
                   placeholder="Start typing the passage here... (Timer starts automatically on first keypress)"
-                  value={snapshot.typedText}
                   onInput={handleTypingInput}
                   onFocus={handleTypingFocus}
                   onBlur={handleTypingBlur}
@@ -908,6 +955,18 @@ export function TypingPractice() {
                 </span>
               </button>
             )}
+          </div>
+
+          <div className={note ? undefined : styles.inputHeader}>
+            <p className={note ? styles.note : styles.statusLine} role="status">
+              {note ??
+                statusMessage ??
+                (snapshot.status === 'finished'
+                  ? snapshot.finishedReason === 'target'
+                    ? 'Passage completed — press Restart or Next passage.'
+                    : 'Time is up — press Restart or Next passage.'
+                  : '')}
+            </p>
           </div>
 
           <div className={styles.consoleFooter}>

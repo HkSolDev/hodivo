@@ -767,9 +767,7 @@
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--warning);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .error {
@@ -1280,5 +1278,35 @@
 
   .summaryGrid dd {
     font-size: 0.75rem;
+  }
+}
+
+/* Give the active passage and input the visible area above the keyboard. */
+.keyboardLayout {
+  position: fixed;
+  inset-inline: 0;
+  z-index: 60;
+  background: var(--page);
+}
+
+.keyboardLayout .metaCluster,
+.keyboardLayout .durationSegment,
+.keyboardLayout .passageHeader {
+  display: none;
+}
+
+.keyboardLayout .passage {
+  padding-block: 0.25rem;
+}
+
+.keyboardLayout .inputCard {
+  flex: 0 1 5.75rem;
+  min-height: 3.75rem;
+}
+
+@media (max-width: 760px) and (pointer: coarse) {
+  .typingInput {
+    /* Avoid focus zoom before the keyboard viewport can be measured. */
+    font-size: 1rem;
   }
 }

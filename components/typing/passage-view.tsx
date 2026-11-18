@@ -51,9 +51,11 @@ function getOffsetTopWithin(
 export const PassageView = memo(function PassageView({
   target,
   typedText,
+  keyboardHeight,
 }: {
   target: string;
   typedText: string;
+  keyboardHeight?: number;
 }) {
   const groups = useMemo(
     () => groupPassageChars(evaluate(target, typedText).chars),
@@ -62,6 +64,7 @@ export const PassageView = memo(function PassageView({
   const containerRef = useRef<HTMLParagraphElement | null>(null);
   const currentRef = useRef<HTMLSpanElement | null>(null);
   const lastLineTopRef = useRef<number | null>(null);
+  const lastPanelHeightRef = useRef<number | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -71,7 +74,11 @@ export const PassageView = memo(function PassageView({
     const lineHeight =
       Number.parseFloat(getComputedStyle(container).lineHeight) || 36;
     const lineTop = getOffsetTopWithin(current, container);
+    const panelHeightChanged =
+      lastPanelHeightRef.current !== container.clientHeight;
+    lastPanelHeightRef.current = container.clientHeight;
     if (
+      !panelHeightChanged &&
       lastLineTopRef.current !== null &&
       Math.abs(lineTop - lastLineTopRef.current) < lineHeight * 0.5
     ) {
@@ -82,13 +89,17 @@ export const PassageView = memo(function PassageView({
     // Keep 1 completed line above the active line (Monkeytype-style window).
     const firstLinePadding =
       Number.parseFloat(getComputedStyle(container).paddingTop) || 0;
-    const targetTop = Math.max(0, lineTop - firstLinePadding - lineHeight);
+    const contextHeight = keyboardHeight === undefined ? lineHeight : 0;
+    const targetTop = Math.max(0, lineTop - firstLinePadding - contextHeight);
     if (typeof container.scrollTo === 'function') {
-      container.scrollTo({ top: targetTop, behavior: 'smooth' });
+      container.scrollTo({
+        top: targetTop,
+        behavior: keyboardHeight === undefined ? 'smooth' : 'auto',
+      });
     } else {
       container.scrollTop = targetTop;
     }
-  }, [typedText.length, target]);
+  }, [typedText.length, target, keyboardHeight]);
 
   return (
     <p

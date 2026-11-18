@@ -223,40 +223,51 @@ test('public typing practice works in an isolated browser session', async (t) =>
     },
   );
 
-  await t.test(
-    'unsupported direct input is rejected and cancelling composition preserves the next key',
-    async () => {
-      try {
-        await setPassage('cat');
-        await input.focus();
-        await page.keyboard.insertText('é');
-        await expect(input).toHaveValue('');
-        await expect(page.getByRole('status')).toContainText(
-          /English|supported|plain/,
-        );
-        const cdp = await page.context().newCDPSession(page);
-        try {
-          await cdp.send('Input.imeSetComposition', {
-            text: 'a',
-            selectionStart: 1,
-            selectionEnd: 1,
-          });
-          await page.keyboard.insertText('a');
-          await expect(input).toHaveValue('');
-        } finally {
-          await cdp.detach();
-        }
-        await input.dispatchEvent('compositionstart', { data: '' });
-        await input.dispatchEvent('compositionend', { data: '' });
-        await input.pressSequentially('cat');
-        await expect(summary).toContainText('3 correct / 0 incorrect');
-      } finally {
-        await page
-          .getByRole('button', { name: 'Restart', exact: true })
-          .click();
-      }
-    },
-  );
+  await t.test('composition scores only the committed edit', async () => {
+    await setPassage('MMa');
+    await input.focus();
+    const cdp = await page.context().newCDPSession(page);
+    try {
+      const compose = (text: string) =>
+        cdp.send('Input.imeSetComposition', {
+          text,
+          selectionStart: text.length,
+          selectionEnd: text.length,
+        });
+
+      await compose('m');
+      await expect(input).toHaveValue('m');
+      await expect(page.getByRole('status')).toContainText('first keystroke');
+      await compose('');
+      await expect(input).toHaveValue('');
+
+      await compose('é');
+      await page.keyboard.insertText('é');
+      await expect(input).toHaveValue('');
+      await expect(page.getByRole('status')).toContainText('That character');
+
+      await compose('m');
+      await compose('M');
+      await page.keyboard.insertText('M');
+      await expect(input).toHaveValue('M');
+      await input.dispatchEvent('input', {
+        inputType: 'insertCompositionText',
+        data: 'M',
+      });
+      await page.keyboard.insertText('M');
+      await expect(input).toHaveValue('MM');
+
+      await input.press('Shift+ArrowLeft');
+      await compose('M');
+      await page.keyboard.insertText('M');
+      await expect(input).toHaveValue('MM');
+      await input.pressSequentially('a');
+      await expect(summary).toContainText('4 correct / 0 incorrect');
+    } finally {
+      await cdp.detach();
+      await page.getByRole('button', { name: 'Restart', exact: true }).click();
+    }
+  });
 
   await t.test(
     'light and dark layouts fit supported widths and footer navigation works',
@@ -342,6 +353,81 @@ test('public typing practice works in an isolated browser session', async (t) =>
         await mobileInput.pressSequentially('c');
         await restart.press('Enter');
         await expect(mobileInput).toHaveValue('');
+      } finally {
+        await touch.close();
+      }
+    },
+  );
+
+  await t.test(
+    'mobile keyboard keeps the active passage above the input',
+    async () => {
+      const touch = await browser.newContext({
+        hasTouch: true,
+        isMobile: true,
+        viewport: { width: 320, height: 740 },
+      });
+      try {
+        nextText = 'Mobile typing practice keeps the next words in view. '
+          .repeat(10)
+          .trim();
+        fixtureId++;
+        const mobile = await touch.newPage();
+        await mobile.goto(`${origin}/typing`);
+        const typing = mobile.getByRole('textbox', {
+          name: 'Type the passage here',
+        });
+        await typing.tap();
+        await mobile.evaluate(() => {
+          const viewport = window.visualViewport!;
+          Object.defineProperties(viewport, {
+            height: { configurable: true, value: 300 },
+            offsetTop: { configurable: true, value: 32 },
+          });
+          viewport.dispatchEvent(new Event('resize'));
+        });
+
+        const passage = mobile.getByLabel('Passage to type');
+        await typing.pressSequentially(nextText.slice(0, 135));
+        await expect
+          .poll(async () => {
+            const inputBox = await typing.boundingBox();
+            const passageBox = await passage.boundingBox();
+            const activeBox = await passage
+              .locator('[class*="_current__"]')
+              .boundingBox();
+            return (
+              !!inputBox &&
+              !!passageBox &&
+              !!activeBox &&
+              activeBox.y >= passageBox.y &&
+              activeBox.y + activeBox.height <=
+                passageBox.y + passageBox.height &&
+              passageBox.y >= 32 &&
+              passageBox.y + passageBox.height <= inputBox.y &&
+              inputBox.y + inputBox.height <= 332 &&
+              (await passage.evaluate((element) => element.scrollTop > 0))
+            );
+          })
+          .toBe(true);
+        await expect(typing).toHaveValue(nextText.slice(0, 135));
+        assert.equal(await mobile.evaluate(() => window.scrollY), 0);
+        await expect(
+          mobile.getByRole('button', { name: 'Restart' }),
+        ).toBeHidden();
+
+        await mobile.evaluate(() => {
+          const viewport = window.visualViewport!;
+          Object.defineProperties(viewport, {
+            height: { value: window.innerHeight },
+            offsetTop: { value: 0 },
+          });
+          viewport.dispatchEvent(new Event('resize'));
+        });
+        await expect(
+          mobile.getByRole('button', { name: 'Restart' }),
+        ).toBeVisible();
+        await expect(typing).toHaveValue(nextText.slice(0, 135));
       } finally {
         await touch.close();
       }
