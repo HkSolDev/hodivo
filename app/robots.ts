@@ -1,3 +1,4 @@
+import { RESIZE_PATH } from '../lib/prepare-file/seo';
 import type { MetadataRoute } from 'next';
 import {
   DEFAULT_PRODUCTION_ORIGIN,
@@ -39,13 +40,15 @@ export function formatRobotsTxt(origin = process.env.SITE_URL): string {
   const config = buildRobots(origin);
   const lines = [
     '# Content Signals (https://contentsignals.org/)',
-    '# Public pages: Government Job Eligibility (/ , /jobs/*), Typing Practice (/typing), and Real Exam Typing Simulation (/typing/exam)',
+    '# Public pages: Government Job Eligibility (/ , /jobs/*), Typing Practice (/typing), Real Exam Typing Simulation (/typing/exam), and file resizing (/tools/prepare-file)',
     'User-Agent: *',
     `Content-Signal: ${CONTENT_SIGNAL_DIRECTIVE}`,
     'Allow: /',
     'Allow: /typing',
     'Allow: /typing/exam',
     'Allow: /jobs/',
+    `Allow: ${RESIZE_PATH}`,
+    'Allow: /api/openapi.json$',
     ...PRIVATE_DISALLOW_PATHS.map((p) => `Disallow: ${p}`),
     '',
     `Sitemap: ${config.sitemap}`,

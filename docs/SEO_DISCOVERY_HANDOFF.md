@@ -60,11 +60,13 @@ This handoff documents the frontend SEO and public AI-search discovery improveme
 
 ### 4. Slice D — Sitemap (`app/sitemap.ts`)
 
-- Implements Next.js `MetadataRoute.Sitemap` at `/sitemap.xml` (`revalidate = 3600`):
+- Implements Next.js `MetadataRoute.Sitemap` at `/sitemap.xml`, with hourly upstream fetch revalidation and an invalidation request from the publication hook:
   - Fetches public jobs from `${BACKEND_INTERNAL_URL}/api/jobs?sort=soonest&page=${page}&pageSize=100` (compatible with the standalone `frontend.Dockerfile` runtime, which has `BACKEND_INTERNAL_URL` and no direct database access).
   - Includes:
     - `https://hodivo.app/`
     - `https://hodivo.app/how-it-works`
+    - `https://hodivo.app/typing`, `https://hodivo.app/typing/exam`, and `https://hodivo.app/tools/prepare-file`
+
     - Verified live public job URLs (`https://hodivo.app/jobs/{id}`)
   - Conservative Sitemap Eligibility (`isSitemapEligibleJob`):
     - Requires a safe job ID (`isSafeJobId`) and non-empty `postName`.
@@ -89,6 +91,14 @@ This handoff documents the frontend SEO and public AI-search discovery improveme
   3. Emit `JobPosting` JSON-LD only when `postName`, recruiting organization (`hiringOrganization.name`), verified employer `datePosted`, and explicit location/remote status are non-null, escaping `<` as `\u003c`.
 
 ---
+
+## Public tool and agent discovery
+
+- The Resize files page is linked from the shared navigation and the homepage Markdown. Its HTML title, canonical, preview metadata and negotiated Markdown describe browser-only processing and the PDF rasterization trade-off.
+- The homepage advertises the existing API catalog, OpenAPI document and service documentation through its HTTP `Link` header. The OpenAPI document is explicitly crawlable. Other existing API crawler rules still apply.
+- Public job Markdown uses published job fields for deadline, qualifications, vacancy count and official links. The job detail HTML already has per-job metadata and canonical URLs.
+- Markdown responses declare `Vary: Accept` and `Cache-Control: no-store`. Keep negotiated HTML out of any blanket CDN cache rule unless that rule distinguishes HTML and Markdown requests.
+- Auth.md and A2A discovery are for actual agent registration and protocol services. Hodivo currently exposes public pages and an API catalog. A scanner score does not determine search rankings.
 
 ## Post-Deploy Operator Runbook
 

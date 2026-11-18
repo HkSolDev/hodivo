@@ -139,3 +139,54 @@ test('renderMarkdownForPath formats job details from backend response', async ()
   assert.match(result.markdown, /^# SSC CGL 2026/m);
   assert.match(result.markdown, /Staff Selection Commission/);
 });
+
+test('public resize Markdown is discoverable without rewriting non-content endpoints', async () => {
+  const home = await renderMarkdownForPath('/');
+  assert.match(home.markdown, /\[Resize files\]\(\/tools\/prepare-file\)/);
+  const tool = await renderMarkdownForPath('/tools/prepare-file');
+  assert.equal(tool.status, 200);
+  assert.match(tool.markdown, /without uploading or storing/);
+  assert.match(tool.markdown, /1,000 bytes/);
+  for (const path of ['/sitemap.xml', '/.well-known/api-catalog', '/profile']) {
+    const response = proxy(
+      new NextRequest(`http://localhost:8080${path}`, {
+        headers: { accept: 'text/markdown' },
+      }),
+    );
+    assert.equal(response.headers.has('x-middleware-rewrite'), false);
+  }
+});
+
+test('job Markdown reflects public API fields and reports an unavailable upstream', async () => {
+  const options = (body: object, status = 200) => ({
+    fetchImpl: async () => Response.json(body, { status }),
+  });
+  const valid = await renderMarkdownForPath(
+    '/jobs/example',
+    options({
+      postName: 'Clerk',
+      applicationLastDate: '2026-12-17T00:00:00.000Z',
+      source: { notificationPdfUrl: 'https://example.org/notice.pdf' },
+      reviewedDetails: {
+        apply_url: 'https://example.org/apply',
+        vacancies: 12,
+      },
+    }),
+  );
+  assert.match(valid.markdown, /2026-12-17/);
+  assert.match(valid.markdown, /\[Official recruitment notice\].*notice\.pdf/);
+  assert.match(valid.markdown, /\[Official application link\].*\/apply/);
+  assert.equal(
+    (await renderMarkdownForPath('/jobs/example', options({}, 502))).status,
+    503,
+  );
+  assert.equal(
+    (
+      await renderMarkdownForPath(
+        '/jobs/example',
+        options({ postName: 'Draft', designReview: true }),
+      )
+    ).status,
+    404,
+  );
+});

@@ -1,11 +1,12 @@
-import type { Metadata } from 'next';
+import { publicPageMetadata } from '@/components/jobs/job-sharing';
 import { ExamMode } from '@/components/typing/exam-mode';
 
-export const metadata: Metadata = {
+export const metadata = publicPageMetadata({
   title: 'Exam simulation | Typing',
   description:
     'Practice an exam simulation with reviewed duration and editing rules. Official scoring is unavailable.',
-};
+  pathname: '/typing/exam',
+});
 
 export default function TypingExamPage() {
   return (

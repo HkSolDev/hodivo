@@ -5,6 +5,7 @@ export default tseslint.config(
     ignores: [
       'generated/**',
       'public/js/**',
+      'public/prepare-file/**',
       'node_modules/**',
       'downloads/**',
       '.next/**',

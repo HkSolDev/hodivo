@@ -120,6 +120,7 @@ export function jobMetadata(job: JobDetailData, origin?: string): Metadata {
   const deadline = reviewed?.application_last_date ?? job.applicationLastDate;
   const description = [
     reviewed?.locations?.join(', '),
+    job.educationRequired ?? reviewed?.education_required,
     vacancies != null
       ? `${vacancies} ${vacancies === 1 ? 'vacancy' : 'vacancies'}`
       : null,
@@ -167,15 +168,11 @@ export function publicPageMetadata(options: {
     ? options.title.trim()
     : `${cleanTitle} | Hodivo`;
 
-  const resolvedOrigin = trustedPublicOrigin(options.origin);
-  if (!resolvedOrigin) {
-    return {
-      title,
-      description: options.description,
-      ...(options.robots ? { robots: options.robots } : {}),
-    };
-  }
-
+  const resolvedOrigin =
+    trustedPublicOrigin(options.origin, {
+      allowLocalhost: false,
+      fallbackOrigin: DEFAULT_PRODUCTION_ORIGIN,
+    }) ?? DEFAULT_PRODUCTION_ORIGIN;
   const url = new URL(options.pathname, resolvedOrigin).href;
   const image = {
     url: new URL('/share-image', resolvedOrigin).href,

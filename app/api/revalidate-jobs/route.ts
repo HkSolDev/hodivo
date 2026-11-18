@@ -1,3 +1,4 @@
+import { revalidatePath } from 'next/cache';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import {
   fetchPublicJobs,
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
   // and the next reader of any identity — fetch fresh upstream data
   // instead of being served the previous entry.
   invalidateJobsCache();
+  revalidatePath('/sitemap.xml');
   // Warm only common page-one entries, through the same fetch path and
   // cache identity as real readers. A warming failure stays visible in
   // `warmed` and never turns into a cached empty success.

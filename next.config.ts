@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { vendorRoot } from './lib/prepare-file/vendor';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -10,6 +11,25 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        source: '/',
+        headers: [
+          {
+            key: 'Link',
+            value:
+              '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", </api/openapi.json>; rel="service-desc", </how-it-works>; rel="service-doc"',
+          },
+        ],
+      },
+      {
+        source: `${vendorRoot}/:path*`,
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
       {
         source: '/admin/:path*',
         headers: [

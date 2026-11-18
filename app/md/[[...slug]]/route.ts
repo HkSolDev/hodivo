@@ -18,6 +18,7 @@ export async function GET(
     headers: {
       'Content-Type': 'text/markdown; charset=utf-8',
       Vary: 'Accept',
+      'Cache-Control': 'no-store',
       'Content-Signal': CONTENT_SIGNAL_DIRECTIVE,
       'x-markdown-tokens': String(estimateMarkdownTokens(markdown)),
     },
