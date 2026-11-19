@@ -2,9 +2,9 @@ import { publicPageMetadata } from '@/components/jobs/job-sharing';
 import { TypingPractice } from '@/components/typing/typing-practice';
 
 export const metadata = publicPageMetadata({
-  title: 'Typing practice',
+  title: 'Free Online Typing Practice & Speed Test',
   description:
-    'Practice typing speed and accuracy with published exam passages. Time away from the field is not counted.',
+    'Free online typing speed and accuracy practice for anyone worldwide—measure WPM, errors, and accuracy in your browser with custom text or published exam passages. No signup required.',
   pathname: '/typing',
 });
 

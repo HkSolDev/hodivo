@@ -74,7 +74,7 @@ test('md route handler returns text/markdown with Vary: Accept and Content-Signa
   );
   assert.equal(typingRes.status, 200);
   const typingBody = await typingRes.text();
-  assert.match(typingBody, /Government Exam Typing Practice/);
+  assert.match(typingBody, /Free Online Typing Practice & Speed Test/);
   assert.match(typingBody, /https:\/\/hodivo\.app\/typing/);
 
   const examRes = await mdGet(
@@ -85,7 +85,7 @@ test('md route handler returns text/markdown with Vary: Accept and Content-Signa
   );
   assert.equal(examRes.status, 200);
   const examBody = await examRes.text();
-  assert.match(examBody, /Government Exam Typing Simulation/);
+  assert.match(examBody, /Timed Typing Exam Simulation/);
 
   const notFoundRes = await mdGet(
     new Request('http://localhost:8080/md/does-not-exist'),
@@ -142,10 +142,13 @@ test('renderMarkdownForPath formats job details from backend response', async ()
 
 test('public resize Markdown is discoverable without rewriting non-content endpoints', async () => {
   const home = await renderMarkdownForPath('/');
-  assert.match(home.markdown, /\[Resize files\]\(\/tools\/prepare-file\)/);
+  assert.match(
+    home.markdown,
+    /\[Free Photo Resizer & PDF Compressor\]\(\/tools\/prepare-file\)/,
+  );
   const tool = await renderMarkdownForPath('/tools/prepare-file');
   assert.equal(tool.status, 200);
-  assert.match(tool.markdown, /without uploading or storing/);
+  assert.match(tool.markdown, /no server uploads/);
   assert.match(tool.markdown, /1,000 bytes/);
   for (const path of ['/sitemap.xml', '/.well-known/api-catalog', '/profile']) {
     const response = proxy(
