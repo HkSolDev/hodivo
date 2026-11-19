@@ -69,7 +69,7 @@ export function TypingPractice() {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(() =>
     engine.snapshot(),
   );
-  const { accountId } = useWorkspace();
+  const { accountId, sessionChecked } = useWorkspace();
   const [passageState, setPassageState] = useState<PassageState>({
     status: 'loading',
   });
@@ -476,9 +476,23 @@ export function TypingPractice() {
   }, [passageState]);
 
   useEffect(() => {
+    if (!accountId || passageState.status !== 'ready') return;
+    const controller = new AbortController();
+    void fetchPassageSummary(passageState.passage.id, controller.signal).then(
+      (summary) => {
+        if (!controller.signal.aborted && summary) {
+          setPassageSummary(summary);
+        }
+      },
+    );
+    return () => controller.abort();
+  }, [accountId, passageState]);
+
+  useEffect(() => {
     if (
       snapshot.status !== 'finished' ||
       passageState.status !== 'ready' ||
+      !sessionChecked ||
       savedRunRef.current
     ) {
       return;
@@ -518,7 +532,7 @@ export function TypingPractice() {
         setSaveState({ status: 'error' });
       }
     });
-  }, [snapshot, passageState]);
+  }, [snapshot, passageState, accountId, sessionChecked]);
 
   const applyDuration = (seconds: number) => {
     restartSession({ durationMs: seconds * 1000 });

@@ -696,6 +696,7 @@ export function ExamMode() {
       phase !== 'finished' ||
       !snapshot ||
       !versionDetail ||
+      !sessionChecked ||
       savedExamRunRef.current
     ) {
       return;
@@ -741,6 +742,8 @@ export function ExamMode() {
     evaluation.overallStatus,
     typedLength,
     elapsedSecs,
+    accountId,
+    sessionChecked,
   ]);
 
   return (
