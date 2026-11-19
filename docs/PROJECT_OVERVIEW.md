@@ -1,8 +1,8 @@
 # Aptus: architecture, decisions, and current progress
 
-<!-- aptus-checkpoint-2026-10-24 -->
+<!-- aptus-checkpoint-2026-11-17 -->
 
-**Current checkpoint — 24 October 2026:** [Production, worker results and review-system next steps](PRODUCTION_REVIEW_CHECKPOINT_2026-10-24.md). Frontend `d577942`, backend/worker `94ccc9d` deployed. Worker saves drafts but has published zero new jobs in the observed runs. Earlier snapshots below are historical.
+**Current checkpoint — 17 November 2026:** [Typing & AI agent readiness deployment](TYPING_DEPLOYMENT_2026-11-17.md). Frontend and API deployed at merged `main` commit `e8098ad793980e1c94dad77bd1a7e4de3e660b9f` (PR #52), building on PR #51 (`5b9a9da`): `/typing` zero-scroll `100dvh` redesign (`2m` default), `/typing/exam` dual-pane terminal & unified SSC evaluator, AI agent readiness (`/robots.txt`, `/sitemap.xml`, `Accept: text/markdown`, `/.well-known/api-catalog`), and mobile home/detail polish (`10` jobs/page, zebra rows, compact pill actions). Earlier [24 October 2026](PRODUCTION_REVIEW_CHECKPOINT_2026-10-24.md) and 2 October 2026 snapshots below are historical.
 
 Snapshot: 2 October 2026. Implementation reviewed at commit `d66efff`.
 
