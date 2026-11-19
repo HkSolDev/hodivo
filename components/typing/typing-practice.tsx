@@ -15,6 +15,12 @@ import {
   type PracticePassage,
 } from '@/lib/typing/practice-api';
 import {
+  fetchPassageSummary,
+  saveTypingAttempt,
+  type PassageSummaryResponse,
+} from '@/lib/typing/attempts-api';
+import { AttemptComparison, type AttemptSaveState } from './attempt-comparison';
+import {
   createTypingSession,
   type ActualInsertion,
   type EditRejection,
@@ -65,6 +71,14 @@ export function TypingPractice() {
   const [passageState, setPassageState] = useState<PassageState>({
     status: 'loading',
   });
+  const [passageIdInput, setPassageIdInput] = useState('');
+  const [showIdPicker, setShowIdPicker] = useState(false);
+  const [passageSummary, setPassageSummary] =
+    useState<PassageSummaryResponse | null>(null);
+  const [saveState, setSaveState] = useState<AttemptSaveState>({
+    status: 'idle',
+  });
+  const savedRunRef = useRef(false);
   const [durationSeconds, setDurationSeconds] = useState(
     DEFAULT_DURATION_SECONDS,
   );
@@ -391,21 +405,27 @@ export function TypingPractice() {
   };
 
   const handleRestart = () => {
+    savedRunRef.current = false;
+    setSaveState({ status: 'idle' });
     restartSession();
     textareaRef.current?.focus();
     setIsFocused(true);
   };
 
-  const loadPassage = () => {
+  const loadPassage = (requestedPassageId?: string) => {
     requestRef.current?.controller.abort();
     const request = {
       controller: new AbortController(),
       id: (requestRef.current?.id ?? 0) + 1,
     };
     requestRef.current = request;
+    savedRunRef.current = false;
+    setSaveState({ status: 'idle' });
+    setPassageSummary(null);
     restartSession({ target: '' });
     setPassageState({ status: 'loading' });
-    void loadPracticePassage(request.controller.signal)
+    const cleanId = requestedPassageId?.trim() || undefined;
+    void loadPracticePassage(request.controller.signal, cleanId)
       .then((passage) => {
         if (
           request.controller.signal.aborted ||
@@ -418,6 +438,13 @@ export function TypingPractice() {
         }
         restartSession({ target: passage.text });
         setPassageState({ status: 'ready', passage });
+        void fetchPassageSummary(passage.id, request.controller.signal).then(
+          (summary) => {
+            if (!request.controller.signal.aborted && summary) {
+              setPassageSummary(summary);
+            }
+          },
+        );
       })
       .catch(() => {
         if (
@@ -431,7 +458,10 @@ export function TypingPractice() {
   };
 
   useEffect(() => {
-    loadPassage();
+    const params = new URLSearchParams(window.location.search);
+    const initialId = params.get('passageId')?.trim() || undefined;
+    if (initialId) setPassageIdInput(initialId);
+    loadPassage(initialId);
     return () => requestRef.current?.controller.abort();
   }, []);
 
@@ -440,6 +470,47 @@ export function TypingPractice() {
       textareaRef.current?.focus();
     }
   }, [passageState]);
+
+  useEffect(() => {
+    if (
+      snapshot.status !== 'finished' ||
+      passageState.status !== 'ready' ||
+      savedRunRef.current
+    ) {
+      return;
+    }
+    savedRunRef.current = true;
+    const netWpm = snapshot.score.netWpm ?? 0;
+    const grossWpm = snapshot.score.grossWpm ?? 0;
+    const accuracy = snapshot.score.accuracy ?? 0;
+    const errorPercent = Math.max(0, Math.round((100 - accuracy) * 100) / 100);
+    const durationMs = Math.max(1000, Math.round(snapshot.elapsedMs ?? 1000));
+    const keystrokes = snapshot.correctAttempts + snapshot.incorrectAttempts;
+
+    setSaveState({ status: 'saving' });
+    void saveTypingAttempt({
+      passageId: passageState.passage.id,
+      mode: 'PRACTICE',
+      grossWpm,
+      netWpm,
+      accuracy,
+      errorPercent,
+      keystrokes,
+      backspaceCount: Math.max(
+        0,
+        snapshot.insertedAttempts - snapshot.typedText.length,
+      ),
+      durationMs,
+    }).then((result) => {
+      if (result.status === 'saved') {
+        setSaveState({ status: 'saved', comparison: result.comparison });
+      } else if (result.status === 'unauthenticated') {
+        setSaveState({ status: 'unauthenticated' });
+      } else {
+        setSaveState({ status: 'error' });
+      }
+    });
+  }, [snapshot, passageState]);
 
   const applyDuration = (seconds: number) => {
     restartSession({ durationMs: seconds * 1000 });
@@ -508,7 +579,7 @@ export function TypingPractice() {
                 <button
                   type="button"
                   className={styles.hudBtn}
-                  onClick={loadPassage}
+                  onClick={() => loadPassage()}
                 >
                   Retry
                 </button>
@@ -517,7 +588,7 @@ export function TypingPractice() {
                 type="button"
                 className={styles.hudBtn}
                 onPointerDown={(event) => event.preventDefault()}
-                onClick={loadPassage}
+                onClick={() => loadPassage()}
                 disabled={loading || passageState.status !== 'ready'}
                 title="Load next passage"
               >
@@ -561,6 +632,57 @@ export function TypingPractice() {
                 </svg>
                 <span>Restart</span>
               </button>
+              {!showIdPicker ? (
+                <button
+                  type="button"
+                  className={styles.hudBtn}
+                  onClick={() => setShowIdPicker(true)}
+                  disabled={loading}
+                  title="Open a specific passage by ID"
+                >
+                  <span># Open ID</span>
+                </button>
+              ) : (
+                <form
+                  className={styles.passageIdForm}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (passageIdInput.trim()) {
+                      loadPassage(passageIdInput);
+                      setShowIdPicker(false);
+                    }
+                  }}
+                >
+                  <input
+                    type="text"
+                    className={styles.passageIdInput}
+                    value={passageIdInput}
+                    onChange={(event) => setPassageIdInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') setShowIdPicker(false);
+                    }}
+                    placeholder="Passage ID"
+                    aria-label="Load passage by ID"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    className={styles.hudBtn}
+                    disabled={loading}
+                  >
+                    Go
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.hudBtn} ${styles.hudBtnIcon}`}
+                    onClick={() => setShowIdPicker(false)}
+                    aria-label="Close Passage ID input"
+                    title="Close"
+                  >
+                    ×
+                  </button>
+                </form>
+              )}
             </div>
           </div>
 
@@ -688,11 +810,30 @@ export function TypingPractice() {
           <div className={styles.passageHeader}>
             <div className={styles.passageHeaderLeft}>
               <span className={styles.pulseDot} aria-hidden="true" />
-              <span className={styles.viewerLabel}>Exam Passage Viewer</span>
-              <span className={styles.viewerSep} aria-hidden="true">
-                •
-              </span>
-              <span className={styles.viewerSub}>Original Text Stream</span>
+              <span className={styles.viewerLabel}>Practice Passage</span>
+              {passageState.status === 'ready' && (
+                <>
+                  <span className={styles.viewerSep} aria-hidden="true">
+                    •
+                  </span>
+                  <span className={styles.viewerSub}>
+                    ID: #{passageState.passage.id}
+                  </span>
+                </>
+              )}
+              {passageSummary &&
+                (passageSummary.practice.attemptCount > 0 ||
+                  passageSummary.exam.attemptCount > 0) && (
+                  <>
+                    <span className={styles.viewerSep} aria-hidden="true">
+                      •
+                    </span>
+                    <span className={styles.viewerSub}>
+                      Practice {passageSummary.practice.attemptCount} · Exam{' '}
+                      {passageSummary.exam.attemptCount}
+                    </span>
+                  </>
+                )}
             </div>
             <div className={styles.passageHeaderRight}>
               <span>
@@ -872,6 +1013,18 @@ export function TypingPractice() {
                       </dd>
                     </div>
                   </dl>
+                  {passageState.status === 'ready' && (
+                    <AttemptComparison
+                      passageId={passageState.passage.id}
+                      mode="PRACTICE"
+                      currentNetWpm={netWpm}
+                      currentErrorPercent={Math.max(
+                        0,
+                        Math.round((100 - accuracy) * 100) / 100,
+                      )}
+                      saveState={saveState}
+                    />
+                  )}
                 </section>
               );
             })()}

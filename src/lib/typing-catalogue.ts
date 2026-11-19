@@ -4,10 +4,26 @@ import type { PrismaClient } from '../../generated/prisma/index.js';
 export type PracticePassage = { id: string; title: string; text: string };
 
 const POOL_TTL_MS = 5 * 60 * 1000;
+const BY_ID_CACHE_MAX = 500;
 let cachedPool: PracticePassage[] | null = null;
 let cachedPoolExpiresAt = 0;
 let lastPickedId: string | null = null;
 let refreshPromise: Promise<PracticePassage[]> | null = null;
+const byIdCache = new Map<
+  string,
+  { passage: PracticePassage; expiresAt: number }
+>();
+
+function cachePassagesById(passages: PracticePassage[]): void {
+  const expiresAt = Date.now() + POOL_TTL_MS;
+  for (const passage of passages) {
+    if (byIdCache.size >= BY_ID_CACHE_MAX) {
+      const oldestKey = byIdCache.keys().next().value;
+      if (oldestKey !== undefined) byIdCache.delete(oldestKey);
+    }
+    byIdCache.set(passage.id, { passage, expiresAt });
+  }
+}
 
 async function fetchPublishedPassagePool(
   database: Pick<PrismaClient, '$queryRaw'>,
@@ -53,6 +69,7 @@ export async function getRandomPracticePassage(
           if (rows.length > 0) {
             cachedPool = rows;
             cachedPoolExpiresAt = Date.now() + POOL_TTL_MS;
+            cachePassagesById(rows);
           }
           return rows;
         })
@@ -82,4 +99,38 @@ export async function getRandomPracticePassage(
     LIMIT 1
   `;
   return passages[0] ?? null;
+}
+
+export async function getPracticePassageById(
+  passageId: string,
+  database: Pick<PrismaClient, '$queryRaw'> = prisma,
+): Promise<PracticePassage | null> {
+  if (database === prisma) {
+    const fromPool = cachedPool?.find((p) => p.id === passageId);
+    if (fromPool) return fromPool;
+
+    const cached = byIdCache.get(passageId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.passage;
+    }
+    if (cached) byIdCache.delete(passageId);
+  }
+
+  const supported = '^[\t\n -~]+$';
+  const passages = await database.$queryRaw<PracticePassage[]>`
+    SELECT p."id", p."title", p."text"
+    FROM "TypingPassage" p
+    JOIN "TypingExamVersion" v ON v."id" = p."examVersionId"
+    WHERE p."id" = ${passageId}
+      AND p."status" = 'PUBLISHED' AND v."status" = 'PUBLISHED'
+      AND v."language" = 'en'
+      AND char_length(p."text") BETWEEN 1 AND 50000
+      AND p."text" ~ ${supported} AND p."text" ~ '[!-~]'
+    LIMIT 1
+  `;
+  const passage = passages[0] ?? null;
+  if (passage && database === prisma) {
+    cachePassagesById([passage]);
+  }
+  return passage;
 }
