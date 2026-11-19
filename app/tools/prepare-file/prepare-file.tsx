@@ -3,6 +3,12 @@
 import Image from 'next/image';
 import { useRef, useState, type FormEvent } from 'react';
 import {
+  EXAM_GROUPS,
+  formatTemplateSpec,
+  type ExamId,
+  type ExamTemplate,
+} from '@/lib/prepare-file/exam-templates';
+import {
   formatBytes,
   isPdf,
   validateFiles,
@@ -20,57 +26,6 @@ const presets = [
   [500, 'Multi-page'],
 ] as const;
 
-const examTemplates = [
-  {
-    id: 'ssc-photo',
-    label: 'SSC Photo',
-    maxKB: 50,
-    minKB: 20,
-    width: 350,
-    height: 450,
-  },
-  {
-    id: 'ssc-sign',
-    label: 'SSC Sign',
-    maxKB: 20,
-    minKB: 10,
-    width: 140,
-    height: 60,
-  },
-  {
-    id: 'upsc-photo',
-    label: 'UPSC Photo',
-    maxKB: 200,
-    minKB: 20,
-    width: 350,
-    height: 350,
-  },
-  {
-    id: 'ibps-photo',
-    label: 'IBPS Photo',
-    maxKB: 50,
-    minKB: 20,
-    width: 200,
-    height: 230,
-  },
-  {
-    id: 'ibps-sign',
-    label: 'IBPS Sign',
-    maxKB: 20,
-    minKB: 10,
-    width: 140,
-    height: 60,
-  },
-  {
-    id: 'ibps-thumb',
-    label: 'IBPS Thumb',
-    maxKB: 50,
-    minKB: 20,
-    width: 240,
-    height: 240,
-  },
-] as const;
-
 export function PrepareFile() {
   const picker = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -80,6 +35,7 @@ export function PrepareFile() {
   const [reqWidth, setReqWidth] = useState('');
   const [reqHeight, setReqHeight] = useState('');
   const [reqMinimum, setReqMinimum] = useState('');
+  const [selectedExam, setSelectedExam] = useState<ExamId | 'custom'>('custom');
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [intakeError, setIntakeError] = useState('');
   const maximumKB = Number(limit);
@@ -91,6 +47,9 @@ export function PrepareFile() {
   );
   const pdfSource = files.length > 0 && isPdf(files[0]);
   const pdfOnly = pdfSource || files.length > 1;
+  const activeGroup = EXAM_GROUPS.find((group) => group.id === selectedExam);
+  const currentTemplate =
+    activeGroup?.templates.find((tpl) => tpl.id === activeTemplate) ?? null;
   const aboveLimit = Boolean(output && output.blob.size > maximumKB * 1000);
   const belowMinimum = Boolean(
     output?.minimumBytes && output.blob.size < output.minimumBytes,
@@ -110,19 +69,25 @@ export function PrepareFile() {
     if (invalid) return;
     invalidate();
     setFiles(selected);
-    if (selected.length > 1 || isPdf(selected[0])) setFormat('pdf');
+    if (selected.length > 1 || isPdf(selected[0])) {
+      setFormat('pdf');
+      if (currentTemplate?.format === 'jpg') {
+        setActiveTemplate(null);
+      }
+    }
   }
 
   function changeLimit(value: string) {
     if (Number(value) !== maximumKB) invalidate();
+    setActiveTemplate(null);
     setLimit(value);
   }
 
   function applyRequirements(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const values = {
-      width: reqWidth.trim(),
-      height: reqHeight.trim(),
+      width: format === 'jpg' ? reqWidth.trim() : '',
+      height: format === 'jpg' ? reqHeight.trim() : '',
       minimum: reqMinimum.trim(),
     };
     const next = Object.values(values).some(Boolean) ? values : null;
@@ -132,19 +97,35 @@ export function PrepareFile() {
     setRequirements(next);
   }
 
-  function applyExamTemplate(tpl: (typeof examTemplates)[number]) {
-    const next = {
-      width: String(tpl.width),
-      height: String(tpl.height),
-      minimum: String(tpl.minKB),
+  function applyExamTemplate(tpl: ExamTemplate) {
+    if (tpl.format === 'jpg' && pdfOnly) return;
+    const nextValues = {
+      width: tpl.width ? String(tpl.width) : '',
+      height: tpl.height ? String(tpl.height) : '',
+      minimum: tpl.minKB ? String(tpl.minKB) : '',
     };
+    const next = Object.values(nextValues).some(Boolean) ? nextValues : null;
     invalidate();
+    setFormat(tpl.format);
     setLimit(String(tpl.maxKB));
-    setReqWidth(next.width);
-    setReqHeight(next.height);
-    setReqMinimum(next.minimum);
+    setReqWidth(nextValues.width);
+    setReqHeight(nextValues.height);
+    setReqMinimum(nextValues.minimum);
     setActiveTemplate(tpl.id);
     setRequirements(next);
+  }
+
+  function selectExamGroup(examId: ExamId | 'custom') {
+    setSelectedExam(examId);
+    if (examId === 'custom') {
+      setActiveTemplate(null);
+      return;
+    }
+    const group = EXAM_GROUPS.find((item) => item.id === examId);
+    const firstCompatible = group?.templates.find(
+      (tpl) => !(tpl.format === 'jpg' && pdfOnly),
+    );
+    if (firstCompatible) applyExamTemplate(firstCompatible);
   }
 
   function clearRequirements() {
@@ -250,6 +231,86 @@ export function PrepareFile() {
         <section className={styles.card} aria-labelledby="prepare-format">
           <h2 id="prepare-format">Format &amp; limit</h2>
           <div className={styles.stack}>
+            <div>
+              <small>Exam preset (auto-fills size &amp; dimensions)</small>
+              <div
+                className={styles.presets}
+                role="group"
+                aria-label="Exam presets"
+              >
+                <button
+                  type="button"
+                  aria-pressed={selectedExam === 'custom'}
+                  className={`button ${selectedExam === 'custom' ? 'button-primary' : 'button-secondary'}`}
+                  onClick={() => selectExamGroup('custom')}
+                >
+                  Custom
+                </button>
+                {EXAM_GROUPS.map((group) => (
+                  <button
+                    key={group.id}
+                    type="button"
+                    aria-pressed={selectedExam === group.id}
+                    className={`button ${selectedExam === group.id ? 'button-primary' : 'button-secondary'}`}
+                    onClick={() => selectExamGroup(group.id)}
+                  >
+                    {group.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {activeGroup ? (
+              <div className={styles.templateBox}>
+                <small>Document for {activeGroup.label}</small>
+                <div
+                  className={styles.presets}
+                  role="group"
+                  aria-label={`${activeGroup.label} documents`}
+                >
+                  {activeGroup.templates.map((tpl) => (
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      disabled={tpl.format === 'jpg' && pdfOnly}
+                      aria-pressed={activeTemplate === tpl.id}
+                      className={`button ${activeTemplate === tpl.id ? 'button-primary' : 'button-secondary'}`}
+                      onClick={() => applyExamTemplate(tpl)}
+                    >
+                      {tpl.label}
+                    </button>
+                  ))}
+                </div>
+                {currentTemplate && (
+                  <p className={styles.templateSummary}>
+                    <strong>
+                      {activeGroup.label} {currentTemplate.label}
+                    </strong>
+                    {' · '}
+                    {formatTemplateSpec(currentTemplate)}
+                    {currentTemplate.note && ` · ${currentTemplate.note}`}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <small>Common upload limits</small>
+                <div className={styles.presets}>
+                  {presets.map(([kb, label]) => (
+                    <button
+                      key={kb}
+                      type="button"
+                      aria-pressed={maximumKB === kb}
+                      className={`button ${maximumKB === kb ? 'button-primary' : 'button-secondary'}`}
+                      onClick={() => changeLimit(String(kb))}
+                    >
+                      {kb} KB {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div
               className={styles.formats}
               role="group"
@@ -265,6 +326,7 @@ export function PrepareFile() {
                   onClick={() => {
                     if (option === format) return;
                     invalidate();
+                    setActiveTemplate(null);
                     setFormat(option);
                   }}
                 >
@@ -296,85 +358,62 @@ export function PrepareFile() {
               )}
             </div>
 
-            <div>
-              <small>Common upload limits</small>
-              <div className={styles.presets}>
-                {presets.map(([kb, label]) => (
-                  <button
-                    key={kb}
-                    type="button"
-                    aria-pressed={maximumKB === kb}
-                    className={`button ${maximumKB === kb ? 'button-primary' : 'button-secondary'}`}
-                    onClick={() => changeLimit(String(kb))}
-                  >
-                    {kb} KB {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <details className={styles.requirements} hidden={format !== 'jpg'}>
+            <details className={styles.requirements}>
               <summary>
-                More requirements for JPG <small>Optional</small>
+                More requirements{' '}
+                <small>
+                  {format === 'jpg'
+                    ? 'Dimensions & minimum KB (Optional)'
+                    : 'Minimum KB (Optional)'}
+                </small>
               </summary>
               <form
                 className={styles.requirementsForm}
                 onSubmit={applyRequirements}
               >
-                <div>
-                  <small>Exam templates (one click)</small>
-                  <div className={styles.presets}>
-                    {examTemplates.map((tpl) => (
-                      <button
-                        key={tpl.id}
-                        type="button"
-                        aria-pressed={activeTemplate === tpl.id}
-                        className={`button ${activeTemplate === tpl.id ? 'button-primary' : 'button-secondary'}`}
-                        onClick={() => applyExamTemplate(tpl)}
-                      >
-                        {tpl.label} ({tpl.width}×{tpl.height}, {tpl.minKB}–
-                        {tpl.maxKB} KB)
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <p>
-                  Set exact dimensions only if your form requires them. White
-                  margins preserve the image’s proportions without cropping.
-                </p>
+                {format === 'jpg' && (
+                  <p>
+                    Set exact dimensions only if your form requires them. White
+                    margins preserve the image’s proportions without cropping.
+                  </p>
+                )}
                 <div className={styles.requirementFields}>
-                  <label className={styles.label}>
-                    Width (px)
-                    <span className={styles.field}>
-                      <input
-                        type="number"
-                        name="width"
-                        min={1}
-                        max={4096}
-                        value={reqWidth}
-                        onChange={(e) => {
-                          setReqWidth(e.target.value);
-                          setActiveTemplate(null);
-                        }}
-                      />
-                    </span>
-                  </label>
-                  <label className={styles.label}>
-                    Height (px)
-                    <span className={styles.field}>
-                      <input
-                        type="number"
-                        name="height"
-                        min={1}
-                        max={4096}
-                        value={reqHeight}
-                        onChange={(e) => {
-                          setReqHeight(e.target.value);
-                          setActiveTemplate(null);
-                        }}
-                      />
-                    </span>
-                  </label>
+                  {format === 'jpg' && (
+                    <>
+                      <label className={styles.label}>
+                        Width (px)
+                        <span className={styles.field}>
+                          <input
+                            type="number"
+                            name="width"
+                            min={1}
+                            max={4096}
+                            value={reqWidth}
+                            onChange={(e) => {
+                              setReqWidth(e.target.value);
+                              setActiveTemplate(null);
+                            }}
+                          />
+                        </span>
+                      </label>
+                      <label className={styles.label}>
+                        Height (px)
+                        <span className={styles.field}>
+                          <input
+                            type="number"
+                            name="height"
+                            min={1}
+                            max={4096}
+                            value={reqHeight}
+                            onChange={(e) => {
+                              setReqHeight(e.target.value);
+                              setActiveTemplate(null);
+                            }}
+                          />
+                        </span>
+                      </label>
+                    </>
+                  )}
                   <label className={styles.label}>
                     Minimum size (KB)
                     <span className={styles.field}>

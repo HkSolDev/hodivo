@@ -17,12 +17,25 @@ export async function prepareFile(
   requirements: Requirements | null,
   signal: AbortSignal,
 ): Promise<PreparedFile> {
+  const minimumBytes =
+    format === 'pdf' && requirements?.minimum
+      ? (await import('./requirements')).readMinimumBytes(
+          requirements.minimum,
+          maximumKB,
+        )
+      : undefined;
+
   if (isPdf(files[0])) {
     const { fitPdf } = await import('./pdf');
     const result = await fitPdf(files[0], maximumKB * 1000, signal);
     const pages =
       result.pageCount === 1 ? '1 page' : `${result.pageCount} pages`;
-    return { ...result, sourceDetails: pages, outputDetails: pages };
+    return {
+      ...result,
+      sourceDetails: pages,
+      outputDetails: pages,
+      minimumBytes,
+    };
   }
 
   const checks =
@@ -62,6 +75,7 @@ export async function prepareFile(
         sourceDetails,
         outputDetails:
           result.pageCount === 1 ? '1 page' : `${result.pageCount} pages`,
+        minimumBytes,
       };
     }
     const { fitImage } = await import('./image');

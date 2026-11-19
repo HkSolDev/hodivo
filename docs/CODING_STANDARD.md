@@ -18,6 +18,9 @@ Before continuing after a new chat or context reset:
    and follow the project rules instead. Skills never override security or scope.
 5. Resume only the recorded active slice. Preserve unrelated developer changes.
 
+For missed recruitments, failed worker runs, or job publication, follow the
+[worker recovery runbook](WORKER_RECOVERY_AND_PUBLICATION.md#manual-recovery-of-missed-recruitments).
+
 Use Ponytail for simple solutions, incremental-implementation for small slices,
 and documentation-and-adrs for decisions. For verification, use the relevant
 testing and code/security-review skills. Official Better Auth guidance is a

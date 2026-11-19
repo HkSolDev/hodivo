@@ -158,6 +158,28 @@
   padding-inline: var(--space-3);
 }
 
+.templateBox {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--small-radius);
+  background: var(--page);
+}
+
+.templateBox .presets {
+  margin-top: 0;
+}
+
+.templateSummary {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.templateSummary strong {
+  color: var(--ink);
+}
+
 .label {
   display: block;
   font-size: 0.875rem;

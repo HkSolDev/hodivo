@@ -58,12 +58,31 @@
   gap: var(--space-5);
 }
 
+.sidebar {
+  display: grid;
+  gap: var(--space-4);
+}
+
 .applyPanel,
 .card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-xs);
+}
+
+.card {
+  scroll-margin-top: var(--space-5);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.card[data-jump-highlight='true'] {
+  border-color: var(--focus);
+  box-shadow:
+    0 0 0 2px var(--focus),
+    var(--shadow-sm);
 }
 
 .applyPanel {
@@ -137,6 +156,21 @@
 
 .intro {
   margin: 0 0 var(--space-5);
+}
+
+.introList {
+  margin: var(--space-4) 0 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: var(--space-2);
+  line-height: 1.55;
+}
+
+.extraIntro {
+  margin: var(--space-4) 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.55;
 }
 
 .routes {
@@ -298,11 +332,19 @@
     grid-row: 1;
   }
 
-  .applyPanel {
+  .sidebar {
     grid-column: 2;
     grid-row: 1;
     position: sticky;
     top: var(--space-5);
+    max-height: calc(100vh - 2.5rem);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 1049px) {
+  .card {
+    scroll-margin-top: 4rem;
   }
 }
 
@@ -337,5 +379,11 @@
   .fact {
     grid-template-columns: 1fr;
     gap: var(--space-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
   }
 }

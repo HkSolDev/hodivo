@@ -110,6 +110,10 @@ export function ExamMode() {
   const { accountId, sessionChecked } = useWorkspace();
   const [authGateEnabled, setAuthGateEnabled] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [keyboardViewport, setKeyboardViewport] = useState<{
+    height: number;
+    top: number;
+  } | null>(null);
   const [exams, setExams] = useState<ExamSummary[]>([]);
   const [examsNextCursor, setExamsNextCursor] = useState<string | null>(null);
   const [selectedExamId, setSelectedExamId] = useState('');
@@ -210,6 +214,38 @@ export function ExamMode() {
   const passageContainerRef = useRef<HTMLDivElement | null>(null);
   const passageCursorRef = useRef<HTMLSpanElement | null>(null);
   const lastPassageLineTopRef = useRef<number | null>(null);
+  const keyboardHeight = keyboardViewport?.height;
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!isInputFocused || !viewport) {
+      setKeyboardViewport(null);
+      return;
+    }
+    const mobile = window.matchMedia(
+      '(max-width: 760px) and (pointer: coarse)',
+    );
+    const update = () => {
+      const keyboardOpen =
+        mobile.matches &&
+        viewport.scale === 1 &&
+        window.innerHeight - viewport.height > 100;
+      setKeyboardViewport(
+        keyboardOpen
+          ? { height: viewport.height, top: viewport.offsetTop }
+          : null,
+      );
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    mobile.addEventListener('change', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+      mobile.removeEventListener('change', update);
+    };
+  }, [isInputFocused]);
 
   useEffect(() => {
     const container = passageContainerRef.current;
@@ -221,19 +257,29 @@ export function ExamMode() {
     const lineTop = getOffsetTopWithin(cursor, container);
     if (
       lastPassageLineTopRef.current !== null &&
-      Math.abs(lineTop - lastPassageLineTopRef.current) < lineHeight * 0.5
+      Math.abs(lineTop - lastPassageLineTopRef.current) < lineHeight * 0.5 &&
+      (keyboardHeight === undefined ||
+        (lineTop >= container.scrollTop &&
+          lineTop + lineHeight <= container.scrollTop + container.clientHeight))
     ) {
       return;
     }
     lastPassageLineTopRef.current = lineTop;
 
-    const targetTop = Math.max(0, lineTop - lineHeight * 1.15);
+    const context =
+      keyboardHeight === undefined
+        ? lineHeight * 1.15
+        : Math.min(
+            lineHeight * 1.15,
+            Math.max(0, container.clientHeight - lineHeight),
+          );
+    const targetTop = Math.max(0, lineTop - context);
     if (typeof container.scrollTo === 'function') {
       container.scrollTo({ top: targetTop, behavior: 'smooth' });
     } else {
       container.scrollTop = targetTop;
     }
-  }, [localText.length, snapshot?.passage.text, fontSize]);
+  }, [localText.length, snapshot?.passage.text, fontSize, keyboardHeight]);
 
   const fetchExams = useCallback(async (cursor?: string) => {
     examsAbortRef.current?.abort();
@@ -640,7 +686,8 @@ export function ExamMode() {
     <div
       className={`${
         styles.examLayout
-      } ${fontSize === 'small' ? styles.fontSizeSmall : fontSize === 'large' ? styles.fontSizeLarge : styles.fontSizeNormal}`}
+      } ${fontSize === 'small' ? styles.fontSizeSmall : fontSize === 'large' ? styles.fontSizeLarge : styles.fontSizeNormal}${keyboardViewport ? ` ${styles.keyboardLayout}` : ''}`}
+      style={keyboardViewport ?? undefined}
       data-typing-exam-viewport="true"
     >
       {/* Top Consolidated Exam HUD Toolbar */}

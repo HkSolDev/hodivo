@@ -194,7 +194,7 @@ test('Mobile discovery: compact layouts, accessible filters, truth in fields, an
       try {
         for (const width of [360, 390, 430, 834, 1440]) {
           await page.setViewportSize({ width, height: 900 });
-          await page.goto(origin, { waitUntil: 'networkidle' });
+          await page.goto(origin, { waitUntil: 'load' });
 
           const overflow = await page.evaluate(
             () => document.documentElement.scrollWidth > window.innerWidth,

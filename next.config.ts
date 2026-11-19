@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 import { vendorRoot } from './lib/prepare-file/vendor';
 
+const staticToolCacheControl =
+  'public, max-age=0, s-maxage=86400, stale-while-revalidate=604800, stale-if-error=604800';
+
 const nextConfig: NextConfig = {
   output: 'standalone',
   devIndicators: process.env.APTUS_LOCAL_REVIEW === '1' ? false : undefined,
@@ -27,6 +30,33 @@ const nextConfig: NextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/tools/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: staticToolCacheControl,
+          },
+        ],
+      },
+      {
+        source: '/typing',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: staticToolCacheControl,
+          },
+        ],
+      },
+      {
+        source: '/typing/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: staticToolCacheControl,
           },
         ],
       },

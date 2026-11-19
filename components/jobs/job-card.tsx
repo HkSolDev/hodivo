@@ -1,5 +1,9 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import {
+  shortenQualificationPoint,
+  summarizeQualification,
+} from '@/lib/jobs/format-qualification';
 import styles from './job-card.module.css';
 import { SaveJobButton } from './save-job-button';
 
@@ -41,9 +45,15 @@ export function JobCard({
   actions?: ReactNode;
 }) {
   const applyBy = formatDate(job.applicationLastDate);
-  const qualification = job.educationRequired?.trim();
-  const hasQualification =
-    qualification && !/^not specified$/i.test(qualification);
+  const { points: qualPoints, chips: qualChips } = summarizeQualification(
+    job.educationRequired,
+  );
+  const hasQualification = qualPoints.length > 0;
+  const visibleQualPoints = qualPoints.slice(0, 2);
+  const hiddenQualCount = Math.max(
+    0,
+    qualPoints.length - visibleQualPoints.length,
+  );
   const organization = job.organization?.trim() || 'Not specified';
   const appointmentType = job.appointmentType?.trim();
   const hasAppointmentType =
@@ -84,7 +94,33 @@ export function JobCard({
         {hasQualification && (
           <div className={styles.qualification}>
             <p className="small muted">Qualification</p>
-            <p>{qualification}</p>
+            {qualPoints.length === 1 ? (
+              <p>{qualPoints[0]}</p>
+            ) : (
+              <>
+                {qualChips.length > 0 && (
+                  <div className={styles.qualChips}>
+                    {qualChips.map((chip) => (
+                      <span className={styles.qualChip} key={chip}>
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <ul className={styles.qualList}>
+                  {visibleQualPoints.map((point, idx) => (
+                    <li key={`${idx}-${point.slice(0, 24)}`}>
+                      {shortenQualificationPoint(point)}
+                    </li>
+                  ))}
+                </ul>
+                {hiddenQualCount > 0 && (
+                  <p className={`small muted ${styles.qualMore}`}>
+                    +{hiddenQualCount} more in details
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
         {(job.vacancies != null || job.payLevel) && (

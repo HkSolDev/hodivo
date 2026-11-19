@@ -111,6 +111,9 @@ Postgres: notifications → web form (edu/category/DOB) → SQL filter → match
 
 ## Learning continuity
 
+- For missed recruitments, failed worker runs, or job publication, follow
+  [the worker recovery runbook](docs/WORKER_RECOVERY_AND_PUBLICATION.md#manual-recovery-of-missed-recruitments).
+
 - Always read `docs/CODING_STANDARD.md` before implementation or review. It
   records the assistant-implements/developer-reviews agreement for auth,
   naming, comments, skill use, verification and context-reset procedure.

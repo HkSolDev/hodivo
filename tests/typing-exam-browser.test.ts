@@ -331,6 +331,88 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
     },
   );
   await t.test(
+    'mobile keyboard keeps the active exam passage above the answer',
+    async () => {
+      const touch = await browser.newContext({
+        hasTouch: true,
+        isMobile: true,
+        viewport: { width: 390, height: 740 },
+      });
+      try {
+        const mobile = await touch.newPage();
+        await mobile.goto(`${origin}/typing/exam`);
+        await mobile.getByLabel('Exam', { exact: true }).selectOption('exam1');
+        await mobile
+          .getByLabel('Version', { exact: true })
+          .selectOption('version1');
+        const load = mobile.getByRole('button', {
+          name: 'Load passage',
+          exact: true,
+        });
+        await load.click();
+        const answer = mobile.getByRole('textbox', { name: 'Your answer' });
+        await answer.tap();
+        const resizeViewport = (height: number | null, top: number) =>
+          mobile.evaluate(
+            ({ height, top }) => {
+              const viewport = window.visualViewport!;
+              Object.defineProperties(viewport, {
+                height: { configurable: true, value: height ?? innerHeight },
+                offsetTop: { configurable: true, value: top },
+              });
+              viewport.dispatchEvent(new Event('resize'));
+            },
+            { height, top },
+          );
+
+        await resizeViewport(288, 32);
+        const timer = mobile.getByLabel('Time remaining');
+        await expect(timer).toHaveText('10:00');
+        const controls = mobile.getByRole('navigation', {
+          name: 'Controls and Counters Bar',
+        });
+        await expect(controls).toBeHidden();
+        const scrollBeforeTyping = await mobile.evaluate(() => scrollY);
+        const text = snapshot.passage.text.slice(0, 180);
+        await answer.pressSequentially(text);
+        await expect(answer).toHaveValue(text);
+        const activeWord = mobile
+          .getByRole('region', { name: 'Official Master Passage' })
+          .locator('[class*="passageActiveWord"]');
+        await expect
+          .poll(() =>
+            activeWord.evaluate((word) => {
+              const line = word.getClientRects()[0];
+              const passage = word.parentElement!;
+              const pane = passage.getBoundingClientRect();
+              const answerBox = document
+                .getElementById('typing-textarea')!
+                .getBoundingClientRect();
+              return (
+                passage.scrollTop > 0 &&
+                pane.top >= 32 &&
+                line.top >= pane.top &&
+                line.bottom <= pane.bottom &&
+                pane.bottom <= answerBox.top &&
+                answerBox.bottom <= 320
+              );
+            }),
+          )
+          .toBe(true);
+        assert.equal(await mobile.evaluate(() => scrollY), scrollBeforeTyping);
+        await expect(
+          mobile.getByRole('button', { name: 'Submit examination' }),
+        ).toBeInViewport();
+
+        await resizeViewport(null, 0);
+        await expect(controls).toBeVisible();
+        await expect(answer).toHaveValue(text);
+      } finally {
+        await touch.close();
+      }
+    },
+  );
+  await t.test(
     'expiry during confirmation finishes exactly once and restart retains passage',
     async () => {
       await page

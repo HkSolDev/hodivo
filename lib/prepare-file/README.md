@@ -8,9 +8,17 @@ Size checks use 1,000 bytes per KB.
 The prototype's PDF worker and reader (PDF.js 3.11.174), PDF writer (pdf-lib),
 and jSquash/MozJPEG 1.6.0 encoder live in
 `public/prepare-file/<fingerprint>`. They load only for the operations that
-need them. Keep the PDF.js reader and worker paired. PDF.js receives
+need them (`./pdf` only for PDF export/input, `./image` + optional `./mozjpeg`
+only for JPG). Keep the PDF.js reader and worker paired. PDF.js receives
 `isEvalSupported: false` as required by the
 [upstream advisory for the reference release](https://github.com/mozilla/pdf.js/security/advisories/GHSA-wgrm-67xf-hhpq).
+
+Exam presets live as static metadata in `lib/prepare-file/exam-templates.ts`
+(SSC, Railway/RRB, UPSC, IBPS, NEET UG, JEE Main — covering JPG photo/signature/thumb
+and PDF certificate limits) with no runtime imports of image or PDF engines.
+`prepareFile` in `lib/prepare-file/prepare.ts` also enforces optional
+`minimumBytes` for PDF outputs via `readMinimumBytes` in
+`lib/prepare-file/requirements.ts`.
 
 Before changing any of these immutable files, generate a new fingerprint.
 Hash each relative path and file's bytes in sorted relative path order using

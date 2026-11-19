@@ -1,4 +1,5 @@
 import { isSafeJobId } from '../components/jobs/job-sharing';
+import { splitQualificationPoints } from './jobs/format-qualification';
 import {
   RESIZE_DESCRIPTION,
   RESIZE_PATH,
@@ -93,8 +94,10 @@ async function fetchJobMarkdown(
     const reviewed = job.reviewedDetails;
     const employer = job.organization || reviewed?.recruiting_body;
     const education = job.educationRequired ?? reviewed?.education_required;
+    const educationPoints = splitQualificationPoints(education);
     const deadline = job.applicationLastDate ?? reviewed?.application_last_date;
     const vacancies = reviewed?.vacancies ?? job.vacancies;
+    const locations = reviewed?.locations?.filter(Boolean);
     const minAge = job.minAge ?? reviewed?.min_age;
     const maxAge = job.maxAge ?? reviewed?.max_age;
     const notice =
@@ -107,7 +110,12 @@ async function fetchJobMarkdown(
       `# ${job.postName}`,
       '',
       employer && `- **Organization**: ${employer}`,
-      education && `- **Education**: ${education}`,
+      locations &&
+        locations.length > 0 &&
+        `- **Locations**: ${locations.join(', ')}`,
+      educationPoints.length > 1
+        ? `- **Education**:\n${educationPoints.map((p) => `  - ${p}`).join('\n')}`
+        : education && `- **Education**: ${education}`,
       deadline && `- **Application deadline**: ${deadline.slice(0, 10)}`,
       vacancies != null && `- **Vacancies**: ${vacancies}`,
       (minAge != null || maxAge != null) &&
@@ -130,10 +138,10 @@ const STATIC_PAGES: Record<string, string> = {
     '## Key Features & Pages',
     '',
     '- **Live Job Eligibility Directory (`/`)**: Browse and filter verified Indian government job notifications by education, category, and age limit.',
-    '- **Government Exam Typing Practice (`/typing`)**: Timed typing practice with published passages and speed and accuracy feedback.',
-    '- **Exam Typing Simulation (`/typing/exam`)**: Practice with reviewed duration and editing rules for available exams.',
+    '- **Free Global Typing Practice (`/typing`)**: Open to anyone worldwide—timed typing speed (WPM) and accuracy practice in your browser using custom text or published passages.',
+    '- **Timed Exam Typing Simulation (`/typing/exam`)**: Practice with reviewed duration and editing rules for available exams.',
     '- **How It Works (`/how-it-works`)**: Learn how deterministic eligibility matching and source-grounded extraction work.',
-    `- [Resize files](${RESIZE_PATH}): Resize a photo or signature and compress PDFs to fit an upload limit on your device.`,
+    `- [Free Photo Resizer & PDF Compressor](${RESIZE_PATH}): Available worldwide—resize photos, convert images to PDF, and compress PDFs privately in your browser (with custom KB/pixel controls plus Indian exam presets).`,
     '- **Applicant Profile (`/profile`)**: Save education qualifications, category, and date of birth for instant eligibility checks.',
     '- **Matched Results (`/results`) & Saved Jobs (`/saved`)**: Track live notifications you qualify for.',
     '',
@@ -147,23 +155,23 @@ const STATIC_PAGES: Record<string, string> = {
     '',
   ].join('\n'),
   '/typing': [
-    '# Government Exam Typing Practice',
+    '# Free Online Typing Practice & Speed Test',
     '',
     'Canonical page: https://hodivo.app/typing',
     '',
-    'Practice typing speed and accuracy with published passages or your own text. Choose a session duration and follow the highlighted passage. The practice view shows your time, net words per minute, accuracy and errors.',
+    'Open to anyone worldwide—practice typing speed and accuracy directly in your browser with no signup required. Use published passages or paste your own custom text, choose a 1, 2, or 3 minute session, and track net WPM, accuracy, and errors.',
     '',
     '- [Typing exam simulation](/typing/exam)',
-    '- [Resize files](/tools/prepare-file)',
+    '- [Free Photo Resizer & PDF Compressor](/tools/prepare-file)',
     '',
   ].join('\n'),
   '/typing/exam': [
-    '# Government Exam Typing Simulation',
+    '# Timed Typing Exam Simulation',
     '',
-    'Choose a ready exam and passage to practise under its reviewed duration and editing rules. Available options depend on the published exam catalogue. Official scoring is unavailable.',
+    'Open to anyone worldwide—choose a ready exam and passage to practice under its reviewed duration and editing rules. Available options depend on the published exam catalogue. Official scoring is unavailable.',
     '',
     '- [Typing practice](/typing)',
-    '- [Resize files](/tools/prepare-file)',
+    '- [Free Photo Resizer & PDF Compressor](/tools/prepare-file)',
     '',
   ].join('\n'),
   [RESIZE_PATH]: [
@@ -171,11 +179,12 @@ const STATIC_PAGES: Record<string, string> = {
     '',
     RESIZE_DESCRIPTION,
     '',
-    '1. Choose a JPG, PNG, WebP, HEIC, HEIF or PDF. The input limit is 50 MB total.',
-    '2. Choose JPG or PDF and enter the form’s maximum file size. One KB is 1,000 bytes. JPG also supports optional exact pixel dimensions and a minimum size.',
-    '3. Check the preview and the measured size before downloading.',
+    '1. Pick an exam preset (**SSC**, **Railway (RRB)**, **UPSC**, **IBPS**, **NEET UG**, or **JEE Main**) and document type (Photo, Signature, Postcard, Thumb, or Certificate PDF), or use Custom settings.',
+    '2. Choose a JPG, PNG, WebP, HEIC, HEIF or PDF. The input limit is 50 MB total.',
+    '3. Set or adjust the form’s minimum and maximum file size in KB (1 KB = 1,000 bytes) and optional exact pixel dimensions for images.',
+    '4. Check the preview and the measured size before downloading — everything runs locally in your browser.',
     '',
-    'Compressing an existing PDF rasterizes its pages. Small text may become less sharp, and selectable text and links are lost. If the result exceeds the limit, the tool shows the smallest result found and disables download for that limit.',
+    'Compressing an existing PDF rasterizes its pages. Small text may become less sharp, and selectable text and links are lost. If the result exceeds the limit or falls below the minimum KB, the tool warns or disables download accordingly.',
     '',
   ].join('\n'),
 };
