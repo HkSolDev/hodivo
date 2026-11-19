@@ -80,6 +80,38 @@
   margin-top: var(--space-1);
 }
 
+.qualChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--space-1);
+}
+
+.qualChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.4;
+}
+
+.qualList {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 4px;
+  line-height: 1.45;
+}
+
+.qualMore {
+  margin-top: 4px;
+}
+
 .actions {
   align-self: center;
   display: grid;
@@ -228,6 +260,12 @@
     background: color-mix(in srgb, var(--ink) 10%, var(--surface));
   }
 
+  :global(.home-page) .card:nth-child(even) .qualChip,
+  .card:nth-child(even) .qualChip {
+    background: var(--surface);
+    border-color: var(--control-line);
+  }
+
   .card {
     gap: var(--space-3);
     padding: 16px;
@@ -311,6 +349,14 @@
 
   :global(.home-page) :global(.home-layout-rows) .card:nth-child(even) {
     background: color-mix(in srgb, var(--ink) 10%, var(--surface));
+  }
+
+  :global(.home-page)
+    :global(.home-layout-rows)
+    .card:nth-child(even)
+    .qualChip {
+    background: var(--surface);
+    border-color: var(--control-line);
   }
 
   :global(.home-page) :global(.home-layout-rows) .card:last-child {

@@ -5,7 +5,13 @@
     "moduleResolution": "NodeNext",
     "esModuleInterop": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
+    
   },
-  "include": ["scripts/**/*", "src/**/*"]
+  "include": ["scripts/**/*", "src/**/*"],
+  "paths": { "@/*": ["./*"] }
 }

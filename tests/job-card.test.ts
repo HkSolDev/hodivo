@@ -63,3 +63,21 @@ test('pay level stays as recorded and untrusted title text stays escaped', () =>
   assert.match(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /<script>|Apply by|₹/);
 });
+
+test('inline bullet qualifications split into a scannable list with chips', () => {
+  const html = renderToStaticMarkup(
+    createElement(JobCard, {
+      job: {
+        ...job,
+        educationRequired:
+          '• Graduate in any discipline from a university recognized by Government of India (or equivalent recognized by Central Govt). • Must hold a valid Domicile Certificate of UT of Jammu & Kashmir. • Fresher-eligible (no prior experience required).',
+      },
+    }),
+  );
+  assert.match(html, /<ul[^>]*>/);
+  assert.match(html, /Domicile req\./);
+  assert.match(html, /Fresher OK/);
+  assert.doesNotMatch(html, /Experience req\./);
+  assert.match(html, /\+1 more in details/);
+  assert.doesNotMatch(html, /•/);
+});

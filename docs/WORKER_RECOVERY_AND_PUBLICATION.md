@@ -2,10 +2,53 @@
 
 <!-- aptus-checkpoint-2026-10-24 -->
 
-**Current checkpoint — 24 October 2026:** [Production, worker results and review-system next steps](PRODUCTION_REVIEW_CHECKPOINT_2026-10-24.md). Frontend `d577942`, backend/worker `94ccc9d` deployed. Worker saves drafts but has published zero new jobs in the observed runs. Earlier snapshots below are historical.
+**Historical checkpoint — 24 October 2026.** Frontend `d577942` and backend/worker `94ccc9d` were deployed. The observed runs saved drafts and published zero new jobs. Verify the live worker, image, storage, and latest run before relying on deployment details below.
 
 Stages 6 and 7 are implemented locally. Publication remains an explicit operator
 action; scheduling the generic worker only creates review artifacts.
+
+## Manual recovery of missed recruitments
+
+Use this procedure when the worker misses a recruitment, fails to extract it,
+or leaves a draft that needs correction. Confirm production access and user
+authorization to publish. Continue independent jobs while blocked items are
+investigated.
+
+1. **Locate the failure and check for duplicates.** Inspect the latest worker
+   report and durable state for discovery, document retrieval, extraction,
+   draft review, and publication. Look up existing drafts and live posts by
+   organization, advertisement number, and post code. Reuse accurate live
+   records and use the supported correction workflow for changed records.
+2. **Divide research when requested.** Give each agent a distinct recruitment
+   and ask for official URLs, page references, applicant-critical facts, and
+   unresolved conflicts. Reassign unavailable or timed-out agents. The
+   coordinator checks every handoff against the official evidence and owns
+   publication.
+3. **Retrieve the official evidence.** Use third-party leads to find the
+   recruitment page, advertisement, annexures, and application portal. Follow
+   the official download flow for button-driven downloads. For scans, use OCR
+   to locate relevant pages and visually verify the decisive fields and tables.
+   If using a mirror, compare its hash against the official download. Retain the
+   source URLs, document hashes, and page or section references. Check for
+   corrigenda, extensions, and cancellations, and apply each to the fields it
+   actually changes. If a strict publication window applies, verify release
+   time in IST and flag unknown times.
+4. **Prepare the reviewed draft.** Capture post identity, vacancies, location,
+   appointment type and tenure, pay, eligibility, relaxations, fees, selection,
+   application instructions, and official links. Reconcile vacancy tables and
+   preserve separate registration, payment, submission, and receipt deadlines.
+   Keep numerical eligibility structured and preserve alternative qualification
+   routes. Leave unsupported values null. Hold an affected post if a material
+   conflict prevents applicants from using it safely.
+5. **Publish and verify.** Use the [reviewed publication commands](#stage-7-approve-exact-bytes-then-deliver)
+   and approve the exact validated draft bytes. If an attempt times out, check
+   receipts and live records before retrying. Verify production records and the
+   public pages, including whether the official notice and application links
+   render and reach the intended destination.
+6. **Report every requested recruitment.** Give its status (published,
+   corrected, already live, or held), public and official links, and any blocker.
+   Count campaigns, published posts, and verified vacancies separately. Report
+   scheduled worker results separately from manual recovery.
 
 ## DeepSeek off-peak scheduling
 

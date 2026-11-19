@@ -1,9 +1,16 @@
 import Link from 'next/link';
 import React, { type ReactNode } from 'react';
+import {
+  splitLeadAndBody,
+  splitQualificationPoints,
+} from '@/lib/jobs/format-qualification';
 import { JobDetailSection, JobPreviewSaveButton } from './job-detail-section';
 import { SaveJobButton } from './save-job-button';
 import styles from './job-detail-content.module.css';
 import { JobShareActions } from './job-share-actions';
+import { JobSectionNav, type JobNavSection } from './job-section-nav';
+import { normalizeYoutubeResources } from './youtube-embed';
+import { YoutubePrepPlayer } from './youtube-prep-player';
 
 type EducationOption = {
   minimum_level?: string | null;
@@ -459,11 +466,9 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
             (Array.isArray(item.topics) && item.topics.length > 0)),
       )
     : [];
-  const youtubeResources = Array.isArray(reviewed?.youtube_resources)
-    ? reviewed.youtube_resources.filter(
-        (item) => item && item.title?.trim() && safeUrl(item.url),
-      )
-    : [];
+  const youtubeResources = normalizeYoutubeResources(
+    reviewed?.youtube_resources,
+  );
 
   // Application steps
   const applicationSteps =
@@ -507,6 +512,38 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
   const hasLinks = Boolean(
     previewOnly || notificationPdf || portalUrl || officialSite || listingUrl,
   );
+
+  const navSections: JobNavSection[] = [
+    { id: 'qualification', label: 'Qualification' },
+    { id: 'age', label: 'Age' },
+    ...(hasApplicantRequirements
+      ? [{ id: 'applicant-requirements', label: 'Applicant' }]
+      : []),
+    ...(hasVacanciesPay
+      ? [{ id: 'vacancies-pay', label: 'Vacancies & pay' }]
+      : []),
+    ...(experienceRules.length
+      ? [{ id: 'experience', label: 'Experience' }]
+      : []),
+    ...(hasFees ? [{ id: 'fees', label: 'Fees' }] : []),
+    ...(selectionProcess.length
+      ? [{ id: 'selection', label: 'Selection' }]
+      : []),
+    ...(officialSyllabus.length ? [{ id: 'syllabus', label: 'Syllabus' }] : []),
+    ...(youtubeResources.length
+      ? [{ id: 'videos', label: 'Free videos' }]
+      : []),
+    ...(applicationSteps.length
+      ? [{ id: 'how-to-apply', label: 'How to apply' }]
+      : []),
+    ...(documentsRequired.length
+      ? [{ id: 'documents', label: 'Documents' }]
+      : []),
+    ...(hasAdditional
+      ? [{ id: 'important-dates', label: 'Dates & details' }]
+      : []),
+    { id: 'links', label: 'Links' },
+  ];
 
   return (
     <article className={`${styles.page} job-detail`}>
@@ -563,124 +600,195 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
       </header>
 
       <div className={styles.grid}>
-        <aside className={styles.applyPanel} aria-label="Application links">
-          {deadline ? (
-            <p className={styles.applyDeadline}>Apply by {deadline}</p>
-          ) : (
-            <p className={styles.unavailable}>
-              Deadline unavailable. Check the recruitment notice before
-              applying.{' '}
-              <RecruitmentNoticeLink
-                source={source}
-                reviewedDetails={reviewed}
-                previewOnly={previewOnly}
-              />
-            </p>
-          )}
+        <div className={styles.sidebar}>
+          <aside className={styles.applyPanel} aria-label="Application links">
+            {deadline ? (
+              <p className={styles.applyDeadline}>Apply by {deadline}</p>
+            ) : (
+              <p className={styles.unavailable}>
+                Deadline unavailable. Check the recruitment notice before
+                applying.{' '}
+                <RecruitmentNoticeLink
+                  source={source}
+                  reviewedDetails={reviewed}
+                  previewOnly={previewOnly}
+                />
+              </p>
+            )}
 
-          {applyUrl ? (
-            <>
+            {applyUrl ? (
+              <>
+                <ExternalLink
+                  href={applyUrl}
+                  previewOnly={previewOnly}
+                  className={styles.primaryAction}
+                >
+                  {previewOnly ? 'Preview application details' : 'Apply now'}
+                </ExternalLink>
+                <RecruitmentNoticeLink
+                  source={source}
+                  reviewedDetails={reviewed}
+                  previewOnly={previewOnly}
+                />
+              </>
+            ) : noticeUrl || previewOnly ? (
               <ExternalLink
-                href={applyUrl}
+                href={noticeUrl}
                 previewOnly={previewOnly}
                 className={styles.primaryAction}
               >
-                {previewOnly ? 'Preview application details' : 'Apply now'}
+                {previewOnly
+                  ? 'Preview recruitment notice'
+                  : 'View recruitment notice'}
               </ExternalLink>
-              <RecruitmentNoticeLink
-                source={source}
-                reviewedDetails={reviewed}
-                previewOnly={previewOnly}
-              />
-            </>
-          ) : noticeUrl || previewOnly ? (
-            <ExternalLink
-              href={noticeUrl}
-              previewOnly={previewOnly}
-              className={styles.primaryAction}
-            >
-              {previewOnly
-                ? 'Preview recruitment notice'
-                : 'View recruitment notice'}
-            </ExternalLink>
-          ) : (
-            <p className={styles.unavailable}>
-              Application and notice links are unavailable for this post.
-            </p>
-          )}
+            ) : (
+              <p className={styles.unavailable}>
+                Application and notice links are unavailable for this post.
+              </p>
+            )}
 
-          <p className="small muted">
-            Read the full notice before applying. Eligibility is verified by the
-            recruiting organization.
-          </p>
-          {job.designReview ? (
             <p className="small muted">
-              This is a fictional design-review notice. No application is
-              submitted from this preview.
+              Read the full notice before applying. Eligibility is verified by
+              the recruiting organization.
             </p>
-          ) : null}
-        </aside>
+            {job.designReview ? (
+              <p className="small muted">
+                This is a fictional design-review notice. No application is
+                submitted from this preview.
+              </p>
+            ) : null}
+          </aside>
+          <JobSectionNav sections={navSections} variant="sidebar" />
+        </div>
 
         <div className={styles.sections}>
-          <JobDetailSection title="Qualification routes">
-            {educationRequired ? (
-              <p className={styles.intro}>{educationRequired}</p>
-            ) : null}
-            {educationOptions.length ? (
-              <div className={styles.routes}>
-                {educationOptions.map((option, index) => (
-                  <div
-                    className={styles.route}
-                    key={`${option.qualification ?? option.minimum_level}-${index}`}
-                  >
-                    {index > 0 ? <p className={styles.or}>OR</p> : null}
-                    <h3>{option.qualification ?? option.minimum_level}</h3>
-                    <dl>
-                      {option.minimum_level ? (
-                        <Fact label="Minimum level">
-                          {formatEducationLevel(option.minimum_level)}
-                        </Fact>
-                      ) : null}
-                      {option.minimum_marks_percent != null ? (
-                        <Fact label="Minimum marks">
-                          {option.minimum_marks_percent}%
-                        </Fact>
-                      ) : null}
-                      {option.subject_requirement ? (
-                        <Fact label="Subject">
-                          {option.subject_requirement}
-                        </Fact>
-                      ) : null}
-                    </dl>
-                    {option.conditions ? (
-                      <p className={styles.conditions}>{option.conditions}</p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : educationRequired ||
-              minEducationLevel ||
-              minMarksPercent != null ? (
-              <dl className={styles.factList}>
-                {minEducationLevel ? (
-                  <Fact label="Minimum level">
-                    {formatEducationLevel(minEducationLevel)}
-                  </Fact>
-                ) : null}
-                {minMarksPercent != null ? (
-                  <Fact label="Minimum marks">{minMarksPercent}%</Fact>
-                ) : null}
-              </dl>
-            ) : (
-              <Unavailable
-                source={source}
-                reviewedDetails={reviewed}
-                previewOnly={previewOnly}
-              >
-                Qualification details unavailable here. Verify in the
-                recruitment notice.
-              </Unavailable>
-            )}
+          <JobSectionNav sections={navSections} variant="strip" />
+          <JobDetailSection id="qualification" title="Qualification routes">
+            {(() => {
+              const qualificationPoints =
+                splitQualificationPoints(educationRequired);
+              const optionText = educationOptions
+                .map((o) =>
+                  [o.qualification, o.subject_requirement, o.conditions]
+                    .filter(Boolean)
+                    .join(' '),
+                )
+                .join(' ')
+                .toLowerCase();
+              const extraPoints = educationOptions.length
+                ? qualificationPoints.filter((point) => {
+                    const normalized = point.toLowerCase();
+                    if (
+                      normalized.includes('domicile') &&
+                      optionText.includes('domicile')
+                    ) {
+                      return false;
+                    }
+                    const head = normalized.slice(0, 24).trim();
+                    return head.length < 8 || !optionText.includes(head);
+                  })
+                : qualificationPoints;
+
+              const renderPoints = (points: string[], className: string) =>
+                points.length === 1 ? (
+                  <p className={className}>{points[0]}</p>
+                ) : points.length > 1 ? (
+                  <ul className={styles.introList}>
+                    {points.map((point, idx) => {
+                      const { lead, body } = splitLeadAndBody(point);
+                      return (
+                        <li key={`${idx}-${point.slice(0, 24)}`}>
+                          {lead ? (
+                            <>
+                              <strong>{lead}</strong> {body}
+                            </>
+                          ) : (
+                            body
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null;
+
+              if (educationOptions.length) {
+                return (
+                  <>
+                    <div className={styles.routes}>
+                      {educationOptions.map((option, index) => (
+                        <div
+                          className={styles.route}
+                          key={`${option.qualification ?? option.minimum_level}-${index}`}
+                        >
+                          {index > 0 ? <p className={styles.or}>OR</p> : null}
+                          <h3>
+                            {option.qualification ?? option.minimum_level}
+                          </h3>
+                          <dl>
+                            {option.minimum_level ? (
+                              <Fact label="Minimum level">
+                                {formatEducationLevel(option.minimum_level)}
+                              </Fact>
+                            ) : null}
+                            {option.minimum_marks_percent != null ? (
+                              <Fact label="Minimum marks">
+                                {option.minimum_marks_percent}%
+                              </Fact>
+                            ) : null}
+                            {option.subject_requirement ? (
+                              <Fact label="Subject">
+                                {option.subject_requirement}
+                              </Fact>
+                            ) : null}
+                          </dl>
+                          {option.conditions ? (
+                            <p className={styles.conditions}>
+                              {option.conditions}
+                            </p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                    {renderPoints(extraPoints, styles.extraIntro)}
+                  </>
+                );
+              }
+
+              if (
+                qualificationPoints.length ||
+                minEducationLevel ||
+                minMarksPercent != null
+              ) {
+                return (
+                  <>
+                    {renderPoints(qualificationPoints, styles.intro)}
+                    {(minEducationLevel || minMarksPercent != null) && (
+                      <dl className={styles.factList}>
+                        {minEducationLevel ? (
+                          <Fact label="Minimum level">
+                            {formatEducationLevel(minEducationLevel)}
+                          </Fact>
+                        ) : null}
+                        {minMarksPercent != null ? (
+                          <Fact label="Minimum marks">{minMarksPercent}%</Fact>
+                        ) : null}
+                      </dl>
+                    )}
+                  </>
+                );
+              }
+
+              return (
+                <Unavailable
+                  source={source}
+                  reviewedDetails={reviewed}
+                  previewOnly={previewOnly}
+                >
+                  Qualification details unavailable here. Verify in the
+                  recruitment notice.
+                </Unavailable>
+              );
+            })()}
             <p className="small muted">
               <RecruitmentNoticeLink
                 source={source}
@@ -690,7 +798,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
             </p>
           </JobDetailSection>
 
-          <JobDetailSection title="Age requirements and relaxations">
+          <JobDetailSection id="age" title="Age requirements and relaxations">
             {baseAge ? (
               <p className={styles.intro}>
                 Base age: <strong>{baseAge}</strong>
@@ -766,7 +874,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           </JobDetailSection>
 
           {hasApplicantRequirements ? (
-            <section className={styles.card}>
+            <section id="applicant-requirements" className={styles.card}>
               <h2>Applicant requirements</h2>
               <dl className={styles.factList}>
                 {rules?.gender_requirement ? (
@@ -785,7 +893,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           ) : null}
 
           {hasVacanciesPay ? (
-            <section className={styles.card}>
+            <section id="vacancies-pay" className={styles.card}>
               <h2>Vacancies and pay</h2>
               <dl className={styles.factList}>
                 {vacancies != null ? (
@@ -834,7 +942,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           ) : null}
 
           {experienceRules.length ? (
-            <section className={styles.card}>
+            <section id="experience" className={styles.card}>
               <h2>Experience requirements</h2>
               <dl className={styles.factList}>
                 {experienceRules.map((rule, idx) => (
@@ -859,7 +967,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           ) : null}
 
           {hasFees ? (
-            <section className={styles.card}>
+            <section id="fees" className={styles.card}>
               <h2>Application fees</h2>
               {feeRules.length ? (
                 <dl className={styles.factList}>
@@ -891,7 +999,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           ) : null}
 
           {selectionProcess.length ? (
-            <section className={styles.card}>
+            <section id="selection" className={styles.card}>
               <h2>Selection process</h2>
               <ol className={styles.stepList}>
                 {selectionProcess.map((step, idx) => (
@@ -902,7 +1010,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           ) : null}
 
           {officialSyllabus.length ? (
-            <section className={styles.card}>
+            <section id="syllabus" className={styles.card}>
               <h2>Syllabus &amp; exam pattern</h2>
               <dl className={styles.factList}>
                 {officialSyllabus.map((entry, idx) => {
@@ -932,40 +1040,14 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           ) : null}
 
           {youtubeResources.length ? (
-            <section className={styles.card}>
+            <section id="videos" className={styles.card}>
               <h2>Free preparation videos (YouTube)</h2>
-              <ul className={styles.bulletList}>
-                {youtubeResources.map((video, idx) => {
-                  const href = safeUrl(video.url);
-                  if (!href) return null;
-                  const meta = [
-                    video.channel,
-                    (
-                      video.topics?.filter(
-                        (t): t is string =>
-                          typeof t === 'string' && Boolean(t.trim()),
-                      ) ?? []
-                    ).join(', '),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ');
-                  return (
-                    <li key={idx}>
-                      <a href={href} target="_blank" rel="noopener noreferrer">
-                        {video.title}
-                      </a>
-                      {meta ? (
-                        <span className={styles.conditionDetail}>{meta}</span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
+              <YoutubePrepPlayer videos={youtubeResources} />
             </section>
           ) : null}
 
           {applicationSteps.length ? (
-            <section className={styles.card}>
+            <section id="how-to-apply" className={styles.card}>
               <h2>How to apply</h2>
               <ol className={styles.stepList}>
                 {applicationSteps.map((step, idx) => (
@@ -976,7 +1058,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           ) : null}
 
           {documentsRequired.length ? (
-            <section className={styles.card}>
+            <section id="documents" className={styles.card}>
               <h2>Required documents</h2>
               <ul className={styles.bulletList}>
                 {documentsRequired.map((doc, idx) => (
@@ -987,7 +1069,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
           ) : null}
 
           {hasAdditional ? (
-            <section className={styles.card}>
+            <section id="important-dates" className={styles.card}>
               <h2>Important dates and additional details</h2>
               <dl className={styles.factList}>
                 {appStartDate ? (
@@ -1015,7 +1097,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
             </section>
           ) : null}
 
-          <section className={styles.card}>
+          <section id="links" className={styles.card}>
             <h2>Recruitment links</h2>
             {hasLinks ? (
               <div className={styles.links}>

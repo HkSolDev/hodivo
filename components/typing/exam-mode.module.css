@@ -1546,3 +1546,36 @@
     overflow: visible;
   }
 }
+
+.keyboardLayout {
+  position: fixed;
+  inset-inline: 0;
+  z-index: 60;
+  min-height: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.keyboardLayout .headerLeft,
+.keyboardLayout .headerSub,
+.keyboardLayout .toolbar,
+.keyboardLayout .instructionsBar,
+.keyboardLayout .panelHeader,
+.keyboardLayout .footerLeft,
+.keyboardLayout .focusGuidePill {
+  display: none;
+}
+
+.keyboardLayout .splitScreen {
+  flex: 1 1 0;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+@media (max-width: 760px) and (pointer: coarse) {
+  .typingTextarea {
+    /* Prevent focus zoom from obscuring the keyboard viewport on iOS. */
+    font-size: max(16px, var(--passage-font-size));
+  }
+}

@@ -4,10 +4,31 @@ import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import styles from './job-detail-section.module.css';
 import { useDesignReview } from './design-review-state';
 
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`}
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
 export function JobDetailSection({
+  id,
   title,
   children,
 }: {
+  id?: string;
   title: string;
   children: ReactNode;
 }) {
@@ -51,15 +72,20 @@ export function JobDetailSection({
 
   return (
     <details
+      id={id}
       ref={detailsRef}
       className={styles.section}
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary ref={summaryRef}>
-        <span>{title}</span>
-        <span className={styles.toggleText} aria-hidden="true">
-          {open ? 'Hide details' : 'Show details'}
+        <span className={styles.title}>{title}</span>
+        <span className={styles.toggleButton} aria-hidden="true">
+          <span>
+            {open ? 'Hide' : 'Show'}
+            <span className={styles.toggleSuffix}> details</span>
+          </span>
+          <ChevronIcon open={open} />
         </span>
       </summary>
       <div className={styles.content}>{children}</div>

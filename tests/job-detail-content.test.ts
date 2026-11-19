@@ -409,3 +409,201 @@ test('public projection renders official notice links without discovery-portal r
   );
   assert.doesNotMatch(markup, /Apply now/);
 });
+
+test('renders click-to-play YouTube facade without iframe on initial SSR for single video', () => {
+  const markup = renderToStaticMarkup(
+    createElement(JobDetailContent, {
+      job: {
+        ...completeJob,
+        reviewedDetails: {
+          youtube_resources: [
+            {
+              title: 'SSC CGL Strategy Breakdown',
+              url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+              channel: 'StudyIQ',
+              topics: ['Strategy'],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  assert.match(markup, /Free preparation videos \(YouTube\)/);
+  assert.match(markup, /SSC CGL Strategy Breakdown/);
+  assert.match(markup, /StudyIQ/);
+  assert.match(
+    markup,
+    /https:\/\/i\.ytimg\.com\/vi\/dQw4w9WgXcQ\/hqdefault\.jpg/,
+  );
+  assert.match(markup, /aria-label="Play SSC CGL Strategy Breakdown"/);
+  assert.match(markup, /Open on YouTube/);
+  assert.doesNotMatch(markup, /<iframe/i);
+  assert.doesNotMatch(markup, /Up next ·/);
+  assert.doesNotMatch(markup, /Filter videos by topic/);
+});
+
+test('renders playlist selector and topic filters when multiple YouTube resources have 2+ topics', () => {
+  const markup = renderToStaticMarkup(
+    createElement(JobDetailContent, {
+      job: {
+        ...completeJob,
+        reviewedDetails: {
+          youtube_resources: [
+            {
+              title: 'Full Quant Revision',
+              url: 'https://youtu.be/dQw4w9WgXcQ',
+              channel: 'Maths Hub',
+              topics: ['Maths'],
+            },
+            {
+              title: 'Complete GS Playlist',
+              url: 'https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf',
+              channel: 'GS Academy',
+              topics: ['General Studies'],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  assert.match(markup, /All topics/);
+  assert.match(markup, /Maths/);
+  assert.match(markup, /General Studies/);
+  assert.match(markup, /aria-pressed="true"/);
+  assert.match(markup, /aria-pressed="false"/);
+  assert.match(markup, /Playlist/);
+  assert.doesNotMatch(markup, /<iframe/i);
+});
+
+test('ignores invalid or non-YouTube URLs in youtube_resources', () => {
+  const markup = renderToStaticMarkup(
+    createElement(JobDetailContent, {
+      job: {
+        ...completeJob,
+        reviewedDetails: {
+          youtube_resources: [
+            {
+              title: 'Not YouTube',
+              url: 'https://example.com/watch?v=dQw4w9WgXcQ',
+            },
+            {
+              title: 'Insecure HTTP',
+              url: 'http://youtube.com/watch?v=dQw4w9WgXcQ',
+            },
+            {
+              title: 'XSS attempt',
+              url: 'javascript:alert(1)',
+            },
+          ],
+        },
+      },
+    }),
+  );
+  assert.doesNotMatch(markup, /Free preparation videos \(YouTube\)/);
+  assert.doesNotMatch(markup, /Not YouTube|Insecure HTTP|XSS attempt/);
+});
+
+test('caps long YouTube playlists to 4 visible cards with an expand toggle', () => {
+  const videos = [1, 2, 3, 4, 5, 6].map((n) => ({
+    title: `Preparation Session ${n}`,
+    url: `https://www.youtube.com/watch?v=dQw4w9WgXc${n}`,
+    channel: `Channel ${n}`,
+    topics: ['Strategy'],
+  }));
+  const markup = renderToStaticMarkup(
+    createElement(JobDetailContent, {
+      job: {
+        ...completeJob,
+        reviewedDetails: { youtube_resources: videos },
+      },
+    }),
+  );
+  assert.match(markup, /Preparation Session 1/);
+  assert.match(markup, /Preparation Session 4/);
+  assert.doesNotMatch(markup, /Preparation Session 5/);
+  assert.doesNotMatch(markup, /Preparation Session 6/);
+  assert.match(markup, /aria-expanded="false"/);
+  assert.match(markup, /Show all 6 videos \(2 more\)/);
+});
+
+test('uses playlist count labels when all youtube_resources are playlists', () => {
+  const markup = renderToStaticMarkup(
+    createElement(JobDetailContent, {
+      job: {
+        ...completeJob,
+        reviewedDetails: {
+          youtube_resources: [
+            {
+              title: 'GK / GS Practice Playlist',
+              url: 'https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf',
+              channel: 'Adda247',
+              topics: ['General Awareness'],
+            },
+            {
+              title: 'English Language PYQs',
+              url: 'https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdg',
+              channel: 'Adda247',
+              topics: ['English'],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  assert.match(markup, /2 playlists/);
+  assert.match(markup, /Up next · 2 playlists/);
+  assert.doesNotMatch(markup, /2 videos/);
+});
+
+test('renders JobDetailSection disclosure toggle with responsive button markup', () => {
+  const markup = renderToStaticMarkup(
+    createElement(JobDetailContent, { job: completeJob }),
+  );
+  assert.match(markup, /Qualification routes/);
+  assert.match(markup, /Hide<span class="toggleSuffix"> details<\/span>/);
+  assert.match(markup, /class="toggleButton"/);
+});
+
+test('renders dynamic On this page jump links only for present sections', () => {
+  const minimalMarkup = renderToStaticMarkup(
+    createElement(JobDetailContent, {
+      job: {
+        id: 'minimal-job',
+        postName: 'Junior Clerk',
+      },
+    }),
+  );
+  assert.match(minimalMarkup, /aria-label="Jump to job section"/);
+  assert.match(minimalMarkup, /href="#qualification"/);
+  assert.match(minimalMarkup, /id="qualification"/);
+  assert.match(minimalMarkup, /href="#age"/);
+  assert.match(minimalMarkup, /id="age"/);
+  assert.match(minimalMarkup, /href="#links"/);
+  assert.match(minimalMarkup, /id="links"/);
+  assert.doesNotMatch(minimalMarkup, /href="#videos"/);
+  assert.doesNotMatch(minimalMarkup, /href="#syllabus"/);
+
+  const richMarkup = renderToStaticMarkup(
+    createElement(JobDetailContent, {
+      job: {
+        ...completeJob,
+        reviewedDetails: {
+          official_syllabus: [{ subject: 'Maths', topics: ['Algebra'] }],
+          youtube_resources: [
+            {
+              title: 'Maths Revision',
+              url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            },
+          ],
+          application_steps: ['Fill the online form'],
+        },
+      },
+    }),
+  );
+  assert.match(richMarkup, /href="#syllabus"/);
+  assert.match(richMarkup, /id="syllabus"/);
+  assert.match(richMarkup, /href="#videos"/);
+  assert.match(richMarkup, /id="videos"/);
+  assert.match(richMarkup, /href="#how-to-apply"/);
+  assert.match(richMarkup, /id="how-to-apply"/);
+});
