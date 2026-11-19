@@ -16,7 +16,34 @@ const TYPING_MODES = [
     label: 'Exam Mode',
     description: 'Official SSC / Govt benchmark simulation',
   },
+  {
+    href: '/typing/leaderboard',
+    label: 'Leaderboard',
+    description: 'Top speed and accuracy rankings per passage',
+  },
+  {
+    href: '/typing/progress',
+    label: 'Progress',
+    description: 'Your past passages, speeds, and exam validity',
+  },
 ] as const;
+
+function isTypingModeActive(pathname: string, modeHref: string): boolean {
+  if (modeHref === '/typing/exam') return pathname.startsWith('/typing/exam');
+  if (modeHref === '/typing/leaderboard') {
+    return pathname.startsWith('/typing/leaderboard');
+  }
+  if (modeHref === '/typing/progress') {
+    return pathname.startsWith('/typing/progress');
+  }
+  return (
+    pathname === '/typing' ||
+    (pathname.startsWith('/typing/') &&
+      !pathname.startsWith('/typing/exam') &&
+      !pathname.startsWith('/typing/leaderboard') &&
+      !pathname.startsWith('/typing/progress'))
+  );
+}
 
 const destinations = [
   {
@@ -183,8 +210,7 @@ export function HeaderModeBreadcrumb() {
         {open && (
           <div className="mode-switcher-menu" aria-label="Switch typing mode">
             {TYPING_MODES.map((mode) => {
-              const selected =
-                mode.href === '/typing/exam' ? isExamMode : !isExamMode;
+              const selected = isTypingModeActive(pathname, mode.href);
               return (
                 <Link
                   key={mode.href}
@@ -230,8 +256,6 @@ export function PrimaryNavigation() {
               href !== '/' &&
               (pathname === href || pathname.startsWith(`${href}/`)),
           )?.href;
-
-  const isExamMode = pathname.startsWith('/typing/exam');
 
   const openTypingDropdownDesktop = () => {
     if (typeof window !== 'undefined' && window.innerWidth >= 760) {
@@ -281,13 +305,10 @@ export function PrimaryNavigation() {
                     aria-label="Typing modes"
                   >
                     {TYPING_MODES.map((mode) => {
-                      const isCurrentMode =
-                        pathname === '/typing' ||
-                        pathname.startsWith('/typing/')
-                          ? mode.href === '/typing/exam'
-                            ? isExamMode
-                            : !isExamMode
-                          : false;
+                      const isCurrentMode = isTypingModeActive(
+                        pathname,
+                        mode.href,
+                      );
                       return (
                         <Link
                           key={mode.href}

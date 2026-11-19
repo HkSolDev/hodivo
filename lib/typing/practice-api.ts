@@ -8,8 +8,13 @@ const endpoint = '/api/typing/practice-passage';
 
 export async function loadPracticePassage(
   signal: AbortSignal,
+  passageId?: string,
 ): Promise<PracticePassage | null> {
-  const response = await fetch(endpoint, { cache: 'no-store', signal });
+  const url = passageId
+    ? `${endpoint}/${encodeURIComponent(passageId)}`
+    : endpoint;
+  const response = await fetch(url, { cache: 'no-store', signal });
+  if (response.status === 404 && passageId) return null;
   if (!response.ok) throw new Error('Practice passage request failed.');
 
   const payload: unknown = await response.json();

@@ -1,6 +1,8 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { registerTypingPracticeRoutes } from './routes/typing-practice.js';
 import { registerTypingExamRoutes } from './routes/typing-exams.js';
+import { registerTypingAttemptsRoutes } from './routes/typing-attempts.js';
+import { registerTypingLeaderboardRoutes } from './routes/typing-leaderboard.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerPublicRoutes } from './routes/public.js';
 import { handleMatch } from './routes/match.js';
@@ -70,6 +72,8 @@ export function buildApp(
   registerReviewDraftRoutes(app, appAuth, env);
   registerProfileRoutes(app, appAuth);
   registerSavedJobsRoutes(app, appAuth);
+  registerTypingAttemptsRoutes(app, appAuth);
+  registerTypingLeaderboardRoutes(app, appAuth);
   const options = { schema: { body: { type: 'object' } } };
   const protectedOptions = {
     ...options,

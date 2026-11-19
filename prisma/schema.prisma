@@ -26,6 +26,7 @@ model AuthUser {
   accounts      AuthAccount[]
   passkeys      AuthPasskey[]
   savedJobs     SavedJob[]
+  typingAttempts TypingAttempt[]
 }
 
 // Public verification material only; private keys stay with the authenticator.
@@ -377,6 +378,7 @@ model TypingExamVersion {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   passages         TypingPassage[]
+  attempts         TypingAttempt[]
 
   @@unique([examId, versionKey])
   @@index([examId, status])
@@ -401,7 +403,39 @@ model TypingPassage {
   publishedAt   DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  attempts      TypingAttempt[]
 
   @@unique([examVersionId, contentKey, revision])
   @@index([examVersionId, status])
+}
+
+enum TypingAttemptMode {
+  PRACTICE
+  EXAM
+}
+
+// Per-user typing attempt history across Practice and Exam modes for a passage.
+model TypingAttempt {
+  id                 String             @id @default(cuid())
+  authUserId         String
+  authUser           AuthUser           @relation(fields: [authUserId], references: [id], onDelete: Cascade)
+  passageId          String
+  passage            TypingPassage      @relation(fields: [passageId], references: [id], onDelete: Restrict)
+  passageContentHash String
+  mode               TypingAttemptMode
+  examVersionId      String?
+  examVersion        TypingExamVersion? @relation(fields: [examVersionId], references: [id], onDelete: SetNull)
+  grossWpm           Float
+  netWpm             Float
+  accuracy           Float
+  errorPercent       Float
+  keystrokes         Int
+  backspaceCount     Int                @default(0)
+  durationMs         Int
+  passedRule         Boolean?
+  createdAt          DateTime           @default(now())
+
+  @@index([authUserId, passageId, createdAt])
+  @@index([authUserId, createdAt])
+  @@index([passageId, mode, createdAt])
 }

@@ -35,6 +35,8 @@ import {
   loadExamSnapshot,
   ExamApiError,
 } from '../../lib/typing/exam-api';
+import { saveTypingAttempt } from '../../lib/typing/attempts-api';
+import { AttemptComparison, type AttemptSaveState } from './attempt-comparison';
 import { evaluateExamAttempt } from '../../lib/typing/exam-evaluator';
 import { useWorkspace } from '../providers/workspace-provider';
 import { AuthBar } from '../auth/auth-bar';
@@ -136,6 +138,10 @@ export function ExamMode() {
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  const [saveState, setSaveState] = useState<AttemptSaveState>({
+    status: 'idle',
+  });
+  const savedExamRunRef = useRef(false);
   const [session, setSession] = useState<ExamSession | null>(null);
   const [localText, setLocalText] = useState('');
   const [fontSize, setFontSize] = useState<'small' | 'normal' | 'large'>(
@@ -554,7 +560,10 @@ export function ExamMode() {
     return () => clearInterval(timer);
   }, [phase, commitSession]);
   useEffect(() => {
-    if (phase !== 'finished') return;
+    if (phase !== 'finished') {
+      savedExamRunRef.current = false;
+      return;
+    }
     submitDialogRef.current?.close();
     restartDialogRef.current?.close();
     changeVersionDialogRef.current?.close();
@@ -681,6 +690,58 @@ export function ExamMode() {
     examSlug: selectedExamSlug,
     rules: versionDetail?.rules ?? null,
   });
+
+  useEffect(() => {
+    if (
+      phase !== 'finished' ||
+      !snapshot ||
+      !versionDetail ||
+      savedExamRunRef.current
+    ) {
+      return;
+    }
+    savedExamRunRef.current = true;
+    if (!accountId) {
+      setSaveState({ status: 'unauthenticated' });
+      return;
+    }
+    const passedRule =
+      evaluation.overallStatus === 'QUALIFIED_ALL' ||
+      evaluation.overallStatus === 'QUALIFIED_RESERVED';
+    setSaveState({ status: 'saving' });
+    void saveTypingAttempt({
+      passageId: snapshot.passage.id,
+      mode: 'EXAM',
+      examVersionId: versionDetail.id,
+      grossWpm: evaluation.grossWpm,
+      netWpm: evaluation.netWpm,
+      accuracy: evaluation.accuracyPercent,
+      errorPercent: evaluation.errorPercent,
+      keystrokes: typedLength,
+      backspaceCount: 0,
+      durationMs: Math.max(1000, elapsedSecs * 1000),
+      passedRule,
+    }).then((result) => {
+      if (result.status === 'saved') {
+        setSaveState({ status: 'saved', comparison: result.comparison });
+      } else if (result.status === 'unauthenticated') {
+        setSaveState({ status: 'unauthenticated' });
+      } else {
+        setSaveState({ status: 'error' });
+      }
+    });
+  }, [
+    phase,
+    snapshot,
+    versionDetail,
+    evaluation.grossWpm,
+    evaluation.netWpm,
+    evaluation.accuracyPercent,
+    evaluation.errorPercent,
+    evaluation.overallStatus,
+    typedLength,
+    elapsedSecs,
+  ]);
 
   return (
     <div
@@ -1534,6 +1595,15 @@ export function ExamMode() {
               </span>
             </div>
           </div>
+          {snapshot && (
+            <AttemptComparison
+              passageId={snapshot.passage.id}
+              mode="EXAM"
+              currentNetWpm={evaluation.netWpm}
+              currentErrorPercent={evaluation.errorPercent}
+              saveState={saveState}
+            />
+          )}
         </div>
         <div className={styles.dialogFooter}>
           <button
