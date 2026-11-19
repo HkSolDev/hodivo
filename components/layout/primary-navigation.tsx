@@ -21,6 +21,11 @@ const TYPING_MODES = [
     label: 'Leaderboard',
     description: 'Top speed and accuracy rankings per passage',
   },
+  {
+    href: '/typing/progress',
+    label: 'Progress',
+    description: 'Your past passages, speeds, and exam validity',
+  },
 ] as const;
 
 function isTypingModeActive(pathname: string, modeHref: string): boolean {
@@ -28,11 +33,15 @@ function isTypingModeActive(pathname: string, modeHref: string): boolean {
   if (modeHref === '/typing/leaderboard') {
     return pathname.startsWith('/typing/leaderboard');
   }
+  if (modeHref === '/typing/progress') {
+    return pathname.startsWith('/typing/progress');
+  }
   return (
     pathname === '/typing' ||
     (pathname.startsWith('/typing/') &&
       !pathname.startsWith('/typing/exam') &&
-      !pathname.startsWith('/typing/leaderboard'))
+      !pathname.startsWith('/typing/leaderboard') &&
+      !pathname.startsWith('/typing/progress'))
   );
 }
 

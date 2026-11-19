@@ -50,6 +50,17 @@ export type SaveAttemptResult =
   | { status: 'unauthenticated' }
   | { status: 'error' };
 
+export interface HistoryItem extends AttemptSnapshot {
+  passageId: string;
+  passageTitle: string;
+  examVersionLabel: string | null;
+}
+
+export type FetchHistoryResult =
+  | { status: 'ok'; items: HistoryItem[]; nextCursor: string | null }
+  | { status: 'unauthenticated' }
+  | { status: 'error' };
+
 export async function saveTypingAttempt(
   input: SaveAttemptInput,
   signal?: AbortSignal,
@@ -93,5 +104,36 @@ export async function fetchPassageSummary(
     return (await response.json()) as PassageSummaryResponse;
   } catch {
     return null;
+  }
+}
+
+export async function fetchTypingHistory(
+  options: { limit?: number; cursor?: string } = {},
+  signal?: AbortSignal,
+): Promise<FetchHistoryResult> {
+  try {
+    const params = new URLSearchParams();
+    if (options.limit) params.set('limit', String(options.limit));
+    if (options.cursor) params.set('cursor', options.cursor);
+    const qs = params.toString();
+    const url = qs ? `/api/typing/history?${qs}` : '/api/typing/history';
+    const response = await fetch(url, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal,
+    });
+    if (response.status === 401) return { status: 'unauthenticated' };
+    if (!response.ok) return { status: 'error' };
+    const data = (await response.json()) as {
+      items?: HistoryItem[];
+      nextCursor?: string | null;
+    };
+    return {
+      status: 'ok',
+      items: Array.isArray(data.items) ? data.items : [],
+      nextCursor: data.nextCursor ?? null,
+    };
+  } catch {
+    return { status: 'error' };
   }
 }
