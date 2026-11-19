@@ -137,6 +137,7 @@ export function ExamMode() {
   const [isLoadingVersionDetail, setIsLoadingVersionDetail] = useState(false);
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { accountId } = useWorkspace();
   const [retry, setRetry] = useState(0);
   const [saveState, setSaveState] = useState<AttemptSaveState>({
     status: 'idle',
@@ -701,6 +702,10 @@ export function ExamMode() {
       return;
     }
     savedExamRunRef.current = true;
+    if (!accountId) {
+      setSaveState({ status: 'unauthenticated' });
+      return;
+    }
     const passedRule =
       evaluation.overallStatus === 'QUALIFIED_ALL' ||
       evaluation.overallStatus === 'QUALIFIED_RESERVED';

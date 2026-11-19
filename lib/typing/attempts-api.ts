@@ -101,7 +101,17 @@ export async function fetchPassageSummary(
       { cache: 'no-store', credentials: 'same-origin', signal },
     );
     if (!response.ok) return null;
-    return (await response.json()) as PassageSummaryResponse;
+    const data =
+      (await response.json()) as Partial<PassageSummaryResponse> | null;
+    if (
+      !data ||
+      typeof data.passageId !== 'string' ||
+      typeof data.practice?.attemptCount !== 'number' ||
+      typeof data.exam?.attemptCount !== 'number'
+    ) {
+      return null;
+    }
+    return data as PassageSummaryResponse;
   } catch {
     return null;
   }

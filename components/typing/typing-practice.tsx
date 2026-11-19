@@ -20,6 +20,7 @@ import {
   type PassageSummaryResponse,
 } from '@/lib/typing/attempts-api';
 import { AttemptComparison, type AttemptSaveState } from './attempt-comparison';
+import { useWorkspace } from '@/components/providers/workspace-provider';
 import {
   createTypingSession,
   type ActualInsertion,
@@ -68,6 +69,7 @@ export function TypingPractice() {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(() =>
     engine.snapshot(),
   );
+  const { accountId } = useWorkspace();
   const [passageState, setPassageState] = useState<PassageState>({
     status: 'loading',
   });
@@ -438,13 +440,15 @@ export function TypingPractice() {
         }
         restartSession({ target: passage.text });
         setPassageState({ status: 'ready', passage });
-        void fetchPassageSummary(passage.id, request.controller.signal).then(
-          (summary) => {
-            if (!request.controller.signal.aborted && summary) {
-              setPassageSummary(summary);
-            }
-          },
-        );
+        if (accountId) {
+          void fetchPassageSummary(passage.id, request.controller.signal).then(
+            (summary) => {
+              if (!request.controller.signal.aborted && summary) {
+                setPassageSummary(summary);
+              }
+            },
+          );
+        }
       })
       .catch(() => {
         if (
@@ -480,6 +484,10 @@ export function TypingPractice() {
       return;
     }
     savedRunRef.current = true;
+    if (!accountId) {
+      setSaveState({ status: 'unauthenticated' });
+      return;
+    }
     const netWpm = snapshot.score.netWpm ?? 0;
     const grossWpm = snapshot.score.grossWpm ?? 0;
     const accuracy = snapshot.score.accuracy ?? 0;
