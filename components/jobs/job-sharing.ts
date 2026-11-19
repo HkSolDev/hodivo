@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { splitQualificationPoints } from '../../lib/jobs/format-qualification';
 import type { JobDetailData } from './job-detail-content';
 
 export const DEFAULT_PRODUCTION_ORIGIN = 'https://hodivo.app';
@@ -118,9 +119,14 @@ export function jobMetadata(job: JobDetailData, origin?: string): Metadata {
   const title = [postName, organization].filter(Boolean).join(' — ');
   const vacancies = reviewed?.vacancies ?? job.vacancies;
   const deadline = reviewed?.application_last_date ?? job.applicationLastDate;
+  const rawEducation = job.educationRequired ?? reviewed?.education_required;
+  const cleanEducation = (() => {
+    const points = splitQualificationPoints(rawEducation);
+    return points.length ? points.join('; ') : rawEducation;
+  })();
   const description = [
     reviewed?.locations?.join(', '),
-    job.educationRequired ?? reviewed?.education_required,
+    cleanEducation,
     vacancies != null
       ? `${vacancies} ${vacancies === 1 ? 'vacancy' : 'vacancies'}`
       : null,
@@ -150,6 +156,81 @@ export function jobMetadata(job: JobDetailData, origin?: string): Metadata {
       images: [image],
     },
   };
+}
+
+/**
+ * Builds schema.org/JobPosting JSON-LD from verified job fields for search engines and AI Overviews.
+ */
+export function jobPostingJsonLd(
+  job: JobDetailData,
+  origin?: string,
+): Record<string, unknown> {
+  const reviewed = job.reviewedDetails;
+  const rawOrganization = reviewed?.recruiting_body ?? job.organization;
+  const postName =
+    stripBrandSuffix(job.postName) || 'Government Job Notification';
+  const organization = rawOrganization
+    ? stripBrandSuffix(rawOrganization)
+    : undefined;
+  const vacancies = reviewed?.vacancies ?? job.vacancies;
+  const deadline = reviewed?.application_last_date ?? job.applicationLastDate;
+  const rawEducation = job.educationRequired ?? reviewed?.education_required;
+  const educationPoints = splitQualificationPoints(rawEducation);
+  const educationText = educationPoints.length
+    ? educationPoints.join('; ')
+    : rawEducation?.trim();
+  const locations = reviewed?.locations?.filter(Boolean) ?? [];
+  const base = parseTrustedOriginUrl(origin ?? DEFAULT_PRODUCTION_ORIGIN);
+  const url = jobShareUrl(job.id, base.origin);
+
+  const descriptionParts = [
+    organization ? `Recruiting body: ${organization}` : null,
+    educationText ? `Qualification: ${educationText}` : null,
+    vacancies != null
+      ? `Vacancies: ${vacancies.toLocaleString('en-IN')}`
+      : null,
+    deadline ? `Apply by: ${deadline.slice(0, 10)}` : null,
+    locations.length ? `Locations: ${locations.join(', ')}` : null,
+  ].filter(Boolean);
+
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'JobPosting',
+    title: postName,
+    description:
+      descriptionParts.join(' · ') ||
+      `${postName} government recruitment notification on Hodivo.`,
+    url,
+    mainEntityOfPage: url,
+  };
+
+  if (organization) {
+    jsonLd.hiringOrganization = {
+      '@type': 'Organization',
+      name: organization,
+    };
+  }
+  if (deadline) {
+    jsonLd.validThrough = deadline.slice(0, 10);
+  }
+  if (vacancies != null && vacancies > 0) {
+    jsonLd.totalJobOpenings = vacancies;
+  }
+  if (educationText) {
+    jsonLd.educationRequirements = educationText;
+  }
+  if (locations.length) {
+    jsonLd.jobLocation = locations.map((loc) => ({
+      '@type': 'Place',
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: loc,
+        addressCountry: 'IN',
+      },
+    }));
+  }
+
+  return jsonLd;
 }
 
 export function publicPageMetadata(options: {

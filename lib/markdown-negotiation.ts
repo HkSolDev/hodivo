@@ -1,4 +1,5 @@
 import { isSafeJobId } from '../components/jobs/job-sharing';
+import { splitQualificationPoints } from './jobs/format-qualification';
 import {
   RESIZE_DESCRIPTION,
   RESIZE_PATH,
@@ -93,8 +94,10 @@ async function fetchJobMarkdown(
     const reviewed = job.reviewedDetails;
     const employer = job.organization || reviewed?.recruiting_body;
     const education = job.educationRequired ?? reviewed?.education_required;
+    const educationPoints = splitQualificationPoints(education);
     const deadline = job.applicationLastDate ?? reviewed?.application_last_date;
     const vacancies = reviewed?.vacancies ?? job.vacancies;
+    const locations = reviewed?.locations?.filter(Boolean);
     const minAge = job.minAge ?? reviewed?.min_age;
     const maxAge = job.maxAge ?? reviewed?.max_age;
     const notice =
@@ -107,7 +110,12 @@ async function fetchJobMarkdown(
       `# ${job.postName}`,
       '',
       employer && `- **Organization**: ${employer}`,
-      education && `- **Education**: ${education}`,
+      locations &&
+        locations.length > 0 &&
+        `- **Locations**: ${locations.join(', ')}`,
+      educationPoints.length > 1
+        ? `- **Education**:\n${educationPoints.map((p) => `  - ${p}`).join('\n')}`
+        : education && `- **Education**: ${education}`,
       deadline && `- **Application deadline**: ${deadline.slice(0, 10)}`,
       vacancies != null && `- **Vacancies**: ${vacancies}`,
       (minAge != null || maxAge != null) &&
@@ -171,11 +179,12 @@ const STATIC_PAGES: Record<string, string> = {
     '',
     RESIZE_DESCRIPTION,
     '',
-    '1. Choose a JPG, PNG, WebP, HEIC, HEIF or PDF. The input limit is 50 MB total.',
-    '2. Choose JPG or PDF and enter the form’s maximum file size. One KB is 1,000 bytes. JPG also supports optional exact pixel dimensions and a minimum size.',
-    '3. Check the preview and the measured size before downloading.',
+    '1. Pick an exam preset (**SSC**, **Railway (RRB)**, **UPSC**, **IBPS**, **NEET UG**, or **JEE Main**) and document type (Photo, Signature, Postcard, Thumb, or Certificate PDF), or use Custom settings.',
+    '2. Choose a JPG, PNG, WebP, HEIC, HEIF or PDF. The input limit is 50 MB total.',
+    '3. Set or adjust the form’s minimum and maximum file size in KB (1 KB = 1,000 bytes) and optional exact pixel dimensions for images.',
+    '4. Check the preview and the measured size before downloading — everything runs locally in your browser.',
     '',
-    'Compressing an existing PDF rasterizes its pages. Small text may become less sharp, and selectable text and links are lost. If the result exceeds the limit, the tool shows the smallest result found and disables download for that limit.',
+    'Compressing an existing PDF rasterizes its pages. Small text may become less sharp, and selectable text and links are lost. If the result exceeds the limit or falls below the minimum KB, the tool warns or disables download accordingly.',
     '',
   ].join('\n'),
 };

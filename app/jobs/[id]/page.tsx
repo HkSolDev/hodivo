@@ -5,6 +5,7 @@ import {
   DEFAULT_PRODUCTION_ORIGIN,
   isSafeJobId,
   jobMetadata,
+  jobPostingJsonLd,
   trustedPublicOrigin,
 } from '../../../components/jobs/job-sharing';
 import {
@@ -104,5 +105,25 @@ export default async function JobDetailPage(props: {
     throw new Error('Job details temporarily unavailable');
   }
 
-  return <JobDetailContent job={result.job} />;
+  const origin =
+    trustedPublicOrigin(process.env.SITE_URL, {
+      allowLocalhost: false,
+      fallbackOrigin: DEFAULT_PRODUCTION_ORIGIN,
+    }) ?? DEFAULT_PRODUCTION_ORIGIN;
+
+  return (
+    <>
+      {!result.job.designReview ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(
+              jobPostingJsonLd(result.job, origin),
+            ).replace(/</g, '\\u003c'),
+          }}
+        />
+      ) : null}
+      <JobDetailContent job={result.job} />
+    </>
+  );
 }
