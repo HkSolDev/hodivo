@@ -6,11 +6,11 @@ Last verified: 2026-11-18 / 2026-11-19
 
 Hodivo/Aptus runs a split production architecture: **Vercel** serves the public Next.js frontend (`https://hodivo.app`), while **Coolify on `akash9568` (`ghost_server`)** runs the Fastify API (`aptus-api`), PostgreSQL, Python worker, and a backup Coolify frontend (`https://aptus.novaraorigin.com`).
 
-| Surface | Public URL | Host / Runtime | Upstream / Notes |
-| --- | --- | --- | --- |
-| Primary Frontend | `https://hodivo.app` (alias `https://hodivo-main.vercel.app`) | Vercel (`hodivo-main`) | Calls `BACKEND_INTERNAL_URL=https://api.hodivo.app` |
-| Backend API | `https://api.hodivo.app` | `akash9568` → `cloudflared` → `coolify-proxy` → `aptus-api` (`:8080`) | Fastify + Prisma + PostgreSQL |
-| Backup Server Frontend | `https://aptus.novaraorigin.com` | `akash9568` → `cloudflared` → `coolify-proxy` → `aptus-frontend` (`:3000`) | Calls `http://aptus-api:8080` on internal Docker network |
+| Surface                | Public URL                                                    | Host / Runtime                                                             | Upstream / Notes                                         |
+| ---------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Primary Frontend       | `https://hodivo.app` (alias `https://hodivo-main.vercel.app`) | Vercel (`hodivo-main`)                                                     | Calls `BACKEND_INTERNAL_URL=https://api.hodivo.app`      |
+| Backend API            | `https://api.hodivo.app`                                      | `akash9568` → `cloudflared` → `coolify-proxy` → `aptus-api` (`:8080`)      | Fastify + Prisma + PostgreSQL                            |
+| Backup Server Frontend | `https://aptus.novaraorigin.com`                              | `akash9568` → `cloudflared` → `coolify-proxy` → `aptus-frontend` (`:3000`) | Calls `http://aptus-api:8080` on internal Docker network |
 
 ## 2. Request Flow
 
@@ -50,11 +50,11 @@ Vercel Next.js (hodivo-main)
 
 ### Environment Variables (Vercel Production)
 
-| Variable | Value | Purpose |
-| --- | --- | --- |
-| `BACKEND_INTERNAL_URL` | `https://api.hodivo.app` | Baked into `next.config.ts` `/api/:path*` rewrites at build time and used by SSR loaders |
-| `SITE_URL` | `https://hodivo.app` | Canonical `<link rel="canonical">`, `robots.txt`, `sitemap.xml`, OpenGraph metadata |
-| `INGEST_TOKEN` *(optional)* | Same secret as `aptus-api` | Only needed if `aptus-api` `FRONTEND_REVALIDATE_URL` points to Vercel `/api/revalidate-jobs` |
+| Variable                    | Value                      | Purpose                                                                                      |
+| --------------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| `BACKEND_INTERNAL_URL`      | `https://api.hodivo.app`   | Baked into `next.config.ts` `/api/:path*` rewrites at build time and used by SSR loaders     |
+| `SITE_URL`                  | `https://hodivo.app`       | Canonical `<link rel="canonical">`, `robots.txt`, `sitemap.xml`, OpenGraph metadata          |
+| `INGEST_TOKEN` _(optional)_ | Same secret as `aptus-api` | Only needed if `aptus-api` `FRONTEND_REVALIDATE_URL` points to Vercel `/api/revalidate-jobs` |
 
 > **Auth note:** Do **not** add `DATABASE_URL`, `BETTER_AUTH_SECRET`, or `GOOGLE_CLIENT_SECRET` to Vercel. All `/api/auth/*` routes proxy to `aptus-api`, which owns authentication and `BETTER_AUTH_URL`.
 
@@ -62,10 +62,10 @@ Vercel Next.js (hodivo-main)
 
 ### DNS (`hodivo.app` zone)
 
-| Type | Name | Target / Value | Proxy Status |
-| --- | --- | --- | --- |
-| `A` / `CNAME` | `@` (`hodivo.app`) | Vercel DNS target (`64.29.17.1` / `f5930848bd4279bf.vercel-dns-017.com`) | `DNS only` (grey cloud) |
-| `CNAME` | `api` (`api.hodivo.app`) | `b138891e-cac6-4c03-8e1e-640c19549f18.cfargotunnel.com` | `Proxied` (orange cloud) |
+| Type          | Name                     | Target / Value                                                           | Proxy Status             |
+| ------------- | ------------------------ | ------------------------------------------------------------------------ | ------------------------ |
+| `A` / `CNAME` | `@` (`hodivo.app`)       | Vercel DNS target (`64.29.17.1` / `f5930848bd4279bf.vercel-dns-017.com`) | `DNS only` (grey cloud)  |
+| `CNAME`       | `api` (`api.hodivo.app`) | `b138891e-cac6-4c03-8e1e-640c19549f18.cfargotunnel.com`                  | `Proxied` (orange cloud) |
 
 ### Cloudflare Security Setting (Critical)
 
@@ -77,8 +77,8 @@ Vercel Next.js (hodivo-main)
 `cloudflared` runs as a systemd service with `/etc/cloudflared/config.yml`:
 
 ```yaml
-  - hostname: api.hodivo.app
-    service: http://localhost:80
+- hostname: api.hodivo.app
+  service: http://localhost:80
 ```
 
 Validate and restart after any edit:
