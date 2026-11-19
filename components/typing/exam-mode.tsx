@@ -137,7 +137,6 @@ export function ExamMode() {
   const [isLoadingVersionDetail, setIsLoadingVersionDetail] = useState(false);
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { accountId } = useWorkspace();
   const [retry, setRetry] = useState(0);
   const [saveState, setSaveState] = useState<AttemptSaveState>({
     status: 'idle',
