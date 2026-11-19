@@ -38,7 +38,7 @@ await test('public job listing allows ten seconds to acquire its snapshot transa
   assert.deepEqual(transactionOptions, {
     isolationLevel: 'RepeatableRead',
     maxWait: 10_000,
-    timeout: 5000,
+    timeout: 15_000,
   });
 });
 

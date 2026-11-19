@@ -20,12 +20,67 @@ const presets = [
   [500, 'Multi-page'],
 ] as const;
 
+const examTemplates = [
+  {
+    id: 'ssc-photo',
+    label: 'SSC Photo',
+    maxKB: 50,
+    minKB: 20,
+    width: 350,
+    height: 450,
+  },
+  {
+    id: 'ssc-sign',
+    label: 'SSC Sign',
+    maxKB: 20,
+    minKB: 10,
+    width: 140,
+    height: 60,
+  },
+  {
+    id: 'upsc-photo',
+    label: 'UPSC Photo',
+    maxKB: 200,
+    minKB: 20,
+    width: 350,
+    height: 350,
+  },
+  {
+    id: 'ibps-photo',
+    label: 'IBPS Photo',
+    maxKB: 50,
+    minKB: 20,
+    width: 200,
+    height: 230,
+  },
+  {
+    id: 'ibps-sign',
+    label: 'IBPS Sign',
+    maxKB: 20,
+    minKB: 10,
+    width: 140,
+    height: 60,
+  },
+  {
+    id: 'ibps-thumb',
+    label: 'IBPS Thumb',
+    maxKB: 50,
+    minKB: 20,
+    width: 240,
+    height: 240,
+  },
+] as const;
+
 export function PrepareFile() {
   const picker = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [format, setFormat] = useState<Format>('jpg');
   const [limit, setLimit] = useState('50');
   const [requirements, setRequirements] = useState<Requirements | null>(null);
+  const [reqWidth, setReqWidth] = useState('');
+  const [reqHeight, setReqHeight] = useState('');
+  const [reqMinimum, setReqMinimum] = useState('');
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [intakeError, setIntakeError] = useState('');
   const maximumKB = Number(limit);
   const { output, error, busy, validLimit, invalidate } = useFilePreparation(
@@ -65,16 +120,41 @@ export function PrepareFile() {
 
   function applyRequirements(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
     const values = {
-      width: String(form.get('width') ?? ''),
-      height: String(form.get('height') ?? ''),
-      minimum: String(form.get('minimum') ?? ''),
+      width: reqWidth.trim(),
+      height: reqHeight.trim(),
+      minimum: reqMinimum.trim(),
     };
     const next = Object.values(values).some(Boolean) ? values : null;
     if (!next && !requirements) return;
     invalidate();
+    setActiveTemplate(null);
     setRequirements(next);
+  }
+
+  function applyExamTemplate(tpl: (typeof examTemplates)[number]) {
+    const next = {
+      width: String(tpl.width),
+      height: String(tpl.height),
+      minimum: String(tpl.minKB),
+    };
+    invalidate();
+    setLimit(String(tpl.maxKB));
+    setReqWidth(next.width);
+    setReqHeight(next.height);
+    setReqMinimum(next.minimum);
+    setActiveTemplate(tpl.id);
+    setRequirements(next);
+  }
+
+  function clearRequirements() {
+    if (!requirements && !reqWidth && !reqHeight && !reqMinimum) return;
+    invalidate();
+    setReqWidth('');
+    setReqHeight('');
+    setReqMinimum('');
+    setActiveTemplate(null);
+    setRequirements(null);
   }
 
   const choose = () => picker.current?.click();
@@ -241,29 +321,91 @@ export function PrepareFile() {
                 className={styles.requirementsForm}
                 onSubmit={applyRequirements}
               >
+                <div>
+                  <small>Exam templates (one click)</small>
+                  <div className={styles.presets}>
+                    {examTemplates.map((tpl) => (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        aria-pressed={activeTemplate === tpl.id}
+                        className={`button ${activeTemplate === tpl.id ? 'button-primary' : 'button-secondary'}`}
+                        onClick={() => applyExamTemplate(tpl)}
+                      >
+                        {tpl.label} ({tpl.width}×{tpl.height}, {tpl.minKB}–
+                        {tpl.maxKB} KB)
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <p>
                   Set exact dimensions only if your form requires them. White
                   margins preserve the image’s proportions without cropping.
                 </p>
                 <div className={styles.requirementFields}>
-                  {(
-                    [
-                      ['width', 'Width (px)', 1, 4096],
-                      ['height', 'Height (px)', 1, 4096],
-                      ['minimum', 'Minimum size (KB)', 1, 50000],
-                    ] as const
-                  ).map(([name, label, min, max]) => (
-                    <label key={name} className={styles.label}>
-                      {label}
-                      <span className={styles.field}>
-                        <input type="number" name={name} min={min} max={max} />
-                      </span>
-                    </label>
-                  ))}
+                  <label className={styles.label}>
+                    Width (px)
+                    <span className={styles.field}>
+                      <input
+                        type="number"
+                        name="width"
+                        min={1}
+                        max={4096}
+                        value={reqWidth}
+                        onChange={(e) => {
+                          setReqWidth(e.target.value);
+                          setActiveTemplate(null);
+                        }}
+                      />
+                    </span>
+                  </label>
+                  <label className={styles.label}>
+                    Height (px)
+                    <span className={styles.field}>
+                      <input
+                        type="number"
+                        name="height"
+                        min={1}
+                        max={4096}
+                        value={reqHeight}
+                        onChange={(e) => {
+                          setReqHeight(e.target.value);
+                          setActiveTemplate(null);
+                        }}
+                      />
+                    </span>
+                  </label>
+                  <label className={styles.label}>
+                    Minimum size (KB)
+                    <span className={styles.field}>
+                      <input
+                        type="number"
+                        name="minimum"
+                        min={1}
+                        max={50000}
+                        value={reqMinimum}
+                        onChange={(e) => {
+                          setReqMinimum(e.target.value);
+                          setActiveTemplate(null);
+                        }}
+                      />
+                    </span>
+                  </label>
                 </div>
-                <button className="button button-secondary" type="submit">
-                  Apply requirements
-                </button>
+                <div className={styles.presets}>
+                  <button className="button button-secondary" type="submit">
+                    Apply requirements
+                  </button>
+                  {requirements && (
+                    <button
+                      className="button button-secondary"
+                      type="button"
+                      onClick={clearRequirements}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </form>
             </details>
 

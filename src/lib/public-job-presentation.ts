@@ -32,6 +32,31 @@ export function officialPublicUrl(value: unknown): string | null {
   }
 }
 
+export function safeYoutubeUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.port)
+      return null;
+    const host = url.hostname.toLowerCase();
+    const videoId = /^[A-Za-z0-9_-]{11}$/;
+    if (host === 'youtu.be' && videoId.test(url.pathname.slice(1)))
+      return url.href;
+    if (
+      ['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(host) &&
+      ((url.pathname === '/watch' &&
+        videoId.test(url.searchParams.get('v') ?? '')) ||
+        (url.pathname === '/playlist' &&
+          /^[A-Za-z0-9_-]{10,100}$/.test(url.searchParams.get('list') ?? '')))
+    ) {
+      return url.href;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function publicJobPresentation<
   T extends {
     postName: string;
@@ -58,6 +83,14 @@ export function publicJobPresentation<
     officialSiteUrl: officialPublicUrl(job.source.officialSiteUrl),
     applyUrl: officialPublicUrl(job.source.applyUrl),
   };
+  const youtubeResources = Array.isArray(reviewed?.youtube_resources)
+    ? reviewed.youtube_resources.flatMap((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+        const record = item as Record<string, unknown>;
+        const href = safeYoutubeUrl(record.url);
+        return href ? [{ ...record, url: href }] : [];
+      })
+    : undefined;
   return {
     ...job,
     postName: cleanPublicJobTitle(job.postName),
@@ -68,6 +101,9 @@ export function publicJobPresentation<
             ...reviewed,
             official_site_url: officialPublicUrl(reviewed.official_site_url),
             apply_url: officialPublicUrl(reviewed.apply_url),
+            ...(youtubeResources !== undefined
+              ? { youtube_resources: youtubeResources }
+              : {}),
           },
         }
       : {}),
