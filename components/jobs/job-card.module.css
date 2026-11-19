@@ -304,7 +304,7 @@
 
   .open {
     flex: 1;
-    min-height: 34px;
+    min-height: var(--target);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -398,7 +398,7 @@
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-    min-height: 34px;
+    min-height: var(--target);
   }
 
   :global(.home-page)
@@ -413,6 +413,6 @@
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-    min-height: 34px;
+    min-height: var(--target);
   }
 }
