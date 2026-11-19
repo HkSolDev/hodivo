@@ -56,6 +56,20 @@ export type ReviewedVacancyCount = {
   count?: number | null;
 };
 
+export type ReviewedSyllabusItem = {
+  stage?: string | null;
+  subject?: string | null;
+  marks?: string | null;
+  topics?: string[] | null;
+};
+
+export type ReviewedYoutubeResource = {
+  title?: string | null;
+  url?: string | null;
+  channel?: string | null;
+  topics?: string[] | null;
+};
+
 export interface ReviewedDetails {
   post_name?: string | null;
   recruiting_body?: string | null;
@@ -89,6 +103,8 @@ export interface ReviewedDetails {
   other_requirements?: string[] | null;
   official_site_url?: string | null;
   apply_url?: string | null;
+  official_syllabus?: ReviewedSyllabusItem[] | null;
+  youtube_resources?: ReviewedYoutubeResource[] | null;
 }
 
 export interface JobDetailData {
@@ -435,6 +451,19 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
       (step): step is string =>
         typeof step === 'string' && Boolean(step.trim()),
     ) ?? [];
+  const officialSyllabus = Array.isArray(reviewed?.official_syllabus)
+    ? reviewed.official_syllabus.filter(
+        (item) =>
+          item &&
+          (item.subject?.trim() ||
+            (Array.isArray(item.topics) && item.topics.length > 0)),
+      )
+    : [];
+  const youtubeResources = Array.isArray(reviewed?.youtube_resources)
+    ? reviewed.youtube_resources.filter(
+        (item) => item && item.title?.trim() && safeUrl(item.url),
+      )
+    : [];
 
   // Application steps
   const applicationSteps =
@@ -869,6 +898,69 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
                   <li key={idx}>{step}</li>
                 ))}
               </ol>
+            </section>
+          ) : null}
+
+          {officialSyllabus.length ? (
+            <section className={styles.card}>
+              <h2>Syllabus &amp; exam pattern</h2>
+              <dl className={styles.factList}>
+                {officialSyllabus.map((entry, idx) => {
+                  const label = [entry.stage, entry.subject]
+                    .filter(Boolean)
+                    .join(' · ');
+                  const topics =
+                    entry.topics?.filter(
+                      (t): t is string =>
+                        typeof t === 'string' && Boolean(t.trim()),
+                    ) ?? [];
+                  return (
+                    <Fact key={idx} label={label || `Section ${idx + 1}`}>
+                      {entry.marks ? <strong>{entry.marks}</strong> : null}
+                      {topics.length ? (
+                        <ul className={styles.bulletList}>
+                          {topics.map((topic, tIdx) => (
+                            <li key={tIdx}>{topic}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </Fact>
+                  );
+                })}
+              </dl>
+            </section>
+          ) : null}
+
+          {youtubeResources.length ? (
+            <section className={styles.card}>
+              <h2>Free preparation videos (YouTube)</h2>
+              <ul className={styles.bulletList}>
+                {youtubeResources.map((video, idx) => {
+                  const href = safeUrl(video.url);
+                  if (!href) return null;
+                  const meta = [
+                    video.channel,
+                    (
+                      video.topics?.filter(
+                        (t): t is string =>
+                          typeof t === 'string' && Boolean(t.trim()),
+                      ) ?? []
+                    ).join(', '),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ');
+                  return (
+                    <li key={idx}>
+                      <a href={href} target="_blank" rel="noopener noreferrer">
+                        {video.title}
+                      </a>
+                      {meta ? (
+                        <span className={styles.conditionDetail}>{meta}</span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
           ) : null}
 
