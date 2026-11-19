@@ -9,6 +9,7 @@ COPY next.config.ts tsconfig.next.json ./
 COPY app ./app
 COPY components ./components
 COPY lib/typing ./lib/typing
+COPY lib/jobs ./lib/jobs
 COPY lib/prepare-file ./lib/prepare-file
 COPY lib/markdown-negotiation.ts ./lib/markdown-negotiation.ts
 COPY proxy.ts ./proxy.ts
