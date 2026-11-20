@@ -1,6 +1,9 @@
 name: CI Checks
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 permissions:
   contents: read
@@ -10,9 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  checks-and-unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17-alpine
@@ -56,8 +59,6 @@ jobs:
         run: |
           pnpm exec prisma migrate deploy --config prisma7.config.ts
           node --input-type=module -e "import pg from 'pg'; const db = new pg.Client({ connectionString: process.env.DATABASE_URL }); await db.connect(); await db.query('CREATE DATABASE aptus_search_fixture'); await db.end();"
-      - name: Install test browser
-        run: pnpm exec playwright install --with-deps chromium
       - name: Production dependency audit
         run: pnpm audit --prod --audit-level=low
       - name: Lint
@@ -77,9 +78,92 @@ jobs:
       - name: Offline Python tests
         if: ${{ !cancelled() }}
         run: services/ai/.venv/bin/python -m unittest discover -s services/ai/tests -q
-      - name: Build and browser tests
-        if: ${{ !cancelled() }}
-        run: pnpm test:web
+
+  web-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: aptus_ci
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: aptus_ci
+        options: >-
+          --health-cmd "pg_isready -U aptus_ci -d aptus_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://aptus_ci:ci-only-password@postgres:5432/aptus_ci
+      TEST_DATABASE_URL: postgresql://aptus_ci:ci-only-password@postgres:5432/aptus_ci
+      APTUS_SEARCH_TEST_DATABASE_URL: postgresql://aptus_ci:ci-only-password@postgres:5432/aptus_search_fixture
+      AUTH_ENABLED: 'false'
+      DOTENV_CONFIG_PATH: /dev/null
+      PYTHONPATH: services/ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - run: pnpm install --frozen-lockfile
+      - name: Install offline Python test dependencies
+        run: |
+          python -c "import ssl; print(ssl.OPENSSL_VERSION)"
+          python -m venv services/ai/.venv
+          services/ai/.venv/bin/python -m pip install -r services/ai/requirements.txt
+      - name: Prepare disposable test database
+        run: |
+          pnpm exec prisma migrate deploy --config prisma7.config.ts
+          node --input-type=module -e "import pg from 'pg'; const db = new pg.Client({ connectionString: process.env.DATABASE_URL }); await db.connect(); await db.query('CREATE DATABASE aptus_search_fixture'); await db.end();"
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'next.config.*') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-
+      - name: Build web and Next.js
+        run: pnpm build:web && pnpm next:build
+      - name: Browser and frontend tests (shard ${{ matrix.shard }}/2)
+        run: |
+          ALL_TESTS=(tests/*.test.ts tests/saved-workspace.test.mjs tests/frontend-malformed-browser.test.mjs)
+          SHARD_TESTS=()
+          for idx in "${!ALL_TESTS[@]}"; do
+            if (( (idx % 2) + 1 == ${{ matrix.shard }} )); then
+              SHARD_TESTS+=("${ALL_TESTS[$idx]}")
+            fi
+          done
+          node --import ./tests/css-module-hook.mjs --import tsx --test --test-concurrency=1 "${SHARD_TESTS[@]}"
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [checks-and-unit, web-tests]
+    if: always()
+    steps:
+      - name: Verify checks-and-unit and web-tests passed
+        run: |
+          if [[ "${{ needs.checks-and-unit.result }}" != "success" || "${{ needs.web-tests.result }}" != "success" ]]; then
+            echo "checks-and-unit: ${{ needs.checks-and-unit.result }}"
+            echo "web-tests: ${{ needs.web-tests.result }}"
+            exit 1
+          fi
 
   api-image:
     runs-on: ubuntu-latest
