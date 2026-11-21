@@ -39,6 +39,8 @@ class BackendController {
   public recordedQueries: string[] = [];
   public mode: 'ok' | 'fail' = 'ok';
   public currentVersion = 'v1';
+  public detailVersion = 'v1';
+  public detailCalls: string[] = [];
 
   constructor() {
     this.server = http.createServer((req, res) => {
@@ -74,6 +76,16 @@ class BackendController {
         return;
       }
 
+      const detail = /^\/api\/jobs\/(job-a|job-b)$/.exec(url.pathname);
+      if (detail) {
+        const id = detail[1]!;
+        this.detailCalls.push(id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify(makeJob(id, `Detail ${id} ${this.detailVersion}`)),
+        );
+        return;
+      }
       res.writeHead(404).end();
     });
   }
@@ -274,6 +286,70 @@ test('production standalone execution path cache regression', async (t) => {
       assert.equal(freshRes.status, 200);
       const freshText = await freshRes.text();
       assert.ok(freshText.includes('Technical Assistant v2 soonest Page 1'));
+    },
+  );
+
+  await t.test(
+    'a valid jobId refreshes only the requested detail',
+    async () => {
+      const readDetail = async (id: string, version: string) => {
+        const response = await fetch(`${standalone.origin}/jobs/${id}`);
+        assert.equal(response.status, 200);
+        assert.match(
+          await response.text(),
+          new RegExp(`Detail ${id} ${version}`),
+        );
+      };
+      await readDetail('job-a', 'v1');
+      await readDetail('job-b', 'v1');
+      backend.detailVersion = 'v2';
+      backend.currentVersion = 'v3';
+      backend.detailCalls = [];
+      backend.jobsCalls = 0;
+      const revalidate = (query: string, token?: string) =>
+        fetch(`${standalone.origin}/api/revalidate-jobs?${query}`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+      assert.equal((await revalidate('jobId=job-a')).status, 401);
+      assert.equal(
+        (await revalidate('jobId=job-a', INGEST_TOKEN + '-wrong')).status,
+        401,
+      );
+      for (const query of [
+        'jobId=',
+        'jobId=job-a&jobId=job-b',
+        'jobId=..%2Fjob-a',
+        'jobId=%20job-a',
+        'jobID=job-a',
+      ]) {
+        assert.equal((await revalidate(query, INGEST_TOKEN)).status, 400);
+      }
+      await readDetail('job-a', 'v1');
+      assert.deepEqual(backend.detailCalls, []);
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const response = await revalidate('jobId=job-a', INGEST_TOKEN);
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), { revalidated: '/jobs/job-a' });
+      }
+      await readDetail('job-a', 'v2');
+      await readDetail('job-b', 'v1');
+      assert.deepEqual(backend.detailCalls, ['job-a']);
+      const list = await fetch(`${standalone.origin}/?sort=soonest`);
+      assert.equal(list.status, 200);
+      assert.match(await list.text(), /Technical Assistant v2 soonest Page 1/);
+      assert.equal(backend.jobsCalls, 0);
+      const bulk = await revalidate('', INGEST_TOKEN);
+      assert.equal(bulk.status, 200);
+      const refreshed = await fetch(`${standalone.origin}/?sort=soonest`);
+      assert.equal(refreshed.status, 200);
+      assert.match(
+        await refreshed.text(),
+        /Technical Assistant v3 soonest Page 1/,
+      );
+      assert.deepEqual(backend.detailCalls, ['job-a']);
     },
   );
 

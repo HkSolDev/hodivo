@@ -9,6 +9,7 @@ await test('legacy replacement does not invent first-publication dates', async (
   const server = buildApp(undefined, {
     AUTH_ENABLED: 'false',
     INGEST_TOKEN: token,
+    FRONTEND_REVALIDATE_URL: 'https://example.invalid/api/revalidate-jobs',
   });
   t.after(() => server.close());
   const restores: Array<() => void> = [];
@@ -26,7 +27,7 @@ await test('legacy replacement does not invent first-publication dates', async (
     rawHash: 'old',
   }));
   replace(prisma.source, 'upsert', async () => ({ id: 'fixture-source' }));
-  replace(prisma.post, 'deleteMany', async () => ({ count: 1 }));
+  replace(prisma, '$queryRaw', async () => [{ id: 'fixture-post' }]);
   const dates: unknown[] = [];
   replace(
     prisma.post,
@@ -36,11 +37,23 @@ await test('legacy replacement does not invent first-publication dates', async (
       return { count: args.data.length };
     },
   );
-  replace(prisma, '$transaction', async (operations: Promise<unknown>[]) =>
-    Promise.all(operations),
+  let committed = false;
+  replace(
+    prisma,
+    '$transaction',
+    async (write: (db: typeof prisma) => Promise<unknown>) => {
+      committed = false;
+      const result = await write(prisma);
+      committed = true;
+      return result;
+    },
   );
-  // Isolate the post-commit notification; never contact a configured frontend.
-  t.mock.method(globalThis, 'fetch', async () => new Response('{}'));
+  const notifications: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: URL) => {
+    assert.ok(committed);
+    notifications.push(url.pathname + url.search);
+    return new Response('{}');
+  });
   for (const raw_hash of ['changed-once', 'changed-again']) {
     const response = await server.inject({
       method: 'POST',
@@ -63,6 +76,12 @@ await test('legacy replacement does not invent first-publication dates', async (
     assert.equal(response.statusCode, 200);
   }
   assert.deepEqual(dates, [null, null]);
+  assert.deepEqual(notifications, [
+    '/api/revalidate-jobs?jobId=fixture-post',
+    '/api/revalidate-jobs',
+    '/api/revalidate-jobs?jobId=fixture-post',
+    '/api/revalidate-jobs',
+  ]);
 });
 
 await test('ingestion rejects malformed rules before accessing the database', async (t) => {
