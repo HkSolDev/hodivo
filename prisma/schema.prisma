@@ -445,3 +445,17 @@ model TypingAttempt {
   @@index([authUserId, createdAt])
   @@index([passageId, mode, createdAt])
 }
+
+model TypingCacheRevision {
+  singleton Boolean @id @default(true)
+  revision  String  @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+}
+
+model TypingAttemptCacheRevision {
+  passageId String
+  kind      String
+  scope     String
+  revision  String @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  @@id([passageId, kind, scope])
+}

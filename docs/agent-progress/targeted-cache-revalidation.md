@@ -90,11 +90,11 @@ Fastify server, real PostgreSQL query events, and disposable Redis 7. It uses
 `node --import tsx --test tests/jobs-cache-production.test.ts` and
 `NODE_ENV=production`.
 
-| Verified read | Next.js calls to Fastify | PostgreSQL version lookups | PostgreSQL detail queries |
-| --- | ---: | ---: | ---: |
-| First visit to A after detail-only correction | 1 | 2 | 1 |
-| Next visit to B and shared list after the same correction, combined | 0 | 0 | 0 |
-| Subsequent direct Fastify read of A | Direct API request | 1 | 0 |
+| Verified read                                                       | Next.js calls to Fastify | PostgreSQL version lookups | PostgreSQL detail queries |
+| ------------------------------------------------------------------- | -----------------------: | -------------------------: | ------------------------: |
+| First visit to A after detail-only correction                       |                        1 |                          2 |                         1 |
+| Next visit to B and shared list after the same correction, combined |                        0 |                          0 |                         0 |
+| Subsequent direct Fastify read of A                                 |       Direct API request |                          1 |                         0 |
 
 The integration also checked one-day expiry, a list-affecting edit, a rollback
 that sent no notification and preserved the warm Redis entry, and notification
@@ -163,18 +163,18 @@ checks. A listing query count below includes PostgreSQL count and page SELECTs.
 Version lookups are separate. Next's bulk warming still includes Soonest and
 Furthest, so a bulk warm makes three listing reads.
 
-| Operation | Next listing calls | Direct Fastify listing calls | PostgreSQL listing queries | Listing revision lookups |
-| --- | ---: | ---: | ---: | ---: |
-| First All Jobs and Newest visit pair | 1 | 0 | 2 | 2 |
-| Publish A, listing warm plus next All Jobs and Newest visits | 3 | 0 | 6 | 2 |
-| Direct API hit after publish, A first | 0 | 1 | 0 | 1 |
-| Detail-only correction, both visits and job B stay warm | 0 | 0 | 0 | 0 |
-| Listing correction or withdrawal, warm plus next visit | 3 | 0 | 6 | 2 |
-| Search bypass | 0 | 1 | 2 | 0 |
-| Direct request during Redis outage | 0 | 1 | 2 | 1 |
-| First direct request after recovery | 0 | 1 | 2 | 2 |
-| Subsequent direct Redis hit | 0 | 1 | 0 | 1 |
-| First direct read at simulated IST midnight | 0 | 1 | 2 | 2 |
+| Operation                                                    | Next listing calls | Direct Fastify listing calls | PostgreSQL listing queries | Listing revision lookups |
+| ------------------------------------------------------------ | -----------------: | ---------------------------: | -------------------------: | -----------------------: |
+| First All Jobs and Newest visit pair                         |                  1 |                            0 |                          2 |                        2 |
+| Publish A, listing warm plus next All Jobs and Newest visits |                  3 |                            0 |                          6 |                        2 |
+| Direct API hit after publish, A first                        |                  0 |                            1 |                          0 |                        1 |
+| Detail-only correction, both visits and job B stay warm      |                  0 |                            0 |                          0 |                        0 |
+| Listing correction or withdrawal, warm plus next visit       |                  3 |                            0 |                          6 |                        2 |
+| Search bypass                                                |                  0 |                            1 |                          2 |                        0 |
+| Direct request during Redis outage                           |                  0 |                            1 |                          2 |                        1 |
+| First direct request after recovery                          |                  0 |                            1 |                          2 |                        2 |
+| Subsequent direct Redis hit                                  |                  0 |                            1 |                          0 |                        1 |
+| First direct read at simulated IST midnight                  |                  0 |                            1 |                          2 |                        2 |
 
 A paused old snapshot completed after the listing correction and did not
 create a second Redis entry. The next API read returned the new value with

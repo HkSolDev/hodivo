@@ -261,18 +261,14 @@ export async function handleIngest(
           applyUrl: body.apply_url ?? null,
         },
       });
+      const affectedJobs = await db.post.findMany({
+        where: { sourceId: source.id },
+        select: { id: true },
+      });
       // An empty extraction can mean the upstream extractor failed.
-      if (posts.length === 0) {
-        const affectedJobs = await db.post.findMany({
-          where: { sourceId: source.id },
-          select: { id: true },
-        });
-        return { source, affectedJobs };
-      }
+      if (posts.length === 0) return { source, affectedJobs };
 
-      const affectedJobs = await db.$queryRaw<{ id: string }[]>`
-        DELETE FROM "Post" WHERE "sourceId" = ${source.id} RETURNING "id"
-      `;
+      await db.post.deleteMany({ where: { sourceId: source.id } });
       await db.post.createMany({
         data: toCreate.map((post) => ({ ...post, sourceId: source.id })),
       });

@@ -27,7 +27,8 @@ await test('legacy replacement does not invent first-publication dates', async (
     rawHash: 'old',
   }));
   replace(prisma.source, 'upsert', async () => ({ id: 'fixture-source' }));
-  replace(prisma, '$queryRaw', async () => [{ id: 'fixture-post' }]);
+  replace(prisma.post, 'findMany', async () => [{ id: 'fixture-post' }]);
+  replace(prisma.post, 'deleteMany', async () => ({ count: 1 }));
   const dates: unknown[] = [];
   replace(
     prisma.post,

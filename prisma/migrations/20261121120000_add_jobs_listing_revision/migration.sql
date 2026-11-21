@@ -5,7 +5,7 @@ CREATE TABLE "JobsListingRevision" (
 INSERT INTO "JobsListingRevision" DEFAULT VALUES;
 
 -- The revision changes atomically with the public listing data, even if Redis is unavailable.
-CREATE FUNCTION advance_jobs_listing_revision() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION advance_jobs_listing_revision() RETURNS trigger LANGUAGE plpgsql SET search_path FROM CURRENT AS $$
 BEGIN
     UPDATE "JobsListingRevision" SET "revision" = gen_random_uuid() WHERE "singleton";
     RETURN NULL;

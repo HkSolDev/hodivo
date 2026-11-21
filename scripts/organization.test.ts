@@ -56,7 +56,10 @@ await test('organization crosses ingestion and public API without source fallbac
     assert(typeof run === 'function');
     const result: unknown = Reflect.apply(run, undefined, [
       {
+        source: prisma.source,
         post: {
+          createMany: prisma.post.createMany,
+          deleteMany: prisma.post.deleteMany,
           count: ({ where }: { where: unknown }) => {
             search = where;
             return Promise.resolve(rows.length);
