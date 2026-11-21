@@ -199,6 +199,12 @@ model Post {
   @@index([publishedAt])
 }
 
+/// Transactional cache version for the default public jobs listing.
+model JobsListingRevision {
+  singleton Boolean @id @default(true)
+  revision  String  @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+}
+
 // Account-owned saved jobs shortlist, independent of profile completion.
 model SavedJob {
   id         String   @id @default(cuid())

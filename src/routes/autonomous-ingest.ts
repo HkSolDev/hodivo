@@ -654,7 +654,7 @@ export async function ingestAutonomousNotice(
 
       if (!priorPost) {
         const created = await db.post.create({
-          data: createData,
+          data: { ...createData, publishedAt: new Date() },
           select: { id: true },
         });
         savedPostIds.push(created.id);

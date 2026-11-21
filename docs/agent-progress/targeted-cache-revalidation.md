@@ -119,3 +119,79 @@ Redis key is readable but bypass immediate Next notification. Next page
 freshness also depends on successful notification delivery. Listings and
 Popular Jobs remain outside the Redis slice. Production rollout requires
 separate approval.
+
+## Redis for All Jobs and Newest
+
+1. Graphify identified the public route and deadline filter. The source trace
+   confirmed that Home All Jobs and the explicit Newest view both normalize to
+   the same unfiltered `newest` page-one request with 10 rows. Fastify's
+   default API request uses 30 rows. Both use the same PostgreSQL list
+   function. It applies the IST calendar-date deadline filter before counting
+   and ordering, with first-publication time descending and unknown dates
+   last. Search and other sorts still use their existing PostgreSQL path.
+2. The existing Fastify Redis connection now serves both jobs caches. The
+   listing cache covers page one at the two existing default sizes (10 and
+   30). Its key includes size, IST date, and the committed listing revision.
+   It expires at the next IST midnight and keeps today's deadlines visible
+   until that boundary. Next and Fastify share the date formatter. Redis
+   timeouts, unavailable entries, and a missing revision fall back to the
+   existing count-and-page query.
+3. PostgreSQL advances a singleton revision in the same transaction as a
+   listing-changing `Post` or `Source` write. The triggers compare the public
+   listing fields, first-publication date, and employment type. A
+   selection-process-only edit or a rolled-back write leaves the revision
+   stable. The commit retires both listing variants before any HTTP
+   notifier warms Next. An in-flight miss checks the revision again before
+   storing and can never refill the currently readable key with old results.
+   Retired Redis keys expire at midnight. Exact job-detail and typing entries
+   use their own keys.
+4. The first integration run exposed a missing first-publication timestamp
+   in the autonomous create branch. It now records the timestamp once on
+   creation. Reviewed publication already did so. Legacy replacement
+   deliberately keeps unknown first-publication dates when it cannot
+   establish stable per-job identity. Autonomous and reviewed HTTP publishes
+   and legacy HTTP replacement retain their post-commit notifications.
+   Direct SQL and the standalone publication CLI advance the Redis
+   revision. They still bypass the Next notification.
+
+### Local production verification
+
+The new migration applied on a fresh loopback PostgreSQL fixture. The
+production Next standalone build served rendered pages through live Fastify
+and Redis 7 with synthetic jobs. The production cache suite passed all 8
+checks. A listing query count below includes PostgreSQL count and page SELECTs.
+Version lookups are separate. Next's bulk warming still includes Soonest and
+Furthest, so a bulk warm makes three listing reads.
+
+| Operation | Next listing calls | Direct Fastify listing calls | PostgreSQL listing queries | Listing revision lookups |
+| --- | ---: | ---: | ---: | ---: |
+| First All Jobs and Newest visit pair | 1 | 0 | 2 | 2 |
+| Publish A, listing warm plus next All Jobs and Newest visits | 3 | 0 | 6 | 2 |
+| Direct API hit after publish, A first | 0 | 1 | 0 | 1 |
+| Detail-only correction, both visits and job B stay warm | 0 | 0 | 0 | 0 |
+| Listing correction or withdrawal, warm plus next visit | 3 | 0 | 6 | 2 |
+| Search bypass | 0 | 1 | 2 | 0 |
+| Direct request during Redis outage | 0 | 1 | 2 | 1 |
+| First direct request after recovery | 0 | 1 | 2 | 2 |
+| Subsequent direct Redis hit | 0 | 1 | 0 | 1 |
+| First direct read at simulated IST midnight | 0 | 1 | 2 | 2 |
+
+A paused old snapshot completed after the listing correction and did not
+create a second Redis entry. The next API read returned the new value with
+zero listing queries. A job with today's deadline was present before midnight
+and absent at the boundary. Redis reported the actual key expiry as midnight.
+The outage test committed a listing-affecting edit while Redis was paused.
+PostgreSQL served the new data during the pause and the first Redis fill after
+recovery used the new revision.
+
+Before rollout, apply the PostgreSQL migration and authorize the production
+change. A warm Fastify listing still depends on one cheap PostgreSQL
+lookup. The singleton revision serializes writes that change public listing
+data. Immediate Next freshness depends on the existing notifier delivering
+successfully. Popular Jobs remains outside this slice.
+
+The 57 focused deadline, search, ingestion, and cache regressions passed.
+Prisma generation, typecheck, focused ESLint, and `git diff --check` passed.
+The disposable Redis container was removed and the PostgreSQL fixture was
+stopped. The checkpoint is local on `perf/redis-job-listings-checkpoint`, based on
+`7a966f7`. The original listings worktree is preserved.

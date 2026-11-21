@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
+import { indiaDateKey } from '../frontend/india-date.js';
 import { generateAutonomousPayloadFromPython } from './autonomous-notice-fixture.js';
 
 const STANDALONE_DIR = path.resolve(import.meta.dirname, '../.next/standalone');
@@ -49,6 +50,8 @@ test(
 
     const detailQueries: string[] = [];
     const versionQueries: string[] = [];
+    const listingQueries: string[] = [];
+    const listingVersions: string[] = [];
     const client = new PrismaClient({
       adapter: new PrismaPg({ connectionString: databaseUrl.href }),
       log: [{ level: 'query', emit: 'event' }],
@@ -56,12 +59,30 @@ test(
     t.after(() => client.$disconnect());
     client.$on('query', ({ query }) => {
       if (query.includes('p.xmin::text')) versionQueries.push(query);
-      if (query.includes('"Post"."reviewedDetails"')) detailQueries.push(query);
+      if (query.includes('"JobsListingRevision"')) listingVersions.push(query);
+      if (
+        query.includes('"Post"."reviewedDetails"') &&
+        query.includes('"Post"."categoryRelaxationRules"')
+      ) {
+        detailQueries.push(query);
+      }
+      if (
+        query.includes('"Post"."applicationLastDate"') &&
+        !query.includes('"Post"."categoryRelaxationRules"')
+      ) {
+        listingQueries.push(query);
+      }
     });
     let holdRead: (() => Promise<void>) | undefined;
+    let holdListing: (() => Promise<void>) | undefined;
     const database = client.$extends({
       query: {
         post: {
+          async findMany({ args, query }) {
+            const result = await query(args);
+            if (holdListing) await holdListing();
+            return result;
+          },
           async findUnique({ args, query }) {
             const result = await query(args);
             if (holdRead) await holdRead();
@@ -126,12 +147,6 @@ test(
       assert.equal(result.status, 200);
       return result.text();
     };
-    const initial = await edit(generateAutonomousPayloadFromPython({}));
-    assert.equal(initial.status, 200);
-    const created = await initial.json();
-    assert.equal(created.cache_refresh, 'ok');
-    const [jobA] = created.post_ids as string[];
-    assert.ok(jobA);
     const jobB = await prisma.post.create({
       data: {
         postName: 'Fixture sibling job',
@@ -145,6 +160,52 @@ test(
         ).id,
       },
     });
+    const newest = '/?sort=newest';
+    const requestListing = async (query = 'pageSize=10') => {
+      const response = await fetch(apiOrigin + `/api/jobs?${query}`);
+      assert.equal(response.status, 200);
+      return (await response.json()).data as FixtureJob[];
+    };
+    const listingKeys = () => redis.keys('hodivo:jobs:listing:v1:*');
+    const counts = () => ({
+      upstream: reads.filter((path) => path === '/api/jobs').length,
+      listing: listingQueries.length,
+      versions: listingVersions.length,
+    });
+    function resetListingCounts() {
+      reads.length = 0;
+      listingQueries.length = 0;
+      listingVersions.length = 0;
+    }
+    assert.match(await read('/'), /Fixture sibling job/);
+    assert.match(await read(newest), /Fixture sibling job/);
+    await read(`/jobs/${jobB.id}`);
+    assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 2 });
+    const [previousListingKey] = await listingKeys();
+    assert.ok(previousListingKey);
+    resetListingCounts();
+    const initial = await edit(generateAutonomousPayloadFromPython({}));
+    assert.equal(initial.status, 200);
+    const created = await initial.json();
+    assert.equal(created.cache_refresh, 'ok');
+    const [jobA] = created.post_ids as string[];
+    assert.ok(jobA);
+    assert.match(await read('/'), /Headmaster/);
+    assert.match(await read(newest), /Headmaster/);
+    assert.deepEqual(counts(), { upstream: 3, listing: 6, versions: 2 });
+    resetListingCounts();
+    assert.equal((await requestListing())[0]?.id, jobA);
+    assert.deepEqual(counts(), { upstream: 1, listing: 0, versions: 1 });
+    assert.equal((await listingKeys()).length, 2);
+    const midnight = Date.parse(`${indiaDateKey()}T18:30:00Z`);
+    assert.equal(
+      await redis.sendCommand(['PEXPIRETIME', previousListingKey]),
+      midnight,
+    );
+    resetListingCounts();
+    await requestListing('pageSize=10&q=Headmaster');
+    assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 0 });
+    const warmListingKeys = (await listingKeys()).sort();
     const detailKeys = (id: string) =>
       redis.keys(`hodivo:jobs:detail:v1:${id}:*`);
     const requestDetail = (id: string) => fetch(apiOrigin + `/api/jobs/${id}`);
@@ -159,6 +220,7 @@ test(
     detailQueries.length = 0;
     versionQueries.length = 0;
 
+    resetListingCounts();
     const detail = await edit(
       generateAutonomousPayloadFromPython({
         selectionStep: 'Fixture written assessment',
@@ -169,6 +231,10 @@ test(
     assert.match(await read(`/jobs/${jobA}`), /Fixture written assessment/);
     await read(`/jobs/${jobB.id}`);
     await read(list);
+    await read('/');
+    await read(newest);
+    assert.deepEqual(counts(), { upstream: 0, listing: 0, versions: 0 });
+    assert.deepEqual((await listingKeys()).sort(), warmListingKeys);
     assert.deepEqual(reads, [`/api/jobs/${jobA}`]);
     assert.deepEqual(refreshCalls, [`/api/revalidate-jobs?jobId=${jobA}`]);
     assert.equal(detailQueries.length, 1);
@@ -199,7 +265,13 @@ test(
       BEFORE UPDATE ON "Post" FOR EACH ROW WHEN (NEW.vacancies = 150)
       EXECUTE FUNCTION reject_fixture_correction()`;
     refreshCalls.length = 0;
+    const revisionBeforeFailure =
+      await prisma.$queryRaw`SELECT "revision" FROM "JobsListingRevision"`;
     const failedWrite = await edit(listEdit);
+    assert.deepEqual(
+      await prisma.$queryRaw`SELECT "revision" FROM "JobsListingRevision"`,
+      revisionBeforeFailure,
+    );
     assert.equal(failedWrite.status, 503);
     assert.deepEqual(refreshCalls, []);
     assert.equal(
@@ -216,7 +288,35 @@ test(
     await prisma.$executeRaw`DROP TRIGGER reject_fixture_correction ON "Post"`;
     await prisma.$executeRaw`DROP FUNCTION reject_fixture_correction()`;
 
-    const listing = await edit(listEdit);
+    await redis.del(await listingKeys());
+    const listFetched = Promise.withResolvers<void>();
+    const releaseListing = Promise.withResolvers<void>();
+    holdListing = async () => {
+      holdListing = undefined;
+      listFetched.resolve();
+      await releaseListing.promise;
+    };
+    const staleListing = requestListing();
+    let listing: Response;
+    try {
+      await Promise.race([
+        listFetched.promise,
+        setTimeout(5_000, undefined, { ref: false }).then(() => {
+          throw new Error('Timed out waiting for the overlapping listing read');
+        }),
+      ]);
+      resetListingCounts();
+      listing = await edit(listEdit);
+      assert.match(await read('/'), /Level-10/);
+      assert.deepEqual(counts(), { upstream: 3, listing: 6, versions: 2 });
+    } finally {
+      releaseListing.resolve();
+    }
+    assert.equal((await staleListing)[0]?.vacancies, 120);
+    assert.equal((await listingKeys()).length, 1);
+    resetListingCounts();
+    assert.equal((await requestListing())[0]?.vacancies, 150);
+    assert.deepEqual(counts(), { upstream: 1, listing: 0, versions: 1 });
     assert.equal(listing.status, 200);
     assert.equal((await listing.json()).cache_refresh, 'ok');
     assert.deepEqual(refreshCalls, [
@@ -285,13 +385,21 @@ test(
     assert.deepEqual(await detailKeys(jobA), []);
     assert.match(await read(`/jobs/${jobA}`), /Fixture new practical/);
 
-    const outageEdit = correctedPayload('Fixture final practical');
+    const outageEdit = generateAutonomousPayloadFromPython({
+      selectionStep: 'Fixture final practical',
+      vacancies: 150,
+      payLevel: 'Level-11',
+    });
+    resetListingCounts();
     await redis.sendCommand(['CLIENT', 'PAUSE', '2000', 'ALL']);
     detailQueries.length = 0;
     try {
       assert.equal((await edit(outageEdit)).status, 200);
       assert.match(await read(`/jobs/${jobA}`), /Fixture final practical/);
       assert.equal(detailQueries.length, 1);
+      resetListingCounts();
+      assert.equal((await requestListing())[0]?.payLevel, 'Level-11');
+      assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 1 });
     } finally {
       await redis.sendCommand(['CLIENT', 'UNPAUSE']);
     }
@@ -299,6 +407,12 @@ test(
       await (await requestDetail(jobA)).text(),
       /Fixture final practical/,
     );
+    resetListingCounts();
+    assert.equal((await requestListing())[0]?.payLevel, 'Level-11');
+    assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 2 });
+    resetListingCounts();
+    assert.equal((await requestListing())[0]?.payLevel, 'Level-11');
+    assert.deepEqual(counts(), { upstream: 1, listing: 0, versions: 1 });
     detailQueries.length = 0;
     assert.match(
       await (await requestDetail(jobA)).text(),
@@ -310,12 +424,16 @@ test(
       where: { id: committed.sourceId },
     });
     refreshCalls.length = 0;
+    resetListingCounts();
     const withdrawal = await edit({
       source_url: source.url,
       source_name: source.name,
       posts: [{ post_name: 'Replacement fixture' }],
     });
     assert.equal(withdrawal.status, 200);
+    assert.doesNotMatch(await read(newest), /Headmaster/);
+    assert.match(await read('/'), /Replacement fixture/);
+    assert.deepEqual(counts(), { upstream: 3, listing: 6, versions: 2 });
     assert.deepEqual(refreshCalls, [
       `/api/revalidate-jobs?jobId=${jobA}`,
       '/api/revalidate-jobs',
@@ -329,6 +447,20 @@ test(
     await read(`/jobs/${jobB.id}`);
     assert.deepEqual(reads, [`/api/jobs/${jobA}`]);
     assert.equal(detailQueries.length, 0);
+
+    await prisma.post.update({
+      where: { id: jobB.id },
+      data: { applicationLastDate: new Date(`${indiaDateKey()}T00:00:00Z`) },
+    });
+    assert.ok((await requestListing()).some(({ id }) => id === jobB.id));
+    t.mock.timers.enable({ apis: ['Date'], now: midnight });
+    try {
+      resetListingCounts();
+      assert.ok(!(await requestListing()).some(({ id }) => id === jobB.id));
+      assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 2 });
+    } finally {
+      t.mock.timers.reset();
+    }
   },
 );
 
