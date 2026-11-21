@@ -1,7 +1,10 @@
+import { indiaDateKey } from '@/frontend/india-date';
 import {
   jobSearchParams,
   type JobFilters,
 } from '@/frontend/public-job-filters';
+
+export { indiaDateKey } from '@/frontend/india-date';
 
 // This module is shared by Next server code and plain Node tests, which
 // type `process` differently; read the environment through globalThis.
@@ -27,17 +30,6 @@ function getJobsRevalidateSeconds(): number {
     if (Number.isFinite(parsed) && parsed >= 0) return parsed;
   }
   return JOBS_REVALIDATE_SECONDS;
-}
-
-// The API interprets deadlines by the India calendar date, so entries must
-// roll over at IST midnight even if nobody invalidates them.
-export function indiaDateKey(now = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
 }
 
 // Explicit server cache for public catalogue results, grouped under the
