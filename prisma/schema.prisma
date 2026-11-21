@@ -405,3 +405,8 @@ model TypingPassage {
   @@unique([examVersionId, contentKey, revision])
   @@index([examVersionId, status])
 }
+
+model TypingCacheRevision {
+  singleton Boolean @id @default(true)
+  revision  String  @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+}

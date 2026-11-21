@@ -20,6 +20,7 @@ import {
   type EditRejection,
   type SessionSnapshot,
 } from '@/lib/typing/session';
+import { PracticeCatalogue } from './practice-catalogue';
 import { PassageView } from './passage-view';
 import styles from './typing-practice.module.css';
 
@@ -87,9 +88,11 @@ export function TypingPractice() {
     text: string;
     position: number;
   } | null>(null);
-  const requestRef = useRef<{ controller: AbortController; id: number } | null>(
-    null,
-  );
+  const requestRef = useRef<{
+    controller: AbortController;
+    id: number;
+    passageId?: string;
+  } | null>(null);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -396,16 +399,17 @@ export function TypingPractice() {
     setIsFocused(true);
   };
 
-  const loadPassage = () => {
+  const loadPassage = (id?: string) => {
     requestRef.current?.controller.abort();
     const request = {
       controller: new AbortController(),
       id: (requestRef.current?.id ?? 0) + 1,
+      passageId: id,
     };
     requestRef.current = request;
     restartSession({ target: '' });
     setPassageState({ status: 'loading' });
-    void loadPracticePassage(request.controller.signal)
+    void loadPracticePassage(request.controller.signal, id)
       .then((passage) => {
         if (
           request.controller.signal.aborted ||
@@ -431,7 +435,8 @@ export function TypingPractice() {
   };
 
   useEffect(() => {
-    loadPassage();
+    const id = new URLSearchParams(window.location.search).get('passage');
+    loadPassage(id ?? undefined);
     return () => requestRef.current?.controller.abort();
   }, []);
 
@@ -488,6 +493,7 @@ export function TypingPractice() {
           {/* Left: Next / Restart Buttons */}
           <div className={styles.metaCluster}>
             <div className={styles.actions}>
+              <PracticeCatalogue buttonClass={styles.hudBtn} />
               {passageState.status === 'loading' && (
                 <span className={styles.loadingTag} role="status">
                   Loading passage…
@@ -508,7 +514,7 @@ export function TypingPractice() {
                 <button
                   type="button"
                   className={styles.hudBtn}
-                  onClick={loadPassage}
+                  onClick={() => loadPassage(requestRef.current?.passageId)}
                 >
                   Retry
                 </button>
@@ -517,7 +523,7 @@ export function TypingPractice() {
                 type="button"
                 className={styles.hudBtn}
                 onPointerDown={(event) => event.preventDefault()}
-                onClick={loadPassage}
+                onClick={() => loadPassage()}
                 disabled={loading || passageState.status !== 'ready'}
                 title="Load next passage"
               >
