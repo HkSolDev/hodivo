@@ -10,11 +10,11 @@ export async function loadPracticePassage(
   signal: AbortSignal,
   passageId?: string,
 ): Promise<PracticePassage | null> {
-  const url = passageId
-    ? `${endpoint}/${encodeURIComponent(passageId)}`
+  const path = passageId
+    ? `${endpoint}s/${encodeURIComponent(passageId)}`
     : endpoint;
-  const response = await fetch(url, { cache: 'no-store', signal });
-  if (response.status === 404 && passageId) return null;
+  const response = await fetch(path, { cache: 'no-store', signal });
+  if (passageId && response.status === 404) return null;
   if (!response.ok) throw new Error('Practice passage request failed.');
 
   const payload: unknown = await response.json();
@@ -60,4 +60,34 @@ function isSupportedPassageText(value: string): boolean {
     /^[\t\n -~]+$/.test(value) &&
     /[!-~]/.test(value)
   );
+}
+
+export async function loadPracticeCatalogue(
+  signal: AbortSignal,
+  cursor?: string,
+) {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  const response = await fetch(`${endpoint}s${query}`, {
+    cache: 'no-store',
+    signal,
+  });
+  if (!response.ok) throw new Error('Practice catalogue request failed.');
+  const payload: unknown = await response.json();
+  if (
+    !isRecord(payload) ||
+    !Array.isArray(payload.passages) ||
+    !payload.passages.every(
+      (item: unknown) =>
+        isRecord(item) &&
+        typeof item.id === 'string' &&
+        typeof item.title === 'string',
+    ) ||
+    (payload.nextCursor !== null && typeof payload.nextCursor !== 'string')
+  ) {
+    throw new Error('Practice catalogue response was invalid.');
+  }
+  return {
+    passages: payload.passages as Pick<PracticePassage, 'id' | 'title'>[],
+    nextCursor: payload.nextCursor,
+  };
 }

@@ -20,6 +20,7 @@ import {
   type PassageSummaryResponse,
 } from '@/lib/typing/attempts-api';
 import { AttemptComparison, type AttemptSaveState } from './attempt-comparison';
+import { PracticeCatalogue } from './practice-catalogue';
 import { useWorkspace } from '@/components/providers/workspace-provider';
 import {
   createTypingSession,
@@ -103,9 +104,11 @@ export function TypingPractice() {
     text: string;
     position: number;
   } | null>(null);
-  const requestRef = useRef<{ controller: AbortController; id: number } | null>(
-    null,
-  );
+  const requestRef = useRef<{
+    controller: AbortController;
+    id: number;
+    passageId?: string;
+  } | null>(null);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -419,6 +422,7 @@ export function TypingPractice() {
     const request = {
       controller: new AbortController(),
       id: (requestRef.current?.id ?? 0) + 1,
+      passageId: requestedPassageId,
     };
     requestRef.current = request;
     savedRunRef.current = false;
@@ -463,7 +467,8 @@ export function TypingPractice() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const initialId = params.get('passageId')?.trim() || undefined;
+    const initialId =
+      params.get('passage')?.trim() || params.get('passageId')?.trim();
     if (initialId) setPassageIdInput(initialId);
     loadPassage(initialId);
     return () => requestRef.current?.controller.abort();
@@ -601,7 +606,7 @@ export function TypingPractice() {
                 <button
                   type="button"
                   className={styles.hudBtn}
-                  onClick={() => loadPassage()}
+                  onClick={() => loadPassage(requestRef.current?.passageId)}
                 >
                   Retry
                 </button>
@@ -654,6 +659,7 @@ export function TypingPractice() {
                 </svg>
                 <span>Restart</span>
               </button>
+              <PracticeCatalogue buttonClass={styles.hudBtn} />
               {!showIdPicker ? (
                 <button
                   type="button"

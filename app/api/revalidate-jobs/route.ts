@@ -6,11 +6,11 @@ import {
   JOBS_CACHE_TAG,
 } from '@/components/jobs/catalogue-grid';
 import type { JobFilters } from '@/frontend/public-job-filters';
+import { isSafeJobId } from '@/components/jobs/job-sharing';
 
 // Internal endpoint: after a publication commits, the API notifies this
 // route with the same Bearer convention as /api/internal/ingest
-// (INGEST_TOKEN). Delivery is idempotent: repeated calls only re-mark the
-// shared jobs tag stale and re-warm the same page-one entries.
+// (INGEST_TOKEN).
 function authorized(request: Request): boolean {
   const token = process.env.INGEST_TOKEN;
   if (!token) return false;
@@ -35,6 +35,27 @@ export async function POST(request: Request) {
     return Response.json(
       { error: 'Unauthorized' },
       { status: 401, headers: { 'cache-control': 'no-store' } },
+    );
+  }
+  const params = new URL(request.url).searchParams;
+  const jobIds = params.getAll('jobId');
+  const jobId = jobIds[0];
+  if (
+    params.size !== jobIds.length ||
+    jobIds.length > 1 ||
+    (jobId !== undefined && (jobId !== jobId.trim() || !isSafeJobId(jobId)))
+  ) {
+    return Response.json(
+      { error: 'Supply at most one valid jobId.' },
+      { status: 400, headers: { 'cache-control': 'no-store' } },
+    );
+  }
+  if (jobId !== undefined) {
+    const path = `/jobs/${jobId}`;
+    revalidatePath(path);
+    return Response.json(
+      { revalidated: path },
+      { headers: { 'cache-control': 'no-store' } },
     );
   }
   // Clear the whole shared `jobs` group, so the warming fetches below —
