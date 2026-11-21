@@ -7,6 +7,7 @@ import { handleJobDetail } from './job-detail.js';
 export function registerPublicRoutes(
   app: FastifyInstance,
   database?: Parameters<typeof handleJobs>[2],
+  readJobDetail?: Parameters<typeof handleJobDetail>[3],
 ) {
   app.all<{ Params: { id: string } }>('/api/jobs/:id', {
     onRequest: async (request, reply) => {
@@ -18,7 +19,7 @@ export function registerPublicRoutes(
       }
     },
     handler: (request, reply) =>
-      handleJobDetail(request.params.id, reply, database),
+      handleJobDetail(request.params.id, reply, database, readJobDetail),
   });
 
   app.all('/api/jobs', {

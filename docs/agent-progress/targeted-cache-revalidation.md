@@ -50,3 +50,72 @@ The opt-in PostgreSQL case in `tests/jobs-cache-production.test.ts` requires a f
 Read-only SSH found healthy frontend `4d5ef9a` and API `bbb963e`. Release this API change with the frontend endpoint that accepts `jobId`. Deployment, production edits, and Redis are pending separate authorization and work.
 
 Final local rerun against a freshly migrated disposable database passed all eight cache checks. After the detail-only edit, the API saw one read for job A and none for job B or the listing. After the listing edit, it saw one read each for the filtered listing and job A and none for job B. The failed write emitted no requests to the notifier, and the failed notification emitted two attempts while leaving the corrected row committed.
+
+## Redis for public job details
+
+Worktree `/private/tmp/hodivo-redis-job-detail`, branch
+`perf/redis-job-detail`. It carries over the in-progress targeted revalidation
+and correction wiring from `perf/public-jobs-cache` at `936c3f2`. Graphify
+identified the detail page, public route, and presentation query. The actual
+imports and write callers confirmed the newer targeted notifier and legacy
+replacement behavior.
+
+1. Next's job page fetches Fastify's `GET /api/jobs/:id`. After its existing ID
+   check, Fastify can serve the same public JSON from Redis when
+   `JOBS_REDIS_URL` is configured. It caches successful detail reads for
+   86,400 seconds. PostgreSQL supplies the response on a miss or Redis timeout.
+   Redis-disabled Fastify still calls the existing detail query directly.
+2. Each key includes the validated job ID and the PostgreSQL row versions
+   (`xmin`) of that Post and its Source. A successful edit retires the old
+   key as part of commit, before the frontend notification. Deletion removes
+   the version lookup result. This works even if Redis was unavailable at the
+   moment of the write. A fill checks the version again after loading the
+   detail. A write racing after that check can only leave an entry under the
+   retired key. Retired values expire by TTL.
+3. Autonomous corrections keep their existing exact detail notification and
+   send the existing bulk operation when listing data changes. Legacy source
+   replacement commits the source changes and post replacement together, using
+   `DELETE ... RETURNING` to capture the exact withdrawn IDs. It notifies those
+   pages after commit and then refreshes the list. Empty legacy extracts
+   preserve posts. If they update a source with existing posts, those details
+   and the list are refreshed to reflect the shared source fields. Reviewed
+   HTTP publication notifies its returned IDs and then the list. A draft save
+   still does not touch public Posts.
+
+The opt-in integration uses a production Next standalone build, a live
+Fastify server, real PostgreSQL query events, and disposable Redis 7. It uses
+`APTUS_TEST_JOB_EDIT_CACHE=1`, a fresh migrated loopback
+`aptus_preparation_test` database with matching `DATABASE_URL` and
+`TEST_DATABASE_URL`, and loopback `JOBS_REDIS_URL`. Run it with
+`node --import tsx --test tests/jobs-cache-production.test.ts` and
+`NODE_ENV=production`.
+
+| Verified read | Next.js calls to Fastify | PostgreSQL version lookups | PostgreSQL detail queries |
+| --- | ---: | ---: | ---: |
+| First visit to A after detail-only correction | 1 | 2 | 1 |
+| Next visit to B and shared list after the same correction, combined | 0 | 0 | 0 |
+| Subsequent direct Fastify read of A | Direct API request | 1 | 0 |
+
+The integration also checked one-day expiry, a list-affecting edit, a rollback
+that sent no notification and preserved the warm Redis entry, and notification
+failure reported separately from the committed edit. A deliberately delayed
+query returned its original data to the already-running request and left no
+stale Redis entry. An edit and visit during a Redis pause returned current
+PostgreSQL data. After recovery the current entry warmed and the next direct
+read made zero detail queries. A real legacy replacement made the old API
+and rendered page return 404 without waiting for expiry. The unrelated job
+page remained warm.
+
+The production build and eight standalone/integration checks passed. All 46
+focused route, presentation and ingestion checks passed, including the
+PostgreSQL-backed autonomous and reviewed publication regressions. Focused
+ESLint, typecheck and the Git diff check passed.
+
+Use a Redis database dedicated to this PostgreSQL environment. When restoring
+or replacing PostgreSQL, start with a fresh Redis namespace because transaction
+IDs are local to the database cluster. This approach keeps one small SQL
+lookup on a warm Fastify read. Direct database or CLI writes change which
+Redis key is readable but bypass immediate Next notification. Next page
+freshness also depends on successful notification delivery. Listings and
+Popular Jobs remain outside the Redis slice. Production rollout requires
+separate approval.

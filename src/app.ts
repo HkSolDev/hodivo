@@ -2,6 +2,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { registerTypingPracticeRoutes } from './routes/typing-practice.js';
 import { registerTypingExamRoutes } from './routes/typing-exams.js';
 import { registerHealthRoute } from './routes/health.js';
+import { createJobDetailCache } from './lib/job-detail-cache.js';
 import { registerPublicRoutes } from './routes/public.js';
 import { handleMatch } from './routes/match.js';
 import { handleExplain } from './routes/explain.js';
@@ -61,7 +62,16 @@ export function buildApp(
   });
 
   registerHealthRoute(app);
-  registerPublicRoutes(app, database);
+  const jobDetailCache = env.JOBS_REDIS_URL
+    ? createJobDetailCache(env.JOBS_REDIS_URL)
+    : undefined;
+  if (jobDetailCache) {
+    app.addHook('onClose', (_app, done) => {
+      jobDetailCache.close();
+      done();
+    });
+  }
+  registerPublicRoutes(app, database, jobDetailCache?.read);
   registerTypingPracticeRoutes(app, typingDatabase);
   registerTypingExamRoutes(app, examCatalogue);
   const config = auth ? null : readAuthConfig(env);
