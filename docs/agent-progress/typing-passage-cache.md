@@ -99,3 +99,93 @@ narrowing invalidation to affected passages. The existing namespace rotation
 still makes unrelated practice entries cold after a typing write. An Exam
 cache miss now selects the text separately after its eligibility query.
 Production rollout remains pending approval.
+
+## Baseline leaderboard and private passage progress
+
+1. The workspace already had the attempt and leaderboard handlers. This branch
+   carries over those handlers, their tests, and the attempt-table migration,
+   and registers the routes in Fastify.
+2. The shared board is keyed by passage ID and mode. It keeps each user's best
+   attempt by net WPM descending, error percentage ascending, then submission
+   time ascending. Attempt ID breaks an exact timestamp tie. The response
+   returns the first 20 entries and the viewer's rank even outside the first
+   20. It adds viewer fields after the shared cache lookup.
+3. The authenticated summary key uses passage ID and the session's user ID.
+   Its Practice and Exam summaries each include attempt count, latest attempt,
+   and personal best. The route keeps its existing no-store response header.
+4. The attempt migration rotates a PostgreSQL revision for that user's progress
+   on every save. It rotates the passage-and-mode board revision only when the
+   new row becomes that user's ranked best. Concurrent saves for a board
+   serialize the best-score check. The revision and attempt commit together,
+   so a rollback or Redis outage cannot leave a committed write behind a stale
+   Redis key. A read in flight fills only its original revision. The existing
+   content revision also retires entries after a passage publication change.
+5. A cold board rebuilds with the existing PostgreSQL ranking logic. Updating
+   individual Redis entries would add a second ranking implementation and a
+   synchronization path for concurrent fills. The process-local ranked-board
+   map was removed. Redis entries expire after 30 seconds.
+
+The production-mode local integration used real Better Auth session lookup,
+Fastify routes, PostgreSQL, and disposable Redis. On a signed-in warm read of
+either route, Prisma recorded one session lookup and one revision query, with
+zero ranking or summary queries. The first read after an affected revision
+change executed one corresponding ranking or summary query. The anonymous
+summary request returned 401 before any revision or summary query.
+
+With both users' summaries and both modes' boards warm, Alice's lower attempt
+invalidated only her summary. Her later improvement on error percentage gave
+her rank 1 while the Exam board remained warm. The earlier timestamp won when
+WPM and error percentage tied. Concurrent submissions preserved the best
+score and the two viewers got their own rank from the same shared board.
+Bob's attempt during a Redis pause appeared in both endpoints via PostgreSQL
+and remained current after recovery. A passage unpublish returned 404 from
+both endpoints. Both Redis integrations, 12 Redis-disabled regressions,
+lint, typecheck, and the Git diff check passed.
+
+Warm reads still perform a lightweight PostgreSQL revision lookup. Cold boards
+still scan all attempts for that passage and mode. The inherited ranking
+accepts client-reported scores within its existing validation bounds. Production
+rollout requires approval and the attempt and revision migrations must be
+applied before enabling the routes with Redis.
+
+
+## Incremental refresh of a warm leaderboard
+
+Graphify's existing project graph predates the attempt routes. The worktree
+source connects the authenticated POST in `src/routes/typing-attempts.ts` to
+`saveTypingAttempt`, the PostgreSQL attempt trigger, and the board promotion in
+`src/lib/typing-leaderboard.ts`. The leaderboard GET reads its exact
+passage-and-mode revision and projects the viewer from the shared board. The
+existing frontend in the adjacent jobs-cache checkout renders `entries` as the
+table and `me` separately. The HTTP response stayed the same.
+
+1. While Redis is ready, the save takes the existing board advisory lock and
+   reads the revision immediately before and after the normal attempt write.
+   The trigger remains responsible for deciding whether the attempt beats the
+   caller's ranked best. It also rotates the caller's private progress
+   revision on every successful submission.
+2. After commit, a changed board revision can reuse a complete predecessor in
+   Redis. Copy its ranked list, remove the caller's former row, and insert the
+   new best in order. WPM descends, error percentage ascends, then the attempt
+   time and ID ascend. Keep the predecessor's absolute expiry. Redis 7 supplies
+   that expiry and `SET NX` preserves a concurrent rebuild.
+3. A promotion can write only to the specific revision produced by its
+   transaction. A board fill checks that its revision survived the database
+   read before caching the result. Missing or expired predecessors, out-of-order
+   promotions, and Redis failures use the existing PostgreSQL rebuild. The
+   browser gets the first 20 entries plus its current signed-in rank.
+
+The production-mode Fastify integration used real Better Auth sessions,
+PostgreSQL and Redis. The baseline's first read after an improvement ran one
+ranking query. After promotion, Alice and Bob each read the correct order with
+zero ranking queries, one session lookup and one revision lookup. The cold
+rebuild now uses two revision lookups. Bob's score and warm progress and the
+Exam board stayed intact. A lower attempt refreshed only Alice's progress.
+The test covered tied scores, an exact timestamp tie, a viewer ranked 21st in a
+20-row response, post-commit refreshes completing in reverse order, and a Redis
+pause followed by recovery. Both cache integrations, all 12 focused
+regressions, lint, typecheck, and the diff check passed locally.
+
+A promotion reads and writes a whole Redis board value while changing one
+participant. Cold boards still scan the passage-and-mode attempts. This slice
+adds no dependency or migration. Production rollout requires approval.

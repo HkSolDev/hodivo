@@ -26,6 +26,7 @@ model AuthUser {
   accounts      AuthAccount[]
   passkeys      AuthPasskey[]
   savedJobs     SavedJob[]
+  typingAttempts TypingAttempt[]
 }
 
 // Public verification material only; private keys stay with the authenticator.
@@ -377,6 +378,7 @@ model TypingExamVersion {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   passages         TypingPassage[]
+  typingAttempts   TypingAttempt[]
 
   @@unique([examId, versionKey])
   @@index([examId, status])
@@ -402,6 +404,8 @@ model TypingPassage {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  typingAttempts TypingAttempt[]
+
   @@unique([examVersionId, contentKey, revision])
   @@index([examVersionId, status])
 }
@@ -409,4 +413,43 @@ model TypingPassage {
 model TypingCacheRevision {
   singleton Boolean @id @default(true)
   revision  String  @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+}
+
+enum TypingAttemptMode {
+  PRACTICE
+  EXAM
+}
+
+model TypingAttempt {
+  id                 String            @id @default(cuid())
+  authUserId         String
+  authUser           AuthUser          @relation(fields: [authUserId], references: [id], onDelete: Cascade)
+  passageId          String
+  passage            TypingPassage     @relation(fields: [passageId], references: [id], onDelete: Restrict)
+  passageContentHash String
+  mode               TypingAttemptMode
+  examVersionId      String?
+  examVersion        TypingExamVersion? @relation(fields: [examVersionId], references: [id], onDelete: SetNull)
+  grossWpm           Float
+  netWpm             Float
+  accuracy           Float
+  errorPercent       Float
+  keystrokes         Int
+  backspaceCount     Int                @default(0)
+  durationMs         Int
+  passedRule         Boolean?
+  createdAt          DateTime           @default(now())
+
+  @@index([authUserId, passageId, createdAt])
+  @@index([authUserId, createdAt])
+  @@index([passageId, mode, createdAt])
+}
+
+model TypingAttemptCacheRevision {
+  passageId String
+  kind      String
+  scope     String
+  revision  String @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  @@id([passageId, kind, scope])
 }
