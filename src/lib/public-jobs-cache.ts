@@ -142,7 +142,24 @@ export function createPublicJobsCache(url: string) {
     return jobs;
   }
 
+  async function readVisitorCounts(ids: string[]) {
+    if (!redis.isReady) return {};
+    const fields = ['_refreshedAt', '_revision', ...ids];
+    const values = await withDeadline(redis.hmGet(JOB_VISITORS_KEY, fields));
+    if (!values) return {};
+    const snapshot = readJobVisitors(
+      Object.fromEntries(
+        fields.flatMap((key, i) =>
+          values[i] === null ? [] : [[key, values[i]]],
+        ),
+      ),
+      Date.now(),
+    );
+    return Object.fromEntries(snapshot?.counts ?? []);
+  }
+
   return {
+    readVisitorCounts,
     readDetail,
     readListing,
     close() {

@@ -107,15 +107,20 @@ async function fetchFreshJobs<T extends FreshnessMarkable>(
   }
 }
 
+export function getJobsBackendUrl(): string {
+  return (
+    (globalThis as { process?: { env: Record<string, string | undefined> } })
+      .process?.env?.BACKEND_INTERNAL_URL ||
+    env.BACKEND_INTERNAL_URL ||
+    'http://127.0.0.1:8081'
+  );
+}
+
 export async function fetchPublicJobsCached<T extends FreshnessMarkable>(
   page: number,
   filters: JobFilters,
 ): Promise<T | null> {
-  const backendUrl =
-    (globalThis as { process?: { env: Record<string, string | undefined> } })
-      .process?.env?.BACKEND_INTERNAL_URL ||
-    env.BACKEND_INTERNAL_URL ||
-    'http://127.0.0.1:8081';
+  const backendUrl = getJobsBackendUrl();
   const params = jobSearchParams(filters, page);
   params.set('pageSize', String(PAGE_SIZE));
   // Cache identity: normalized sort/filters, page, page size, India date.

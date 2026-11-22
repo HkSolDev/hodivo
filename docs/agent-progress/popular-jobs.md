@@ -22,3 +22,22 @@ Following the existing host-cron deployment pattern, schedule a single entry onc
 ```
 
 Use a container named `hodivo-job-visitors` with the refresh command as its command and restart policy disabled. The API processes do not schedule refreshes. Capture exit status in the host's existing cron logs. HTTP 429 leaves the existing snapshot in place and the next scheduled invocation is the next attempt. Verify the server secret can query the intended project, compare Redis results to Vercel, and check exactly one run per interval. Production installation and activation require approval.
+
+## Visitor labels on job cards
+
+The catalogue reads one batch of visitor counts after it resolves the page of
+jobs. Fastify reads just those job IDs and the snapshot freshness fields with
+one Redis HMGET. The request uses no-store so an analytics refresh can update
+the next visit while the Next.js listing and Redis job entries remain warm.
+The rendered card displays positive counts below vacancies and pay. Zero,
+missing, expired, and unavailable counts omit the line.
+
+Verified on `feat/job-card-visitors` from merged main `528e5eb`. The production
+Next.js build and eight production cache checks passed with disposable PostgreSQL
+and Redis. Newest and Popular both changed from six to seven visitors on the
+next request. The warm Newest visit ran zero PostgreSQL queries. The base Redis
+listing and detail entries were unchanged after refresh. The check also covered
+snapshot expiry, missing snapshots, and a simulated Redis delay and recovery.
+Chromium verified the label in both sorts at widths of 375, 768, and 1440 px.
+Typecheck, lint, and changed-file formatting passed. The separate opt-in
+job-edit scenario was skipped. Production rollout and cron remain separate.

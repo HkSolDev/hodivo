@@ -13,6 +13,7 @@ export interface PublicJobItem {
   organization?: string | null;
   appointmentType?: string | null;
   vacancies: number | null;
+  recentVisitorCount?: number | null;
   applicationLastDate: string | null;
   educationRequired: string | null;
   payLevel?: string | null;
@@ -44,6 +45,7 @@ export function JobCard({
   matchSummary?: ReactNode;
   actions?: ReactNode;
 }) {
+  const visitors = job.recentVisitorCount ?? 0;
   const applyBy = formatDate(job.applicationLastDate);
   const { points: qualPoints, chips: qualChips } = summarizeQualification(
     job.educationRequired,
@@ -129,6 +131,12 @@ export function JobCard({
               `${job.vacancies.toLocaleString('en-IN')} vacancies`}
             {job.vacancies != null && job.payLevel && ' · '}
             {job.payLevel && `Pay: ${job.payLevel}`}
+          </p>
+        )}
+        {Number.isSafeInteger(visitors) && visitors > 0 && (
+          <p className="small muted" data-job-visitors>
+            {visitors.toLocaleString('en-IN')}{' '}
+            {visitors === 1 ? 'visitor' : 'visitors'} in the last 7 days
           </p>
         )}
       </div>
