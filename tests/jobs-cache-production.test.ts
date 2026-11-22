@@ -1062,6 +1062,27 @@ test(
     assert.ok(
       html.indexOf('Technical Fixture 0') < html.indexOf('Technical Fixture 1'),
     );
+    const newestWithFixture = frontend.origin + '/?q=Technical';
+    const popularWithFixture = newestWithFixture + '&sort=popular';
+    async function assertVisitors(url: string, count: number) {
+      const response = await fetch(url);
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      const card = html
+        .match(/<article[^>]*data-job-card[^>]*>.*?<\/article>/g)
+        ?.find((entry) => entry.includes('Technical Fixture 0'));
+      assert.ok(card);
+      if (count) {
+        assert.match(
+          card,
+          new RegExp(`data-job-visitors[^>]*>${count}<!-- -->`),
+        );
+      } else {
+        assert.doesNotMatch(card, /data-job-visitors/);
+      }
+    }
+    await assertVisitors(newestWithFixture, 6);
+    await assertVisitors(popularWithFixture, 6);
     await fetch(apiOrigin + '/api/jobs/popular-00');
     const detailKeys = await redis.keys('hodivo:jobs:detail:v1:*');
     const newestKeys = await redis.keys('hodivo:jobs:listing:v1:*');
@@ -1069,8 +1090,9 @@ test(
     const unrelatedEntries = await redis.mGet([...detailKeys, ...newestKeys]);
 
     const changed = structuredClone(rows);
-    changed[1].visitors = 7;
-    assert.equal(await refreshJobVisitors(redis, config, fixture(changed)), 1);
+    changed[0].visitors = 7;
+    changed[1].visitors = 8;
+    assert.equal(await refreshJobVisitors(redis, config, fixture(changed)), 2);
     assert.notEqual(
       await redis.hGet(JOB_VISITORS_KEY, '_revision'),
       first._revision,
@@ -1079,6 +1101,39 @@ test(
       await redis.mGet([...detailKeys, ...newestKeys]),
       unrelatedEntries,
     );
+    queries.length = 0;
+    await assertVisitors(newestWithFixture, 7);
+    assert.deepEqual(queries, [], 'warm Next.js listing must avoid PostgreSQL');
+    await assertVisitors(popularWithFixture, 7);
+    if (process.env.APTUS_TEST_JOB_VISITOR_BROWSER === '1') {
+      const { chromium, expect } = await import('playwright/test');
+      const browser = await chromium.launch({
+        channel: process.env.APTUS_TEST_CHROMIUM_CHANNEL,
+      });
+      try {
+        const page = await browser.newPage();
+        for (const width of [375, 768, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          for (const url of [newestWithFixture, popularWithFixture]) {
+            await page.goto(url);
+            const card = page.locator('[data-job-card]').filter({
+              has: page.getByRole('heading', { name: 'Technical Fixture 0' }),
+            });
+            const label = card.getByText('7 visitors in the last 7 days', {
+              exact: true,
+            });
+            await expect(label).toBeVisible();
+            const bounds = await label.boundingBox();
+            assert.ok(
+              bounds && bounds.x >= 0 && bounds.x + bounds.width <= width,
+            );
+          }
+        }
+      } finally {
+        await browser.close();
+      }
+    }
+
     const updated = await (
       await fetch(frontend.origin + '/?sort=popular')
     ).text();
@@ -1143,7 +1198,15 @@ test(
       String(Date.now() - 3_600_000),
     );
     assert.deepEqual((await read('sort=popular&pageSize=10')).ids, newest.ids);
+    await assertVisitors(newestWithFixture, 0);
+    await assertVisitors(popularWithFixture, 0);
+    await redis.hSet(JOB_VISITORS_KEY, '_refreshedAt', String(Date.now()));
+    await redis.sendCommand(['CLIENT', 'PAUSE', '500', 'ALL']);
+    await assertVisitors(newestWithFixture, 0);
+    await redis.ping();
+    await assertVisitors(newestWithFixture, 7);
     await redis.del(JOB_VISITORS_KEY);
+    await assertVisitors(newestWithFixture, 0);
     assert.deepEqual((await read('sort=popular&pageSize=10')).ids, newest.ids);
   },
 );

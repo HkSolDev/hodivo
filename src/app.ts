@@ -78,6 +78,7 @@ export function buildApp(
     database,
     publicJobsCache?.readDetail,
     publicJobsCache?.readListing,
+    publicJobsCache?.readVisitorCounts,
   );
   registerTypingPracticeRoutes(app, typingDatabase);
   registerTypingExamRoutes(app, examCatalogue);
