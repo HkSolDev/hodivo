@@ -5,16 +5,18 @@ import {
   getPassageComparisonSummary,
   listUserTypingHistory,
   parseAttemptInput,
-  saveTypingAttempt,
   TYPING_ID_REGEX,
   TypingAttemptError,
-  type TypingAttemptsDatabase,
 } from '../lib/typing-attempts.js';
+import {
+  saveAttemptAndRefreshBoard,
+  type TypingAttemptWriteDatabase,
+} from '../lib/typing-leaderboard.js';
 
 export function registerTypingAttemptsRoutes(
   app: FastifyInstance,
   auth: AppAuth | null,
-  db?: TypingAttemptsDatabase,
+  db?: TypingAttemptWriteDatabase,
 ): void {
   const sessionGuard = auth
     ? requireSession(auth)
@@ -37,7 +39,7 @@ export function registerTypingAttemptsRoutes(
       }
       try {
         const input = parseAttemptInput(request.body);
-        const result = await saveTypingAttempt(authUserId, input, db);
+        const result = await saveAttemptAndRefreshBoard(authUserId, input, db);
         return reply.code(201).send(result);
       } catch (error) {
         if (error instanceof TypingAttemptError) {

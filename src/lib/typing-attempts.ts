@@ -1,3 +1,4 @@
+import { readTypingAttemptCache } from './typing-passage-cache.js';
 import { prisma } from '../db.js';
 import type {
   PrismaClient,
@@ -77,7 +78,7 @@ export class TypingAttemptError extends Error {
 
 export type TypingAttemptsDatabase = Pick<
   PrismaClient,
-  'typingAttempt' | 'typingPassage' | 'typingExamVersion'
+  'typingAttempt' | 'typingPassage' | 'typingExamVersion' | '$queryRaw'
 >;
 
 function isFiniteInRange(
@@ -349,20 +350,28 @@ export async function getPassageComparisonSummary(
   passageId: string,
   db: TypingAttemptsDatabase = prisma,
 ): Promise<PassageSummaryResponse> {
-  const passage = await db.typingPassage.findUnique({
-    where: { id: passageId },
-    select: { id: true, status: true },
-  });
-  if (!passage || passage.status !== 'PUBLISHED') {
-    throw new TypingAttemptError('Passage not found.', 404);
-  }
+  return readTypingAttemptCache(
+    db,
+    passageId,
+    'progress',
+    authUserId,
+    async () => {
+      const passage = await db.typingPassage.findUnique({
+        where: { id: passageId },
+        select: { id: true, status: true },
+      });
+      if (!passage || passage.status !== 'PUBLISHED') {
+        throw new TypingAttemptError('Passage not found.', 404);
+      }
 
-  const breakdown = await loadModeBreakdown(authUserId, passageId, db);
-  return {
-    passageId: passage.id,
-    practice: breakdown.practice,
-    exam: breakdown.exam,
-  };
+      const breakdown = await loadModeBreakdown(authUserId, passageId, db);
+      return {
+        passageId: passage.id,
+        practice: breakdown.practice,
+        exam: breakdown.exam,
+      };
+    },
+  );
 }
 
 export async function listUserTypingHistory(

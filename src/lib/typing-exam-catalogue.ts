@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { prisma } from '../db.js';
+import { getPracticePassage } from './typing-catalogue.js';
 import {
   Prisma,
   type PrismaClient,
@@ -194,28 +195,29 @@ async function eligiblePassage(
   tx: Prisma.TransactionClient,
   versionId: string,
   passageId?: string,
-): Promise<ExamStartSnapshot['passage'] | null> {
+): Promise<Omit<ExamStartSnapshot['passage'], 'text'> | null> {
   // shortcut: random sorting suits a small catalogue; measure before 10000 published passages.
-  const rows = await tx.$queryRaw<ExamStartSnapshot['passage'][]>`
-    SELECT p."id", p."title", p."text", p."contentHash", p."revision", p."sourceKind", p."sourceUrl", p."sourceNote"
+  const rows = await tx.$queryRaw<Omit<ExamStartSnapshot['passage'], 'text'>[]>`
+    SELECT p."id", p."title", p."contentHash", p."revision", p."sourceKind", p."sourceUrl", p."sourceNote"
     FROM "TypingPassage" p
     WHERE ${eligiblePassageWhere(versionId, passageId)}
     ORDER BY random() LIMIT 1
   `;
-  const passage = rows[0] ?? null;
-  if (
-    passage &&
-    createHash('sha256').update(passage.text).digest('hex') !==
-      passage.contentHash
-  )
-    throw new Error('Invalid passage hash.');
-  return passage;
+  return rows[0] ?? null;
 }
 
 export function createExamCatalogue(
   database: PrismaClient = prisma,
 ): ExamCatalogue {
-  async function read(versionId: string, passageId?: string) {
+  function read<T>(
+    versionId: string,
+    passageId: string | undefined,
+    project: (
+      version: ExamVersionDetail,
+      passage: Awaited<ReturnType<typeof eligiblePassage>>,
+      tx: Prisma.TransactionClient,
+    ) => T | Promise<T>,
+  ) {
     return database.$transaction(
       async (tx) => {
         const version = await tx.typingExamVersion.findFirst({
@@ -223,7 +225,7 @@ export function createExamCatalogue(
         });
         if (!version) throw new ExamCatalogueError('NOT_FOUND');
         const passage = await eligiblePassage(tx, versionId, passageId);
-        return { version: versionDetail(version, passage !== null), passage };
+        return project(versionDetail(version, passage !== null), passage, tx);
       },
       { isolationLevel: 'RepeatableRead', timeout: 5000 },
     );
@@ -275,7 +277,7 @@ export function createExamCatalogue(
       return page(rows.map(versionSummary), limit);
     },
     async getVersion(versionId) {
-      return (await read(versionId)).version;
+      return read(versionId, undefined, (version) => version);
     },
     async listPassages(versionId) {
       const version = await database.typingExamVersion.findFirst({
@@ -291,13 +293,27 @@ export function createExamCatalogue(
       `;
     },
     async getSnapshot(versionId, passageId) {
-      const { version, passage } = await read(versionId, passageId);
-      if (!version.readiness.canStart || !passage)
-        throw new ExamCatalogueError(
-          'EXAM_NOT_READY',
-          version.readiness.reasons,
-        );
-      return { contractRevision: 'exam-v1', version, passage };
+      return read(versionId, passageId, async (version, passage, tx) => {
+        if (!version.readiness.canStart || !passage)
+          throw new ExamCatalogueError(
+            'EXAM_NOT_READY',
+            version.readiness.reasons,
+          );
+
+        // Read the shared key using the same snapshot as Exam's eligibility check.
+        const content = await getPracticePassage(passage.id, tx);
+        if (
+          !content ||
+          createHash('sha256').update(content.text).digest('hex') !==
+            passage.contentHash
+        )
+          throw new Error('Invalid passage hash.');
+        return {
+          contractRevision: 'exam-v1',
+          version,
+          passage: { ...passage, text: content.text },
+        };
+      });
     },
   };
 }

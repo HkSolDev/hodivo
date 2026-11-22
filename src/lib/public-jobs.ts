@@ -38,8 +38,9 @@ export function listPublicJobs(
   pageSize: number,
   filters?: JobFilters,
   database: typeof prisma = prisma,
+  now = new Date(),
 ) {
-  const conditions: Prisma.PostWhereInput[] = [activeApplicationWhere()];
+  const conditions: Prisma.PostWhereInput[] = [activeApplicationWhere(now)];
   if (filters?.q) {
     const keyword = filters.q.replace(/[\\%_]/g, '\\$&');
     conditions.push({

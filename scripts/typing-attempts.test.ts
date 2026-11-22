@@ -222,19 +222,47 @@ test('saveTypingAttempt + summary compare Practice and Exam on the same passageI
   assert.equal(page2.nextCursor, null);
 });
 
-test('practice-passage/:passageId route returns passage, 404, 400, and 503', async (t) => {
+test('practice-passages/:passageId route returns passage, 404, 400, and 503', async (t) => {
   const app = Fastify();
   let fail = false;
-  registerTypingPracticeRoutes(
-    app,
-    async () => null,
-    async (passageId) => {
+  registerTypingPracticeRoutes(app, async () => null, {
+    $queryRaw: async (_query: unknown, ...args: unknown[]) => {
       if (fail) throw new Error('db down');
-      return passageId === 'pass1'
-        ? { id: 'pass1', title: 'Passage 1', text: 'Hello world.' }
-        : null;
+      return args.at(-1) === 'pass1'
+        ? [{ id: 'pass1', title: 'Passage 1', text: 'Hello world.' }]
+        : [];
     },
-  );
+  } as unknown as Parameters<typeof registerTypingPracticeRoutes>[2]);
+  t.after(() => app.close());
+
+  let res = await app.inject('/api/typing/practice-passages/pass1');
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), {
+    passage: { id: 'pass1', title: 'Passage 1', text: 'Hello world.' },
+  });
+
+  res = await app.inject('/api/typing/practice-passages/missing1');
+  assert.equal(res.statusCode, 404);
+
+  res = await app.inject('/api/typing/practice-passages/BAD-ID!');
+  assert.equal(res.statusCode, 400);
+
+  fail = true;
+  res = await app.inject('/api/typing/practice-passages/pass1');
+  assert.equal(res.statusCode, 503);
+});
+
+test('legacy practice-passage/:passageId route returns passage, 404, 400, and 503', async (t) => {
+  const app = Fastify();
+  let fail = false;
+  registerTypingPracticeRoutes(app, async () => null, {
+    $queryRaw: async (_query: unknown, ...args: unknown[]) => {
+      if (fail) throw new Error('db down');
+      return args.at(-1) === 'pass1'
+        ? [{ id: 'pass1', title: 'Passage 1', text: 'Hello world.' }]
+        : [];
+    },
+  } as unknown as Parameters<typeof registerTypingPracticeRoutes>[2]);
   t.after(() => app.close());
 
   let res = await app.inject('/api/typing/practice-passage/pass1');

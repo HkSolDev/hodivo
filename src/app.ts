@@ -1,9 +1,10 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { registerTypingPracticeRoutes } from './routes/typing-practice.js';
-import { registerTypingExamRoutes } from './routes/typing-exams.js';
 import { registerTypingAttemptsRoutes } from './routes/typing-attempts.js';
 import { registerTypingLeaderboardRoutes } from './routes/typing-leaderboard.js';
+import { registerTypingExamRoutes } from './routes/typing-exams.js';
 import { registerHealthRoute } from './routes/health.js';
+import { createPublicJobsCache } from './lib/public-jobs-cache.js';
 import { registerPublicRoutes } from './routes/public.js';
 import { handleMatch } from './routes/match.js';
 import { handleExplain } from './routes/explain.js';
@@ -63,7 +64,21 @@ export function buildApp(
   });
 
   registerHealthRoute(app);
-  registerPublicRoutes(app, database);
+  const publicJobsCache = env.JOBS_REDIS_URL
+    ? createPublicJobsCache(env.JOBS_REDIS_URL)
+    : undefined;
+  if (publicJobsCache) {
+    app.addHook('onClose', (_app, done) => {
+      publicJobsCache.close();
+      done();
+    });
+  }
+  registerPublicRoutes(
+    app,
+    database,
+    publicJobsCache?.readDetail,
+    publicJobsCache?.readListing,
+  );
   registerTypingPracticeRoutes(app, typingDatabase);
   registerTypingExamRoutes(app, examCatalogue);
   const config = auth ? null : readAuthConfig(env);
@@ -110,7 +125,7 @@ export function buildApp(
   app.post<{ Body: Parameters<typeof handleIngest>[0]['body'] }>(
     '/api/internal/ingest',
     { ...options, onRequest: requireIngestToken(env) },
-    handleIngest,
+    (request, reply) => handleIngest(request, reply, env),
   );
   return app;
 }

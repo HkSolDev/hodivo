@@ -12,6 +12,7 @@ import { registerTypingLeaderboardRoutes } from '../src/routes/typing-leaderboar
 function createFakeLeaderboardDb(): TypingLeaderboardDatabase {
   const attempts = [
     {
+      id: 'attempt0',
       authUserId: 'u1',
       netWpm: 42,
       accuracy: 96,
@@ -21,6 +22,7 @@ function createFakeLeaderboardDb(): TypingLeaderboardDatabase {
       authUser: { name: 'Aarav' },
     },
     {
+      id: 'attempt1',
       authUserId: 'u1',
       netWpm: 35,
       accuracy: 92,
@@ -30,6 +32,7 @@ function createFakeLeaderboardDb(): TypingLeaderboardDatabase {
       authUser: { name: 'Aarav' },
     },
     {
+      id: 'attempt2',
       authUserId: 'u2',
       netWpm: 48,
       accuracy: 98,
