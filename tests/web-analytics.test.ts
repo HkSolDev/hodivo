@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { publicPageView } from '../components/layout/web-analytics';
+import {
+  publicPageView,
+  publicTelemetryEvent,
+} from '../components/layout/web-analytics';
 
 test('analytics strips query and fragment from public page views', () => {
   assert.deepEqual(
@@ -26,4 +29,23 @@ test('analytics drops private page views', () => {
       null,
     );
   }
+});
+
+test('speed insights sanitizes public vitals and drops private vitals', () => {
+  const vital = {
+    type: 'vital',
+    route: '/jobs/[id]',
+    url: 'https://example.test/jobs/fixture',
+  };
+  assert.deepEqual(
+    publicTelemetryEvent({ ...vital, url: vital.url + '?q=fixture#fragment' }),
+    vital,
+  );
+  assert.equal(
+    publicTelemetryEvent({
+      ...vital,
+      url: 'https://example.test/typing/progress',
+    }),
+    null,
+  );
 });
