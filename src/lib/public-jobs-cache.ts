@@ -2,6 +2,7 @@ import { clearTimeout, setTimeout } from 'node:timers';
 import { createClient } from 'redis';
 import { prisma } from '../db.js';
 import { getPublicJob, listPublicJobs } from './public-jobs.js';
+import { JOB_VISITORS_KEY, readJobVisitors } from './job-visitors.js';
 import { indiaDateKey } from '../../frontend/india-date.js';
 
 export function createPublicJobsCache(url: string) {
@@ -79,14 +80,21 @@ export function createPublicJobsCache(url: string) {
     database = prisma,
     now = new Date(),
   ) {
-    const load = () => listPublicJobs(page, pageSize, filters, database, now);
+    const popular = filters?.sort === 'popular';
+    const fields =
+      popular && redis.isReady
+        ? await withDeadline(redis.hGetAll(JOB_VISITORS_KEY))
+        : undefined;
+    const snapshot = fields && readJobVisitors(fields, now.getTime());
+    const load = () =>
+      listPublicJobs(page, pageSize, filters, database, now, snapshot?.counts);
     if (
       !redis.isReady ||
       page !== 1 ||
       (pageSize !== 10 && pageSize !== 30) ||
-      filters?.sort !== 'newest' ||
-      filters.q ||
-      filters.qualification
+      (filters?.sort !== 'newest' && !snapshot) ||
+      filters?.q ||
+      filters?.qualification
     )
       return load();
 
@@ -100,7 +108,9 @@ export function createPublicJobsCache(url: string) {
     const revision = await version().catch(() => undefined);
     if (!revision) return load();
     const date = indiaDateKey(now);
-    const key = `hodivo:jobs:listing:v1:${date}:${pageSize}:${revision}`;
+    const key = snapshot
+      ? `hodivo:jobs:popular:v1:${date}:${pageSize}:${revision}:${snapshot.revision}`
+      : `hodivo:jobs:listing:v1:${date}:${pageSize}:${revision}`;
     const stored = await withDeadline(redis.get(key));
     if (stored) {
       try {
@@ -120,7 +130,12 @@ export function createPublicJobsCache(url: string) {
     ) {
       await withDeadline(
         redis.set(key, JSON.stringify(jobs), {
-          expiration: { type: 'PXAT', value: nextIndiaMidnight },
+          expiration: {
+            type: 'PXAT',
+            value: snapshot
+              ? Math.min(nextIndiaMidnight, Date.now() + 3_600_000)
+              : nextIndiaMidnight,
+          },
         }),
       );
     }

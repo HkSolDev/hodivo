@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
+import { isSafeJobId } from '../../frontend/job-id';
 import { splitQualificationPoints } from '../../lib/jobs/format-qualification';
 import type { JobDetailData } from './job-detail-content';
+
+export { isSafeJobId };
 
 export const DEFAULT_PRODUCTION_ORIGIN = 'https://hodivo.app';
 
@@ -14,8 +17,6 @@ export const HOW_IT_WORKS_SEO_TITLE = 'How It Works';
 
 export const HOW_IT_WORKS_SEO_DESCRIPTION =
   'Understand how Hodivo matches government job notifications, what eligibility details are compared, and what to verify in the official recruitment notice before applying.';
-
-const SAFE_JOB_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 
 function isLocalhostHost(hostname: string): boolean {
   const lower = hostname.toLowerCase();
@@ -98,10 +99,6 @@ export function trustedPublicOrigin(
   } catch {
     return options.fallbackOrigin;
   }
-}
-
-export function isSafeJobId(id: string): boolean {
-  return SAFE_JOB_ID_PATTERN.test(id.trim());
 }
 
 export function jobShareUrl(id: string, origin: string): string {
