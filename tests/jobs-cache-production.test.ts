@@ -898,3 +898,252 @@ test('production standalone execution path cache regression', async (t) => {
     },
   );
 });
+
+test(
+  'Popular ranks all matching jobs and serves revisable Redis results',
+  {
+    skip: process.env.APTUS_TEST_POPULAR_JOBS !== '1',
+  },
+  async (t) => {
+    const databaseUrl = new URL(process.env.DATABASE_URL ?? '');
+    assert.equal(databaseUrl.hostname, '127.0.0.1');
+    assert.equal(databaseUrl.pathname, '/aptus_preparation_test');
+    assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
+    const redisUrl = new URL(process.env.JOBS_REDIS_URL ?? '');
+    assert.equal(redisUrl.hostname, '127.0.0.1');
+    const { createClient } = await import('redis');
+    const { prisma } = await import('../src/db.js');
+    const { PrismaPg } = await import('@prisma/adapter-pg');
+    const { PrismaClient } = await import('../generated/prisma/index.js');
+    const database = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: databaseUrl.href }),
+      log: [{ level: 'query', emit: 'event' }],
+    });
+    t.after(() => database.$disconnect());
+    const queries: string[] = [];
+    database.$on('query', ({ query }) => queries.push(query));
+    const { buildApp } = await import('../src/app.js');
+    const { refreshJobVisitors, JOB_VISITORS_KEY } =
+      await import('../src/lib/job-visitors.js');
+    const redis = await createClient({ url: redisUrl.href }).connect();
+    t.after(() => redis.destroy());
+    t.after(() => prisma.$disconnect());
+    assert.equal(await prisma.post.count(), 0);
+    assert.equal(await redis.exists(JOB_VISITORS_KEY), 0);
+
+    const source = await prisma.source.create({
+      data: {
+        url: 'https://example.org/popular-fixture',
+        name: 'Fixture Jobs',
+      },
+    });
+    const instant = new Date();
+    const today = indiaDateKey(instant);
+    await prisma.post.createMany({
+      data: Array.from({ length: 12 }, (_, index) => ({
+        id: `popular-${String(index).padStart(2, '0')}`,
+        sourceId: source.id,
+        postName:
+          index < 3 ? `Technical Fixture ${index}` : `General Fixture ${index}`,
+        publishedAt: new Date(instant.getTime() - (20 - index) * 60_000),
+        minEducationLevel: index === 2 ? 'TENTH' : 'BACHELORS',
+        applicationLastDate:
+          index === 11 ? new Date(`${today}T00:00:00Z`) : null,
+      })),
+    });
+    await prisma.post.update({
+      where: { id: 'popular-02' },
+      data: { publishedAt: new Date(instant.getTime() - 19 * 60_000) },
+    });
+
+    const config = {
+      teamId: 'fixture-team',
+      projectId: 'fixture-project',
+      token: 'fixture',
+    };
+    const rows = Array.from({ length: 11 }, (_, index) => ({
+      requestPath: `/jobs/popular-${String(index).padStart(2, '0')}`,
+      visitors: [6, 3, 3][index] ?? 0,
+      pageviews: [6, 7, 3][index] ?? 1,
+    }));
+    const fixture =
+      (data = rows): typeof fetch =>
+      async (input) => {
+        const url = new URL(String(input));
+        assert.equal(url.pathname, '/v1/query/web-analytics/visits/aggregate');
+        assert.equal(url.searchParams.get('by'), 'requestPath');
+        assert.equal(
+          url.searchParams.get('filter'),
+          "startswith(requestPath,'/jobs/')",
+        );
+        assert.equal(
+          Date.parse(url.searchParams.get('until')!) -
+            Date.parse(url.searchParams.get('since')!),
+          7 * 86_400_000,
+        );
+        return Response.json({ data });
+      };
+    assert.equal(await refreshJobVisitors(redis, config, fixture()), 11);
+    const first = await redis.hGetAll(JOB_VISITORS_KEY);
+    assert.equal(await refreshJobVisitors(redis, config, fixture()), 0);
+    assert.equal(
+      await redis.hGet(JOB_VISITORS_KEY, '_revision'),
+      first._revision,
+    );
+    assert.ok((await redis.pTTL(JOB_VISITORS_KEY)) > 3_590_000);
+
+    const api = buildApp(
+      undefined,
+      {
+        ...process.env,
+        JOBS_REDIS_URL: redisUrl.href,
+      },
+      database,
+    );
+    t.after(() => api.close());
+    const apiOrigin = await api.listen({ host: '127.0.0.1', port: 0 });
+    const frontend = await startStandaloneServer({
+      BACKEND_INTERNAL_URL: apiOrigin,
+    });
+    t.after(() => frontend.stop());
+    const read = async (query: string) => {
+      const started = performance.now();
+      const response = await api.inject({
+        method: 'GET',
+        url: `/api/jobs?${query}`,
+      });
+      assert.equal(response.statusCode, 200);
+      const { data } = response.json<{ data: FixtureJob[] }>();
+      return {
+        ids: data.map(({ id }) => id),
+        elapsed: performance.now() - started,
+      };
+    };
+    const newest = await read('pageSize=10');
+    assert.equal(newest.ids[0], 'popular-11');
+    assert.ok(!newest.ids.includes('popular-00'));
+    const cold = await read('sort=popular&pageSize=10');
+    assert.deepEqual(cold.ids.slice(0, 3), [
+      'popular-00',
+      'popular-01',
+      'popular-02',
+    ]);
+    assert.deepEqual((await read('sort=popular&pageSize=10&page=2')).ids, [
+      'popular-04',
+      'popular-03',
+    ]);
+    assert.deepEqual(
+      (
+        await read(
+          'sort=popular&q=Technical&qualification=BACHELORS&pageSize=1&page=2',
+        )
+      ).ids,
+      ['popular-01'],
+    );
+    const [popularKey] = await redis.keys('hodivo:jobs:popular:v1:*');
+    assert.ok(popularKey);
+    const ttl = await redis.pTTL(popularKey);
+    await setTimeout(25);
+    queries.length = 0;
+    const warm = await read('sort=popular&pageSize=10');
+    assert.deepEqual(warm.ids, cold.ids);
+    assert.equal(queries.length, 1);
+    assert.match(queries[0], /JobsListingRevision/);
+    assert.ok(
+      (await redis.pTTL(popularKey)) < ttl,
+      'warm read must not rewrite cache',
+    );
+    t.diagnostic(
+      `Fastify cold ${cold.elapsed.toFixed(1)}ms, warm ${warm.elapsed.toFixed(1)}ms`,
+    );
+
+    const html = await (await fetch(frontend.origin + '/?sort=popular')).text();
+    assert.match(html, /<option value="popular" selected="">Popular<\/option>/);
+    assert.ok(
+      html.indexOf('Technical Fixture 0') < html.indexOf('Technical Fixture 1'),
+    );
+    await fetch(apiOrigin + '/api/jobs/popular-00');
+    const detailKeys = await redis.keys('hodivo:jobs:detail:v1:*');
+    const newestKeys = await redis.keys('hodivo:jobs:listing:v1:*');
+    assert.ok(detailKeys.length && newestKeys.length);
+    const unrelatedEntries = await redis.mGet([...detailKeys, ...newestKeys]);
+
+    const changed = structuredClone(rows);
+    changed[1].visitors = 7;
+    assert.equal(await refreshJobVisitors(redis, config, fixture(changed)), 1);
+    assert.notEqual(
+      await redis.hGet(JOB_VISITORS_KEY, '_revision'),
+      first._revision,
+    );
+    assert.deepEqual(
+      await redis.mGet([...detailKeys, ...newestKeys]),
+      unrelatedEntries,
+    );
+    const updated = await (
+      await fetch(frontend.origin + '/?sort=popular')
+    ).text();
+    assert.ok(
+      updated.indexOf('Technical Fixture 1') <
+        updated.indexOf('Technical Fixture 0'),
+    );
+    await prisma.post.update({
+      where: { id: 'popular-01' },
+      data: { postName: 'Updated Technical Fixture 1' },
+    });
+    assert.match(
+      await (await fetch(frontend.origin + '/?sort=popular')).text(),
+      /Updated Technical Fixture 1/,
+    );
+
+    const stored = await redis.hGetAll(JOB_VISITORS_KEY);
+    for (const request of [
+      async () => new Response(null, { status: 429 }),
+      async () => {
+        throw new DOMException('fixture timeout', 'TimeoutError');
+      },
+      fixture([{ ...rows[0], requestPath: 'Others' }]),
+      fixture([{ ...rows[0], visitors: -1 }]),
+    ]) {
+      await assert.rejects(refreshJobVisitors(redis, config, request));
+      assert.deepEqual(await redis.hGetAll(JOB_VISITORS_KEY), stored);
+    }
+
+    const { promise, resolve } = Promise.withResolvers<Response>();
+    const older = refreshJobVisitors(redis, config, () => promise);
+    await setTimeout(10);
+    changed[1].visitors = 2;
+    changed.splice(2, 1);
+    assert.equal(await refreshJobVisitors(redis, config, fixture(changed)), 2);
+    resolve(Response.json({ data: rows }));
+    assert.equal(await older, null);
+    assert.equal(await redis.hGet(JOB_VISITORS_KEY, 'popular-01'), '2');
+    assert.equal(await redis.hGet(JOB_VISITORS_KEY, 'popular-02'), null);
+
+    changed.push({
+      requestPath: '/jobs/popular-11',
+      visitors: 100,
+      pageviews: 100,
+    });
+    assert.equal(await refreshJobVisitors(redis, config, fixture(changed)), 1);
+    assert.equal((await read('sort=popular&pageSize=10')).ids[0], 'popular-11');
+    const midnight = Date.parse(`${today}T18:30:00Z`);
+    // Keep the snapshot usable so the date check exercises Popular, not fallback.
+    await redis.hSet(JOB_VISITORS_KEY, '_refreshedAt', String(midnight - 1000));
+    t.mock.timers.enable({ apis: ['Date'], now: midnight });
+    try {
+      const rollover = await read('sort=popular&pageSize=10');
+      assert.equal(rollover.ids[0], 'popular-00');
+      assert.ok(!rollover.ids.includes('popular-11'));
+    } finally {
+      t.mock.timers.reset();
+    }
+    await redis.hSet(
+      JOB_VISITORS_KEY,
+      '_refreshedAt',
+      String(Date.now() - 3_600_000),
+    );
+    assert.deepEqual((await read('sort=popular&pageSize=10')).ids, newest.ids);
+    await redis.del(JOB_VISITORS_KEY);
+    assert.deepEqual((await read('sort=popular&pageSize=10')).ids, newest.ids);
+  },
+);

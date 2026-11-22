@@ -85,7 +85,7 @@ type FreshnessMarkable = { freshnessUnconfirmed?: boolean };
 async function fetchFreshJobs<T extends FreshnessMarkable>(
   cacheKey: string,
   backendUrl: string,
-  generation: number,
+  generation?: number,
 ): Promise<T | null> {
   try {
     const res = await fetch(`${backendUrl}/api/jobs?${cacheKey}`, {
@@ -99,7 +99,8 @@ async function fetchFreshJobs<T extends FreshnessMarkable>(
     }
     return result;
   } catch {
-    const cached = jobsCache.get(cacheKey);
+    const cached =
+      generation === undefined ? undefined : jobsCache.get(cacheKey);
     return cached
       ? { ...(cached.result as T), freshnessUnconfirmed: true }
       : null;
@@ -121,6 +122,9 @@ export async function fetchPublicJobsCached<T extends FreshnessMarkable>(
   // The API ignores istDate; it exists so IST rollover keys fresh entries.
   params.set('istDate', indiaDateKey());
   const cacheKey = params.toString();
+  // Fastify owns Popular freshness because it can see the analytics revision.
+  if (filters.sort === 'popular')
+    return fetchFreshJobs<T>(cacheKey, backendUrl);
   const entry = jobsCache.get(cacheKey);
   const ttlSeconds = getJobsRevalidateSeconds();
   if (entry && Date.now() - entry.fetchedAt < ttlSeconds * 1000) {

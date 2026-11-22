@@ -10,7 +10,7 @@ export const JOB_QUALIFICATIONS = [
 export interface JobFilters {
   q: string;
   qualification: (typeof JOB_QUALIFICATIONS)[number]['value'] | '';
-  sort: 'newest' | 'soonest' | 'furthest';
+  sort: 'newest' | 'popular' | 'soonest' | 'furthest';
 }
 
 export function readJobFilters(params: URLSearchParams): JobFilters | null {
@@ -28,7 +28,12 @@ export function readJobFilters(params: URLSearchParams): JobFilters | null {
       ?.value ?? '';
   if (rawQualification && !qualification) return null;
   const sort = params.get('sort') ?? 'newest';
-  if (sort !== 'newest' && sort !== 'soonest' && sort !== 'furthest')
+  if (
+    sort !== 'newest' &&
+    sort !== 'popular' &&
+    sort !== 'soonest' &&
+    sort !== 'furthest'
+  )
     return null;
   return { q, qualification, sort };
 }
