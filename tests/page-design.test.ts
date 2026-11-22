@@ -67,7 +67,9 @@ test('review-only recommendation, saved, and profile pages fit mobile, tablet an
   try {
     await serverOnlyPage.goto(`${origin}/results`);
     await expect(
-      serverOnlyPage.getByRole('searchbox', { name: 'Search recommended jobs' }),
+      serverOnlyPage.getByRole('searchbox', {
+        name: 'Search recommended jobs',
+      }),
     ).toBeDisabled();
   } finally {
     await serverOnlyPage.close();

@@ -97,7 +97,11 @@ export function RecommendationsPreview({
 }: {
   savedJobs?: PublicJobItem[];
 }) {
-  const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot);
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    clientSnapshot,
+    serverSnapshot,
+  );
   const savedView = savedJobs !== undefined;
   const review = useDesignReview();
   const scope = savedView ? 'saved' : 'recommendations';
