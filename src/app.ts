@@ -106,7 +106,7 @@ export function buildApp(
   app.post<{ Body: Parameters<typeof handleIngest>[0]['body'] }>(
     '/api/internal/ingest',
     { ...options, onRequest: requireIngestToken(env) },
-    handleIngest,
+    (request, reply) => handleIngest(request, reply, env),
   );
   return app;
 }

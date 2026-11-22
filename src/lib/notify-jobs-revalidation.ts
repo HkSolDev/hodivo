@@ -1,22 +1,22 @@
-// Best-effort cache notification after a publication has committed.
-// The publication has already succeeded when this runs: a failed or
-// unconfigured notification is logged and swallowed, never reported as a
-// publication failure. Retrying is safe because the receiver only
-// re-marks the shared jobs tag stale and re-warms page-one entries.
+// Delivery runs after commit. Both revalidation operations can be retried.
 export async function notifyJobsRevalidated(
   env: NodeJS.ProcessEnv = process.env,
-): Promise<void> {
+  jobId?: string,
+): Promise<boolean> {
   const url = env.FRONTEND_REVALIDATE_URL;
   const token = env.INGEST_TOKEN;
-  if (!url || !token) return;
+  if (!url || !token) return false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const response = await fetch(url, {
+      const endpoint = new URL(url);
+      if (jobId !== undefined) endpoint.searchParams.set('jobId', jobId);
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(3000),
+        // Bulk refresh also waits for three list fetches.
+        signal: AbortSignal.timeout(jobId === undefined ? 15_000 : 3_000),
       });
-      if (response.ok) return;
+      if (response.ok) return true;
       console.error(
         `jobs revalidation notification failed with ${response.status}`,
       );
@@ -24,4 +24,5 @@ export async function notifyJobsRevalidated(
       console.error('jobs revalidation notification failed');
     }
   }
+  return false;
 }

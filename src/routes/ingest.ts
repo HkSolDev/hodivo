@@ -58,13 +58,14 @@ interface IngestRequestBody {
 export async function handleIngest(
   req: FastifyRequest<{ Body: IngestRequestBody }>,
   res: FastifyReply,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   try {
     const body = req.body ?? {};
 
     if (body.kind === 'autonomous_notice') {
       try {
-        sendJson(res, 200, await ingestAutonomousNotice(body));
+        sendJson(res, 200, await ingestAutonomousNotice(body, prisma, env));
       } catch (error) {
         sendJson(res, error instanceof AutonomousIngestError ? 400 : 503, {
           error: 'Autonomous publication rejected',
@@ -77,7 +78,7 @@ export async function handleIngest(
       try {
         const published = await ingestReviewedCandidate(body);
         // Publication has committed; cache refresh is best-effort after it.
-        await notifyJobsRevalidated();
+        await notifyJobsRevalidated(env);
         sendJson(res, 200, published);
       } catch (error) {
         // Safe to resend the identical approved draft after transient failures.
@@ -270,7 +271,7 @@ export async function handleIngest(
       prisma.post.createMany({ data: toCreate }),
     ]);
 
-    await notifyJobsRevalidated();
+    await notifyJobsRevalidated(env);
     sendJson(res, 200, {
       sourceId: source.id,
       created: toCreate.length,

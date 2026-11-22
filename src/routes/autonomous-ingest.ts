@@ -9,6 +9,7 @@ import {
 } from '../../scripts/store-extraction-candidate.js';
 import { validatePost } from '../../scripts/validate-post.js';
 import { prisma } from '../db.js';
+import { notifyJobsRevalidated } from '../lib/notify-jobs-revalidation.js';
 
 export class AutonomousIngestError extends Error {}
 
@@ -285,6 +286,7 @@ function buildPostDataFromDetails(
 export async function ingestAutonomousNotice(
   input: unknown,
   database = prisma,
+  env: NodeJS.ProcessEnv = process.env,
 ) {
   if (!isRecord(input) || input.kind !== 'autonomous_notice') {
     throw new AutonomousIngestError('Invalid autonomous notice payload');
@@ -600,10 +602,17 @@ export async function ingestAutonomousNotice(
 
   const savedCandidate = await storeExtractionCandidate(envelope, database);
 
-  return database.$transaction(async (db) => {
+  const committed = await database.$transaction(async (db) => {
+    const priorSource = await db.source.findUnique({
+      where: { url: envelope.source_url },
+      select: { name: true },
+    });
     const source = await db.source.upsert({
       where: { url: envelope.source_url },
-      update: { name: envelope.source_name },
+      update:
+        priorSource?.name === envelope.source_name
+          ? {}
+          : { name: envelope.source_name },
       create: { url: envelope.source_url, name: envelope.source_name },
     });
 
@@ -621,6 +630,12 @@ export async function ingestAutonomousNotice(
     ).filter((item): item is Prisma.InputJsonObject => isRecord(item));
 
     const savedPostIds: string[] = [];
+    const sourceRenamed =
+      priorSource !== null && priorSource.name !== source.name;
+    const detailIds = new Set(
+      sourceRenamed ? existingPosts.map(({ id }) => id) : [],
+    );
+    let refreshListings = sourceRenamed;
     const rawPosts: unknown[] = Array.isArray(envelope.facts.posts)
       ? envelope.facts.posts
       : [];
@@ -643,15 +658,13 @@ export async function ingestAutonomousNotice(
           select: { id: true },
         });
         savedPostIds.push(created.id);
+        detailIds.add(created.id);
+        refreshListings = true;
         continue;
       }
 
       // Stronger later official evidence updates only supported non-null fields and records auditLineage
-      const updateData: Prisma.PostUncheckedUpdateInput = {
-        reviewedDetails: details,
-        reviewedAt: new Date(),
-        reviewNote: autoNote,
-      };
+      const updateData: Prisma.PostUncheckedUpdateInput = {};
 
       const recordFieldChange = (
         fieldPath: string,
@@ -755,12 +768,29 @@ export async function ingestAutonomousNotice(
         updateData.payLevel = createData.payLevel;
       }
 
+      const priorDetails = isRecord(priorPost.reviewedDetails)
+        ? priorPost.reviewedDetails
+        : null;
+      // Employment type is the only reviewed-details field in the list response.
+      if (
+        Object.keys(updateData).length > 0 ||
+        priorDetails?.employment_type !== details.employment_type
+      ) {
+        refreshListings = true;
+      }
+
       const updated = await db.post.update({
         where: { id: priorPost.id },
-        data: updateData,
+        data: {
+          ...updateData,
+          reviewedDetails: details,
+          reviewedAt: new Date(),
+          reviewNote: autoNote,
+        },
         select: { id: true },
       });
       savedPostIds.push(updated.id);
+      detailIds.add(updated.id);
     }
 
     const record = await db.automatedNoticeRecord.upsert({
@@ -826,6 +856,17 @@ export async function ingestAutonomousNotice(
       reused_existing: false,
       post_ids: savedPostIds,
       audit_lineage: computedLineage,
+      detailIds,
+      refreshListings,
     };
   });
+  const { detailIds, refreshListings, ...receipt } = committed;
+  const details = await Promise.all(
+    [...detailIds].map((id) => notifyJobsRevalidated(env, id)),
+  );
+  const listings = refreshListings ? await notifyJobsRevalidated(env) : true;
+  return {
+    ...receipt,
+    cache_refresh: details.every(Boolean) && listings ? 'ok' : 'failed',
+  };
 }

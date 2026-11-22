@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
+import { generateAutonomousPayloadFromPython } from './autonomous-notice-fixture.js';
 
 const STANDALONE_DIR = path.resolve(import.meta.dirname, '../.next/standalone');
 const INGEST_TOKEN = 'test-ingest-token-1234567890abcdef1234567890';
@@ -19,6 +20,166 @@ interface FixtureJob {
   educationRequired: string | null;
   publishedAt?: string;
 }
+
+test(
+  'committed job corrections refresh the production frontend at the right scope',
+  { skip: process.env.APTUS_TEST_JOB_EDIT_CACHE !== '1' },
+  async (t) => {
+    const databaseUrl = new URL(process.env.DATABASE_URL ?? '');
+    assert.equal(databaseUrl.hostname, '127.0.0.1');
+    assert.equal(databaseUrl.pathname, '/aptus_preparation_test');
+    assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
+    const { prisma } = await import('../src/db.js');
+    const { buildApp } = await import('../src/app.js');
+    assert.equal(
+      await prisma.post.count(),
+      0,
+      'Use a disposable empty database',
+    );
+    t.after(() => prisma.$disconnect());
+
+    const env: NodeJS.ProcessEnv = { INGEST_TOKEN };
+    const api = buildApp(undefined, env);
+    const reads: string[] = [];
+    api.addHook('onRequest', async (request) => {
+      if (request.method === 'GET' && request.url.startsWith('/api/jobs'))
+        reads.push(request.url.split('?')[0]!);
+    });
+    const apiOrigin = await api.listen({ host: '127.0.0.1', port: 0 });
+    t.after(() => api.close());
+    const frontend = await startStandaloneServer({
+      BACKEND_INTERNAL_URL: apiOrigin,
+      APTUS_JOBS_CACHE_SECONDS: '7200',
+    });
+    t.after(() => frontend.stop());
+    const refreshCalls: string[] = [];
+    let failRefresh = false;
+    const relay = http.createServer(async (request, response) => {
+      const url = request.url ?? '/';
+      refreshCalls.push(url);
+      if (failRefresh) {
+        response.writeHead(503).end();
+        return;
+      }
+      try {
+        const result = await fetch(frontend.origin + url, {
+          method: 'POST',
+          headers: { Authorization: request.headers.authorization ?? '' },
+        });
+        response.writeHead(result.status).end(await result.text());
+      } catch {
+        response.writeHead(502).end();
+      }
+    });
+    relay.listen(0, '127.0.0.1');
+    await once(relay, 'listening');
+    env.FRONTEND_REVALIDATE_URL = `http://127.0.0.1:${(relay.address() as { port: number }).port}/api/revalidate-jobs`;
+    t.after(() => new Promise<void>((resolve) => relay.close(() => resolve())));
+
+    const edit = (payload: Record<string, unknown>) =>
+      fetch(apiOrigin + '/api/internal/ingest', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${INGEST_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    const read = async (path: string) => {
+      const result = await fetch(frontend.origin + path);
+      assert.equal(result.status, 200);
+      return result.text();
+    };
+    const initial = await edit(generateAutonomousPayloadFromPython({}));
+    assert.equal(initial.status, 200);
+    const created = await initial.json();
+    assert.equal(created.cache_refresh, 'ok');
+    const [jobA] = created.post_ids as string[];
+    assert.ok(jobA);
+    const jobB = await prisma.post.create({
+      data: {
+        postName: 'Fixture sibling job',
+        sourceId: (await prisma.post.findUniqueOrThrow({ where: { id: jobA } }))
+          .sourceId,
+      },
+    });
+    const list = '/?sort=soonest&q=Headmaster';
+    assert.match(await read(list), /Headmaster/);
+    await read(`/jobs/${jobA}`);
+    await read(`/jobs/${jobB.id}`);
+    reads.length = 0;
+    refreshCalls.length = 0;
+
+    const detail = await edit(
+      generateAutonomousPayloadFromPython({
+        selectionStep: 'Fixture written assessment',
+      }),
+    );
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json()).cache_refresh, 'ok');
+    assert.match(await read(`/jobs/${jobA}`), /Fixture written assessment/);
+    await read(`/jobs/${jobB.id}`);
+    await read(list);
+    assert.deepEqual(reads, [`/api/jobs/${jobA}`]);
+    assert.deepEqual(refreshCalls, [`/api/revalidate-jobs?jobId=${jobA}`]);
+
+    const listEdit = generateAutonomousPayloadFromPython({
+      selectionStep: 'Fixture written assessment',
+      vacancies: 150,
+      payLevel: 'Level-10',
+    });
+    await prisma.$executeRaw`CREATE FUNCTION reject_fixture_correction()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'fixture correction rejected'; END;
+      $$`;
+    await prisma.$executeRaw`CREATE TRIGGER reject_fixture_correction
+      BEFORE UPDATE ON "Post" FOR EACH ROW WHEN (NEW.vacancies = 150)
+      EXECUTE FUNCTION reject_fixture_correction()`;
+    refreshCalls.length = 0;
+    const failedWrite = await edit(listEdit);
+    assert.equal(failedWrite.status, 503);
+    assert.deepEqual(refreshCalls, []);
+    assert.equal(
+      (await prisma.post.findUniqueOrThrow({ where: { id: jobA } })).vacancies,
+      120,
+    );
+    await prisma.$executeRaw`DROP TRIGGER reject_fixture_correction ON "Post"`;
+    await prisma.$executeRaw`DROP FUNCTION reject_fixture_correction()`;
+
+    const listing = await edit(listEdit);
+    assert.equal(listing.status, 200);
+    assert.equal((await listing.json()).cache_refresh, 'ok');
+    assert.deepEqual(refreshCalls, [
+      `/api/revalidate-jobs?jobId=${jobA}`,
+      '/api/revalidate-jobs',
+    ]);
+    reads.length = 0;
+    assert.match(await read(list), /Level-10/);
+    assert.match(await read(`/jobs/${jobA}`), /Level-10/);
+    await read(`/jobs/${jobB.id}`);
+    assert.deepEqual(reads, ['/api/jobs', `/api/jobs/${jobA}`]);
+
+    refreshCalls.length = 0;
+    failRefresh = true;
+    const failedRefresh = await edit(
+      generateAutonomousPayloadFromPython({
+        selectionStep: 'Fixture interview',
+        vacancies: 150,
+        payLevel: 'Level-10',
+      }),
+    );
+    assert.equal(failedRefresh.status, 200);
+    assert.equal((await failedRefresh.json()).cache_refresh, 'failed');
+    assert.equal(refreshCalls.length, 2);
+    const committed = await prisma.post.findUniqueOrThrow({
+      where: { id: jobA },
+    });
+    assert.match(
+      JSON.stringify(committed.reviewedDetails),
+      /Fixture interview/,
+    );
+  },
+);
 
 function makeJob(id: string, postName: string): FixtureJob {
   return {
@@ -39,6 +200,8 @@ class BackendController {
   public recordedQueries: string[] = [];
   public mode: 'ok' | 'fail' = 'ok';
   public currentVersion = 'v1';
+  public detailVersion = 'v1';
+  public detailCalls: string[] = [];
 
   constructor() {
     this.server = http.createServer((req, res) => {
@@ -74,6 +237,16 @@ class BackendController {
         return;
       }
 
+      const detail = /^\/api\/jobs\/(job-a|job-b)$/.exec(url.pathname);
+      if (detail) {
+        const id = detail[1]!;
+        this.detailCalls.push(id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify(makeJob(id, `Detail ${id} ${this.detailVersion}`)),
+        );
+        return;
+      }
       res.writeHead(404).end();
     });
   }
@@ -274,6 +447,70 @@ test('production standalone execution path cache regression', async (t) => {
       assert.equal(freshRes.status, 200);
       const freshText = await freshRes.text();
       assert.ok(freshText.includes('Technical Assistant v2 soonest Page 1'));
+    },
+  );
+
+  await t.test(
+    'a valid jobId refreshes only the requested detail',
+    async () => {
+      const readDetail = async (id: string, version: string) => {
+        const response = await fetch(`${standalone.origin}/jobs/${id}`);
+        assert.equal(response.status, 200);
+        assert.match(
+          await response.text(),
+          new RegExp(`Detail ${id} ${version}`),
+        );
+      };
+      await readDetail('job-a', 'v1');
+      await readDetail('job-b', 'v1');
+      backend.detailVersion = 'v2';
+      backend.currentVersion = 'v3';
+      backend.detailCalls = [];
+      backend.jobsCalls = 0;
+      const revalidate = (query: string, token?: string) =>
+        fetch(`${standalone.origin}/api/revalidate-jobs?${query}`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+      assert.equal((await revalidate('jobId=job-a')).status, 401);
+      assert.equal(
+        (await revalidate('jobId=job-a', INGEST_TOKEN + '-wrong')).status,
+        401,
+      );
+      for (const query of [
+        'jobId=',
+        'jobId=job-a&jobId=job-b',
+        'jobId=..%2Fjob-a',
+        'jobId=%20job-a',
+        'jobID=job-a',
+      ]) {
+        assert.equal((await revalidate(query, INGEST_TOKEN)).status, 400);
+      }
+      await readDetail('job-a', 'v1');
+      assert.deepEqual(backend.detailCalls, []);
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const response = await revalidate('jobId=job-a', INGEST_TOKEN);
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), { revalidated: '/jobs/job-a' });
+      }
+      await readDetail('job-a', 'v2');
+      await readDetail('job-b', 'v1');
+      assert.deepEqual(backend.detailCalls, ['job-a']);
+      const list = await fetch(`${standalone.origin}/?sort=soonest`);
+      assert.equal(list.status, 200);
+      assert.match(await list.text(), /Technical Assistant v2 soonest Page 1/);
+      assert.equal(backend.jobsCalls, 0);
+      const bulk = await revalidate('', INGEST_TOKEN);
+      assert.equal(bulk.status, 200);
+      const refreshed = await fetch(`${standalone.origin}/?sort=soonest`);
+      assert.equal(refreshed.status, 200);
+      assert.match(
+        await refreshed.text(),
+        /Technical Assistant v3 soonest Page 1/,
+      );
+      assert.deepEqual(backend.detailCalls, ['job-a']);
     },
   );
 
