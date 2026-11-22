@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { WorkspaceProvider } from '@/components/providers/workspace-provider';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { WebAnalytics } from '@/components/layout/web-analytics';
 import { SkipLink } from '@/components/layout/skip-link';
 import { DesignReviewProvider } from '@/components/jobs/design-review-state';
 import {
@@ -67,6 +68,7 @@ export default function RootLayout({
             content
           )}
         </WorkspaceProvider>
+        <WebAnalytics />
       </body>
     </html>
   );
