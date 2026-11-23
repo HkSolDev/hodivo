@@ -58,7 +58,10 @@ test('JobDetailContent renders Historical cutoffs after Qualification routes and
   const ageIdx = html.indexOf('Age requirements and relaxations');
 
   assert.ok(qualIdx >= 0, 'Qualification routes should render');
-  assert.ok(cutoffIdx > qualIdx, 'Historical cutoffs should render after Qualification routes');
+  assert.ok(
+    cutoffIdx > qualIdx,
+    'Historical cutoffs should render after Qualification routes',
+  );
   assert.ok(ageIdx > cutoffIdx, 'Historical cutoffs should render before Age');
   assert.ok(html.includes('2024'));
   assert.ok(html.includes('Official'));

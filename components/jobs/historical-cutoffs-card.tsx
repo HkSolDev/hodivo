@@ -42,7 +42,8 @@ export function HistoricalCutoffsCard({
           const entries =
             item.cutoffs && typeof item.cutoffs === 'object'
               ? Object.entries(item.cutoffs).filter(
-                  ([, v]) => v !== null && v !== undefined && String(v).trim() !== '',
+                  ([, v]) =>
+                    v !== null && v !== undefined && String(v).trim() !== '',
                 )
               : [];
           const sourceHref = safeHttpUrl(item.sourceUrl);
