@@ -87,6 +87,60 @@
   box-shadow: 0 4px 10px rgba(37, 99, 235, 0.14);
 }
 
+.passageIdForm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+input.passageIdInput {
+  all: unset;
+  box-sizing: border-box;
+  width: 7rem;
+  min-width: 0;
+  padding: 0.375rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-color: var(--control-line);
+  border-radius: 0.5rem;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08),
+    0 1px 1px rgba(15, 23, 42, 0.04);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+input.passageIdInput::placeholder {
+  color: var(--muted);
+}
+
+input.passageIdInput:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.hudBtnIcon {
+  padding-inline: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  input.passageIdInput {
+    width: 5.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .passageIdInput {
+    width: 5.25rem;
+  }
+}
+
 .hudBtn:hover:not(:disabled) .hudIcon {
   color: #2563eb;
 }

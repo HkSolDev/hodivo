@@ -63,6 +63,18 @@ test('review-only recommendation, saved, and profile pages fit mobile, tablet an
     route.fulfill({ json: { user: null, enabled: false } }),
   );
 
+  const serverOnlyPage = await browser.newPage({ javaScriptEnabled: false });
+  try {
+    await serverOnlyPage.goto(`${origin}/results`);
+    await expect(
+      serverOnlyPage.getByRole('searchbox', {
+        name: 'Search recommended jobs',
+      }),
+    ).toBeDisabled();
+  } finally {
+    await serverOnlyPage.close();
+  }
+
   for (const width of [390, 834, 1440]) {
     await page.setViewportSize({ width, height: 900 });
 
@@ -94,6 +106,7 @@ test('review-only recommendation, saved, and profile pages fit mobile, tablet an
     const search = page.getByRole('searchbox', {
       name: 'Search recommended jobs',
     });
+    await expect(search).toBeEnabled();
     await search.focus();
     await page.keyboard.press('Tab');
     await expect(

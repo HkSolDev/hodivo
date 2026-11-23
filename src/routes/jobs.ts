@@ -20,6 +20,7 @@ export async function handleJobs(
   res: FastifyReply,
   params: URLSearchParams,
   database?: Parameters<typeof listPublicJobs>[3],
+  readListing: typeof listPublicJobs = listPublicJobs,
 ): Promise<void> {
   const page = readPageNumber(params, 'page', 1, 10_000);
   const pageSize = readPageNumber(params, 'pageSize', 30, 100);
@@ -27,7 +28,7 @@ export async function handleJobs(
   if (!filters) {
     sendJson(res, 400, {
       error:
-        'Use one search of at most 100 characters, a supported qualification and newest, soonest or furthest sorting.',
+        'Use one search of at most 100 characters, a supported qualification and newest, popular, soonest or furthest sorting.',
     });
     return;
   }
@@ -39,7 +40,7 @@ export async function handleJobs(
     return;
   }
   try {
-    const result = await listPublicJobs(page, pageSize, filters, database);
+    const result = await readListing(page, pageSize, filters, database);
     sendJson(res, 200, result);
   } catch {
     sendJson(res, 503, {

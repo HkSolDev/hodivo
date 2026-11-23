@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
+import { indiaDateKey } from '../frontend/india-date.js';
 import { generateAutonomousPayloadFromPython } from './autonomous-notice-fixture.js';
 
 const STANDALONE_DIR = path.resolve(import.meta.dirname, '../.next/standalone');
@@ -29,6 +30,15 @@ test(
     assert.equal(databaseUrl.hostname, '127.0.0.1');
     assert.equal(databaseUrl.pathname, '/aptus_preparation_test');
     assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
+    const redisUrl = new URL(process.env.JOBS_REDIS_URL ?? '');
+    assert.equal(redisUrl.hostname, '127.0.0.1');
+    const { createClient } = await import('redis');
+    const redis = createClient({ url: redisUrl.href });
+    redis.on('error', () => {});
+    await redis.connect();
+    t.after(() => redis.destroy());
+    const { PrismaPg } = await import('@prisma/adapter-pg');
+    const { PrismaClient } = await import('../generated/prisma/index.js');
     const { prisma } = await import('../src/db.js');
     const { buildApp } = await import('../src/app.js');
     assert.equal(
@@ -38,8 +48,55 @@ test(
     );
     t.after(() => prisma.$disconnect());
 
-    const env: NodeJS.ProcessEnv = { INGEST_TOKEN };
-    const api = buildApp(undefined, env);
+    const detailQueries: string[] = [];
+    const versionQueries: string[] = [];
+    const listingQueries: string[] = [];
+    const listingVersions: string[] = [];
+    const client = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: databaseUrl.href }),
+      log: [{ level: 'query', emit: 'event' }],
+    });
+    t.after(() => client.$disconnect());
+    client.$on('query', ({ query }) => {
+      if (query.includes('p.xmin::text')) versionQueries.push(query);
+      if (query.includes('"JobsListingRevision"')) listingVersions.push(query);
+      if (
+        query.includes('"Post"."reviewedDetails"') &&
+        query.includes('"Post"."categoryRelaxationRules"')
+      ) {
+        detailQueries.push(query);
+      }
+      if (
+        query.includes('"Post"."applicationLastDate"') &&
+        !query.includes('"Post"."categoryRelaxationRules"')
+      ) {
+        listingQueries.push(query);
+      }
+    });
+    let holdRead: (() => Promise<void>) | undefined;
+    let holdListing: (() => Promise<void>) | undefined;
+    const database = client.$extends({
+      query: {
+        post: {
+          async findMany({ args, query }) {
+            const result = await query(args);
+            if (holdListing) await holdListing();
+            return result;
+          },
+          async findUnique({ args, query }) {
+            const result = await query(args);
+            if (holdRead) await holdRead();
+            return result;
+          },
+        },
+      },
+    });
+
+    const env: NodeJS.ProcessEnv = {
+      INGEST_TOKEN,
+      JOBS_REDIS_URL: redisUrl.href,
+    };
+    const api = buildApp(undefined, env, database as unknown as typeof prisma);
     const reads: string[] = [];
     api.addHook('onRequest', async (request) => {
       if (request.method === 'GET' && request.url.startsWith('/api/jobs'))
@@ -90,26 +147,80 @@ test(
       assert.equal(result.status, 200);
       return result.text();
     };
+    const jobB = await prisma.post.create({
+      data: {
+        postName: 'Fixture sibling job',
+        sourceId: (
+          await prisma.source.create({
+            data: {
+              name: 'Fixture sibling source',
+              url: 'https://example.org/sibling',
+            },
+          })
+        ).id,
+      },
+    });
+    const newest = '/?sort=newest';
+    const requestListing = async (query = 'pageSize=10') => {
+      const response = await fetch(apiOrigin + `/api/jobs?${query}`);
+      assert.equal(response.status, 200);
+      return (await response.json()).data as FixtureJob[];
+    };
+    const listingKeys = () => redis.keys('hodivo:jobs:listing:v1:*');
+    const counts = () => ({
+      upstream: reads.filter((path) => path === '/api/jobs').length,
+      listing: listingQueries.length,
+      versions: listingVersions.length,
+    });
+    function resetListingCounts() {
+      reads.length = 0;
+      listingQueries.length = 0;
+      listingVersions.length = 0;
+    }
+    assert.match(await read('/'), /Fixture sibling job/);
+    assert.match(await read(newest), /Fixture sibling job/);
+    await read(`/jobs/${jobB.id}`);
+    assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 2 });
+    const [previousListingKey] = await listingKeys();
+    assert.ok(previousListingKey);
+    resetListingCounts();
     const initial = await edit(generateAutonomousPayloadFromPython({}));
     assert.equal(initial.status, 200);
     const created = await initial.json();
     assert.equal(created.cache_refresh, 'ok');
     const [jobA] = created.post_ids as string[];
     assert.ok(jobA);
-    const jobB = await prisma.post.create({
-      data: {
-        postName: 'Fixture sibling job',
-        sourceId: (await prisma.post.findUniqueOrThrow({ where: { id: jobA } }))
-          .sourceId,
-      },
-    });
+    assert.match(await read('/'), /Headmaster/);
+    assert.match(await read(newest), /Headmaster/);
+    assert.deepEqual(counts(), { upstream: 3, listing: 6, versions: 2 });
+    resetListingCounts();
+    assert.equal((await requestListing())[0]?.id, jobA);
+    assert.deepEqual(counts(), { upstream: 1, listing: 0, versions: 1 });
+    assert.equal((await listingKeys()).length, 2);
+    const midnight = Date.parse(`${indiaDateKey()}T18:30:00Z`);
+    assert.equal(
+      await redis.sendCommand(['PEXPIRETIME', previousListingKey]),
+      midnight,
+    );
+    resetListingCounts();
+    await requestListing('pageSize=10&q=Headmaster');
+    assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 0 });
+    const warmListingKeys = (await listingKeys()).sort();
+    const detailKeys = (id: string) =>
+      redis.keys(`hodivo:jobs:detail:v1:${id}:*`);
+    const requestDetail = (id: string) => fetch(apiOrigin + `/api/jobs/${id}`);
     const list = '/?sort=soonest&q=Headmaster';
     assert.match(await read(list), /Headmaster/);
     await read(`/jobs/${jobA}`);
     await read(`/jobs/${jobB.id}`);
+    assert.equal((await detailKeys(jobA)).length, 1);
+    assert.equal((await detailKeys(jobB.id)).length, 1);
     reads.length = 0;
     refreshCalls.length = 0;
+    detailQueries.length = 0;
+    versionQueries.length = 0;
 
+    resetListingCounts();
     const detail = await edit(
       generateAutonomousPayloadFromPython({
         selectionStep: 'Fixture written assessment',
@@ -120,8 +231,26 @@ test(
     assert.match(await read(`/jobs/${jobA}`), /Fixture written assessment/);
     await read(`/jobs/${jobB.id}`);
     await read(list);
+    await read('/');
+    await read(newest);
+    assert.deepEqual(counts(), { upstream: 0, listing: 0, versions: 0 });
+    assert.deepEqual((await listingKeys()).sort(), warmListingKeys);
     assert.deepEqual(reads, [`/api/jobs/${jobA}`]);
     assert.deepEqual(refreshCalls, [`/api/revalidate-jobs?jobId=${jobA}`]);
+    assert.equal(detailQueries.length, 1);
+    assert.equal(versionQueries.length, 2);
+    detailQueries.length = 0;
+    versionQueries.length = 0;
+    assert.match(
+      await (await requestDetail(jobA)).text(),
+      /Fixture written assessment/,
+    );
+    assert.equal(detailQueries.length, 0);
+    assert.equal(versionQueries.length, 1);
+    const currentKeys = await detailKeys(jobA);
+    const ttls = await Promise.all(currentKeys.map((key) => redis.ttl(key)));
+    assert.equal(currentKeys.length, 2);
+    assert.ok(ttls.every((ttl) => ttl > 86_380 && ttl <= 86_400));
 
     const listEdit = generateAutonomousPayloadFromPython({
       selectionStep: 'Fixture written assessment',
@@ -136,17 +265,58 @@ test(
       BEFORE UPDATE ON "Post" FOR EACH ROW WHEN (NEW.vacancies = 150)
       EXECUTE FUNCTION reject_fixture_correction()`;
     refreshCalls.length = 0;
+    const revisionBeforeFailure =
+      await prisma.$queryRaw`SELECT "revision" FROM "JobsListingRevision"`;
     const failedWrite = await edit(listEdit);
+    assert.deepEqual(
+      await prisma.$queryRaw`SELECT "revision" FROM "JobsListingRevision"`,
+      revisionBeforeFailure,
+    );
     assert.equal(failedWrite.status, 503);
     assert.deepEqual(refreshCalls, []);
     assert.equal(
       (await prisma.post.findUniqueOrThrow({ where: { id: jobA } })).vacancies,
       120,
     );
+    detailQueries.length = 0;
+    assert.match(
+      await (await requestDetail(jobA)).text(),
+      /Fixture written assessment/,
+    );
+    assert.equal(detailQueries.length, 0);
+    assert.deepEqual((await detailKeys(jobA)).sort(), currentKeys.sort());
     await prisma.$executeRaw`DROP TRIGGER reject_fixture_correction ON "Post"`;
     await prisma.$executeRaw`DROP FUNCTION reject_fixture_correction()`;
 
-    const listing = await edit(listEdit);
+    await redis.del(await listingKeys());
+    const listFetched = Promise.withResolvers<void>();
+    const releaseListing = Promise.withResolvers<void>();
+    holdListing = async () => {
+      holdListing = undefined;
+      listFetched.resolve();
+      await releaseListing.promise;
+    };
+    const staleListing = requestListing();
+    let listing: Response;
+    try {
+      await Promise.race([
+        listFetched.promise,
+        setTimeout(5_000, undefined, { ref: false }).then(() => {
+          throw new Error('Timed out waiting for the overlapping listing read');
+        }),
+      ]);
+      resetListingCounts();
+      listing = await edit(listEdit);
+      assert.match(await read('/'), /Level-10/);
+      assert.deepEqual(counts(), { upstream: 3, listing: 6, versions: 2 });
+    } finally {
+      releaseListing.resolve();
+    }
+    assert.equal((await staleListing)[0]?.vacancies, 120);
+    assert.equal((await listingKeys()).length, 1);
+    resetListingCounts();
+    assert.equal((await requestListing())[0]?.vacancies, 150);
+    assert.deepEqual(counts(), { upstream: 1, listing: 0, versions: 1 });
     assert.equal(listing.status, 200);
     assert.equal((await listing.json()).cache_refresh, 'ok');
     assert.deepEqual(refreshCalls, [
@@ -178,6 +348,119 @@ test(
       JSON.stringify(committed.reviewedDetails),
       /Fixture interview/,
     );
+    failRefresh = false;
+
+    const correctedPayload = (selectionStep: string) =>
+      generateAutonomousPayloadFromPython({
+        selectionStep,
+        vacancies: 150,
+        payLevel: 'Level-10',
+      });
+    assert.match(await (await requestDetail(jobA)).text(), /Fixture interview/);
+    const oldKeys = await detailKeys(jobA);
+    await redis.del(oldKeys);
+    const fetched = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    holdRead = async () => {
+      holdRead = undefined;
+      fetched.resolve();
+      await release.promise;
+    };
+    const staleRead = requestDetail(jobA);
+    try {
+      await Promise.race([
+        fetched.promise,
+        setTimeout(5_000, undefined, { ref: false }).then(() => {
+          throw new Error('Timed out waiting for the overlapping detail read');
+        }),
+      ]);
+      assert.equal(
+        (await edit(correctedPayload('Fixture new practical'))).status,
+        200,
+      );
+    } finally {
+      release.resolve();
+    }
+    assert.match(await (await staleRead).text(), /Fixture interview/);
+    assert.deepEqual(await detailKeys(jobA), []);
+    assert.match(await read(`/jobs/${jobA}`), /Fixture new practical/);
+
+    const outageEdit = generateAutonomousPayloadFromPython({
+      selectionStep: 'Fixture final practical',
+      vacancies: 150,
+      payLevel: 'Level-11',
+    });
+    resetListingCounts();
+    await redis.sendCommand(['CLIENT', 'PAUSE', '2000', 'ALL']);
+    detailQueries.length = 0;
+    try {
+      assert.equal((await edit(outageEdit)).status, 200);
+      assert.match(await read(`/jobs/${jobA}`), /Fixture final practical/);
+      assert.equal(detailQueries.length, 1);
+      resetListingCounts();
+      assert.equal((await requestListing())[0]?.payLevel, 'Level-11');
+      assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 1 });
+    } finally {
+      await redis.sendCommand(['CLIENT', 'UNPAUSE']);
+    }
+    assert.match(
+      await (await requestDetail(jobA)).text(),
+      /Fixture final practical/,
+    );
+    resetListingCounts();
+    assert.equal((await requestListing())[0]?.payLevel, 'Level-11');
+    assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 2 });
+    resetListingCounts();
+    assert.equal((await requestListing())[0]?.payLevel, 'Level-11');
+    assert.deepEqual(counts(), { upstream: 1, listing: 0, versions: 1 });
+    detailQueries.length = 0;
+    assert.match(
+      await (await requestDetail(jobA)).text(),
+      /Fixture final practical/,
+    );
+    assert.equal(detailQueries.length, 0);
+
+    const source = await prisma.source.findUniqueOrThrow({
+      where: { id: committed.sourceId },
+    });
+    refreshCalls.length = 0;
+    resetListingCounts();
+    const withdrawal = await edit({
+      source_url: source.url,
+      source_name: source.name,
+      posts: [{ post_name: 'Replacement fixture' }],
+    });
+    assert.equal(withdrawal.status, 200);
+    assert.doesNotMatch(await read(newest), /Headmaster/);
+    assert.match(await read('/'), /Replacement fixture/);
+    assert.deepEqual(counts(), { upstream: 3, listing: 6, versions: 2 });
+    assert.deepEqual(refreshCalls, [
+      `/api/revalidate-jobs?jobId=${jobA}`,
+      '/api/revalidate-jobs',
+    ]);
+    assert.equal((await requestDetail(jobA)).status, 404);
+    reads.length = 0;
+    detailQueries.length = 0;
+    const withdrawnPage = await fetch(frontend.origin + `/jobs/${jobA}`);
+    assert.equal(withdrawnPage.status, 404);
+    assert.doesNotMatch(await withdrawnPage.text(), /Fixture final practical/);
+    await read(`/jobs/${jobB.id}`);
+    assert.deepEqual(reads, [`/api/jobs/${jobA}`]);
+    assert.equal(detailQueries.length, 0);
+
+    await prisma.post.update({
+      where: { id: jobB.id },
+      data: { applicationLastDate: new Date(`${indiaDateKey()}T00:00:00Z`) },
+    });
+    assert.ok((await requestListing()).some(({ id }) => id === jobB.id));
+    t.mock.timers.enable({ apis: ['Date'], now: midnight });
+    try {
+      resetListingCounts();
+      assert.ok(!(await requestListing()).some(({ id }) => id === jobB.id));
+      assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 2 });
+    } finally {
+      t.mock.timers.reset();
+    }
   },
 );
 
@@ -615,3 +898,315 @@ test('production standalone execution path cache regression', async (t) => {
     },
   );
 });
+
+test(
+  'Popular ranks all matching jobs and serves revisable Redis results',
+  {
+    skip: process.env.APTUS_TEST_POPULAR_JOBS !== '1',
+  },
+  async (t) => {
+    const databaseUrl = new URL(process.env.DATABASE_URL ?? '');
+    assert.equal(databaseUrl.hostname, '127.0.0.1');
+    assert.equal(databaseUrl.pathname, '/aptus_preparation_test');
+    assert.equal(process.env.DATABASE_URL, process.env.TEST_DATABASE_URL);
+    const redisUrl = new URL(process.env.JOBS_REDIS_URL ?? '');
+    assert.equal(redisUrl.hostname, '127.0.0.1');
+    const { createClient } = await import('redis');
+    const { prisma } = await import('../src/db.js');
+    const { PrismaPg } = await import('@prisma/adapter-pg');
+    const { PrismaClient } = await import('../generated/prisma/index.js');
+    const database = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: databaseUrl.href }),
+      log: [{ level: 'query', emit: 'event' }],
+    });
+    t.after(() => database.$disconnect());
+    const queries: string[] = [];
+    database.$on('query', ({ query }) => queries.push(query));
+    const { buildApp } = await import('../src/app.js');
+    const { refreshJobVisitors, JOB_VISITORS_KEY } =
+      await import('../src/lib/job-visitors.js');
+    const redis = await createClient({ url: redisUrl.href }).connect();
+    t.after(() => redis.destroy());
+    t.after(() => prisma.$disconnect());
+    assert.equal(await prisma.post.count(), 0);
+    assert.equal(await redis.exists(JOB_VISITORS_KEY), 0);
+
+    const source = await prisma.source.create({
+      data: {
+        url: 'https://example.org/popular-fixture',
+        name: 'Fixture Jobs',
+      },
+    });
+    const instant = new Date();
+    const today = indiaDateKey(instant);
+    await prisma.post.createMany({
+      data: Array.from({ length: 12 }, (_, index) => ({
+        id: `popular-${String(index).padStart(2, '0')}`,
+        sourceId: source.id,
+        postName:
+          index < 3 ? `Technical Fixture ${index}` : `General Fixture ${index}`,
+        publishedAt: new Date(instant.getTime() - (20 - index) * 60_000),
+        minEducationLevel: index === 2 ? 'TENTH' : 'BACHELORS',
+        applicationLastDate:
+          index === 11 ? new Date(`${today}T00:00:00Z`) : null,
+      })),
+    });
+    await prisma.post.update({
+      where: { id: 'popular-02' },
+      data: { publishedAt: new Date(instant.getTime() - 19 * 60_000) },
+    });
+
+    const config = {
+      teamId: 'fixture-team',
+      projectId: 'fixture-project',
+      token: 'fixture',
+    };
+    const rows = Array.from({ length: 11 }, (_, index) => ({
+      requestPath: `/jobs/popular-${String(index).padStart(2, '0')}`,
+      visitors: [6, 3, 3][index] ?? 0,
+      pageviews: [6, 7, 3][index] ?? 1,
+    }));
+    const fixture =
+      (data = rows): typeof fetch =>
+      async (input) => {
+        const url = new URL(String(input));
+        assert.equal(url.pathname, '/v1/query/web-analytics/visits/aggregate');
+        assert.equal(url.searchParams.get('by'), 'requestPath');
+        assert.equal(
+          url.searchParams.get('filter'),
+          "startswith(requestPath,'/jobs/')",
+        );
+        assert.equal(
+          Date.parse(url.searchParams.get('until')!) -
+            Date.parse(url.searchParams.get('since')!),
+          7 * 86_400_000,
+        );
+        return Response.json({ data });
+      };
+    assert.equal(await refreshJobVisitors(redis, config, fixture()), 11);
+    const first = await redis.hGetAll(JOB_VISITORS_KEY);
+    assert.equal(await refreshJobVisitors(redis, config, fixture()), 0);
+    assert.equal(
+      await redis.hGet(JOB_VISITORS_KEY, '_revision'),
+      first._revision,
+    );
+    assert.ok((await redis.pTTL(JOB_VISITORS_KEY)) > 3_590_000);
+
+    const api = buildApp(
+      undefined,
+      {
+        ...process.env,
+        JOBS_REDIS_URL: redisUrl.href,
+      },
+      database,
+    );
+    t.after(() => api.close());
+    const apiOrigin = await api.listen({ host: '127.0.0.1', port: 0 });
+    const frontend = await startStandaloneServer({
+      BACKEND_INTERNAL_URL: apiOrigin,
+    });
+    t.after(() => frontend.stop());
+    const read = async (query: string) => {
+      const started = performance.now();
+      const response = await api.inject({
+        method: 'GET',
+        url: `/api/jobs?${query}`,
+      });
+      assert.equal(response.statusCode, 200);
+      const { data } = response.json<{ data: FixtureJob[] }>();
+      return {
+        ids: data.map(({ id }) => id),
+        elapsed: performance.now() - started,
+      };
+    };
+    const newest = await read('pageSize=10');
+    assert.equal(newest.ids[0], 'popular-11');
+    assert.ok(!newest.ids.includes('popular-00'));
+    const cold = await read('sort=popular&pageSize=10');
+    assert.deepEqual(cold.ids.slice(0, 3), [
+      'popular-00',
+      'popular-01',
+      'popular-02',
+    ]);
+    assert.deepEqual((await read('sort=popular&pageSize=10&page=2')).ids, [
+      'popular-04',
+      'popular-03',
+    ]);
+    assert.deepEqual(
+      (
+        await read(
+          'sort=popular&q=Technical&qualification=BACHELORS&pageSize=1&page=2',
+        )
+      ).ids,
+      ['popular-01'],
+    );
+    const [popularKey] = await redis.keys('hodivo:jobs:popular:v1:*');
+    assert.ok(popularKey);
+    const ttl = await redis.pTTL(popularKey);
+    await setTimeout(25);
+    queries.length = 0;
+    const warm = await read('sort=popular&pageSize=10');
+    assert.deepEqual(warm.ids, cold.ids);
+    assert.equal(queries.length, 1);
+    assert.match(queries[0], /JobsListingRevision/);
+    assert.ok(
+      (await redis.pTTL(popularKey)) < ttl,
+      'warm read must not rewrite cache',
+    );
+    t.diagnostic(
+      `Fastify cold ${cold.elapsed.toFixed(1)}ms, warm ${warm.elapsed.toFixed(1)}ms`,
+    );
+
+    const html = await (await fetch(frontend.origin + '/?sort=popular')).text();
+    assert.match(html, /<option value="popular" selected="">Popular<\/option>/);
+    assert.ok(
+      html.indexOf('Technical Fixture 0') < html.indexOf('Technical Fixture 1'),
+    );
+    const newestWithFixture = frontend.origin + '/?q=Technical';
+    const popularWithFixture = newestWithFixture + '&sort=popular';
+    async function assertVisitors(url: string, count: number) {
+      const response = await fetch(url);
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      const card = html
+        .match(/<article[^>]*data-job-card[^>]*>.*?<\/article>/g)
+        ?.find((entry) => entry.includes('Technical Fixture 0'));
+      assert.ok(card);
+      if (count) {
+        assert.match(
+          card,
+          new RegExp(`data-job-visitors[^>]*>${count}<!-- -->`),
+        );
+      } else {
+        assert.doesNotMatch(card, /data-job-visitors/);
+      }
+    }
+    await assertVisitors(newestWithFixture, 6);
+    await assertVisitors(popularWithFixture, 6);
+    await fetch(apiOrigin + '/api/jobs/popular-00');
+    const detailKeys = await redis.keys('hodivo:jobs:detail:v1:*');
+    const newestKeys = await redis.keys('hodivo:jobs:listing:v1:*');
+    assert.ok(detailKeys.length && newestKeys.length);
+    const unrelatedEntries = await redis.mGet([...detailKeys, ...newestKeys]);
+
+    const changed = structuredClone(rows);
+    changed[0].visitors = 7;
+    changed[1].visitors = 8;
+    assert.equal(await refreshJobVisitors(redis, config, fixture(changed)), 2);
+    assert.notEqual(
+      await redis.hGet(JOB_VISITORS_KEY, '_revision'),
+      first._revision,
+    );
+    assert.deepEqual(
+      await redis.mGet([...detailKeys, ...newestKeys]),
+      unrelatedEntries,
+    );
+    queries.length = 0;
+    await assertVisitors(newestWithFixture, 7);
+    assert.deepEqual(queries, [], 'warm Next.js listing must avoid PostgreSQL');
+    await assertVisitors(popularWithFixture, 7);
+    if (process.env.APTUS_TEST_JOB_VISITOR_BROWSER === '1') {
+      const { chromium, expect } = await import('playwright/test');
+      const browser = await chromium.launch({
+        channel: process.env.APTUS_TEST_CHROMIUM_CHANNEL,
+      });
+      try {
+        const page = await browser.newPage();
+        for (const width of [375, 768, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          for (const url of [newestWithFixture, popularWithFixture]) {
+            await page.goto(url);
+            const card = page.locator('[data-job-card]').filter({
+              has: page.getByRole('heading', { name: 'Technical Fixture 0' }),
+            });
+            const label = card.getByText('7 visitors in the last 7 days', {
+              exact: true,
+            });
+            await expect(label).toBeVisible();
+            const bounds = await label.boundingBox();
+            assert.ok(
+              bounds && bounds.x >= 0 && bounds.x + bounds.width <= width,
+            );
+          }
+        }
+      } finally {
+        await browser.close();
+      }
+    }
+
+    const updated = await (
+      await fetch(frontend.origin + '/?sort=popular')
+    ).text();
+    assert.ok(
+      updated.indexOf('Technical Fixture 1') <
+        updated.indexOf('Technical Fixture 0'),
+    );
+    await prisma.post.update({
+      where: { id: 'popular-01' },
+      data: { postName: 'Updated Technical Fixture 1' },
+    });
+    assert.match(
+      await (await fetch(frontend.origin + '/?sort=popular')).text(),
+      /Updated Technical Fixture 1/,
+    );
+
+    const stored = await redis.hGetAll(JOB_VISITORS_KEY);
+    for (const request of [
+      async () => new Response(null, { status: 429 }),
+      async () => {
+        throw new DOMException('fixture timeout', 'TimeoutError');
+      },
+      fixture([{ ...rows[0], requestPath: 'Others' }]),
+      fixture([{ ...rows[0], visitors: -1 }]),
+    ]) {
+      await assert.rejects(refreshJobVisitors(redis, config, request));
+      assert.deepEqual(await redis.hGetAll(JOB_VISITORS_KEY), stored);
+    }
+
+    const { promise, resolve } = Promise.withResolvers<Response>();
+    const older = refreshJobVisitors(redis, config, () => promise);
+    await setTimeout(10);
+    changed[1].visitors = 2;
+    changed.splice(2, 1);
+    assert.equal(await refreshJobVisitors(redis, config, fixture(changed)), 2);
+    resolve(Response.json({ data: rows }));
+    assert.equal(await older, null);
+    assert.equal(await redis.hGet(JOB_VISITORS_KEY, 'popular-01'), '2');
+    assert.equal(await redis.hGet(JOB_VISITORS_KEY, 'popular-02'), null);
+
+    changed.push({
+      requestPath: '/jobs/popular-11',
+      visitors: 100,
+      pageviews: 100,
+    });
+    assert.equal(await refreshJobVisitors(redis, config, fixture(changed)), 1);
+    assert.equal((await read('sort=popular&pageSize=10')).ids[0], 'popular-11');
+    const midnight = Date.parse(`${today}T18:30:00Z`);
+    // Keep the snapshot usable so the date check exercises Popular, not fallback.
+    await redis.hSet(JOB_VISITORS_KEY, '_refreshedAt', String(midnight - 1000));
+    t.mock.timers.enable({ apis: ['Date'], now: midnight });
+    try {
+      const rollover = await read('sort=popular&pageSize=10');
+      assert.equal(rollover.ids[0], 'popular-00');
+      assert.ok(!rollover.ids.includes('popular-11'));
+    } finally {
+      t.mock.timers.reset();
+    }
+    await redis.hSet(
+      JOB_VISITORS_KEY,
+      '_refreshedAt',
+      String(Date.now() - 3_600_000),
+    );
+    assert.deepEqual((await read('sort=popular&pageSize=10')).ids, newest.ids);
+    await assertVisitors(newestWithFixture, 0);
+    await assertVisitors(popularWithFixture, 0);
+    await redis.hSet(JOB_VISITORS_KEY, '_refreshedAt', String(Date.now()));
+    await redis.sendCommand(['CLIENT', 'PAUSE', '500', 'ALL']);
+    await assertVisitors(newestWithFixture, 0);
+    await redis.ping();
+    await assertVisitors(newestWithFixture, 7);
+    await redis.del(JOB_VISITORS_KEY);
+    await assertVisitors(newestWithFixture, 0);
+    assert.deepEqual((await read('sort=popular&pageSize=10')).ids, newest.ids);
+  },
+);

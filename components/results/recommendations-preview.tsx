@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import {
   useDesignReview,
@@ -9,6 +9,10 @@ import {
 } from '@/components/jobs/design-review-state';
 import { JobCard, type PublicJobItem } from '@/components/jobs/job-card';
 import styles from './recommendations-preview.module.css';
+
+const subscribeToHydration = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
 
 type PreviewRecommendation = PublicJobItem & {
   level: 'TWELFTH' | 'DIPLOMA' | 'BACHELORS';
@@ -93,6 +97,11 @@ export function RecommendationsPreview({
 }: {
   savedJobs?: PublicJobItem[];
 }) {
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    clientSnapshot,
+    serverSnapshot,
+  );
   const savedView = savedJobs !== undefined;
   const review = useDesignReview();
   const scope = savedView ? 'saved' : 'recommendations';
@@ -225,6 +234,7 @@ export function RecommendationsPreview({
             {savedView ? 'Search saved jobs' : 'Search recommended jobs'}
             <input
               type="search"
+              disabled={!hydrated}
               placeholder="Exam, role or organization"
               value={search}
               onChange={(event) => setSearch(event.target.value)}

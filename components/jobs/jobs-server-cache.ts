@@ -1,7 +1,10 @@
+import { indiaDateKey } from '@/frontend/india-date';
 import {
   jobSearchParams,
   type JobFilters,
 } from '@/frontend/public-job-filters';
+
+export { indiaDateKey } from '@/frontend/india-date';
 
 // This module is shared by Next server code and plain Node tests, which
 // type `process` differently; read the environment through globalThis.
@@ -27,17 +30,6 @@ function getJobsRevalidateSeconds(): number {
     if (Number.isFinite(parsed) && parsed >= 0) return parsed;
   }
   return JOBS_REVALIDATE_SECONDS;
-}
-
-// The API interprets deadlines by the India calendar date, so entries must
-// roll over at IST midnight even if nobody invalidates them.
-export function indiaDateKey(now = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
 }
 
 // Explicit server cache for public catalogue results, grouped under the
@@ -93,7 +85,7 @@ type FreshnessMarkable = { freshnessUnconfirmed?: boolean };
 async function fetchFreshJobs<T extends FreshnessMarkable>(
   cacheKey: string,
   backendUrl: string,
-  generation: number,
+  generation?: number,
 ): Promise<T | null> {
   try {
     const res = await fetch(`${backendUrl}/api/jobs?${cacheKey}`, {
@@ -107,28 +99,37 @@ async function fetchFreshJobs<T extends FreshnessMarkable>(
     }
     return result;
   } catch {
-    const cached = jobsCache.get(cacheKey);
+    const cached =
+      generation === undefined ? undefined : jobsCache.get(cacheKey);
     return cached
       ? { ...(cached.result as T), freshnessUnconfirmed: true }
       : null;
   }
 }
 
+export function getJobsBackendUrl(): string {
+  return (
+    (globalThis as { process?: { env: Record<string, string | undefined> } })
+      .process?.env?.BACKEND_INTERNAL_URL ||
+    env.BACKEND_INTERNAL_URL ||
+    'http://127.0.0.1:8081'
+  );
+}
+
 export async function fetchPublicJobsCached<T extends FreshnessMarkable>(
   page: number,
   filters: JobFilters,
 ): Promise<T | null> {
-  const backendUrl =
-    (globalThis as { process?: { env: Record<string, string | undefined> } })
-      .process?.env?.BACKEND_INTERNAL_URL ||
-    env.BACKEND_INTERNAL_URL ||
-    'http://127.0.0.1:8081';
+  const backendUrl = getJobsBackendUrl();
   const params = jobSearchParams(filters, page);
   params.set('pageSize', String(PAGE_SIZE));
   // Cache identity: normalized sort/filters, page, page size, India date.
   // The API ignores istDate; it exists so IST rollover keys fresh entries.
   params.set('istDate', indiaDateKey());
   const cacheKey = params.toString();
+  // Fastify owns Popular freshness because it can see the analytics revision.
+  if (filters.sort === 'popular')
+    return fetchFreshJobs<T>(cacheKey, backendUrl);
   const entry = jobsCache.get(cacheKey);
   const ttlSeconds = getJobsRevalidateSeconds();
   if (entry && Date.now() - entry.fetchedAt < ttlSeconds * 1000) {

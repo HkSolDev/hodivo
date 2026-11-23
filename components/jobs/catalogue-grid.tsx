@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { JobCard, type PublicJobItem } from './job-card';
 import { type JobFilters } from '@/frontend/public-job-filters';
-import { fetchPublicJobsCached } from './jobs-server-cache';
+import { fetchPublicJobsCached, getJobsBackendUrl } from './jobs-server-cache';
 import { JobSortControl } from './job-search-controls';
 import { HomeLayoutControls } from './home-layout-controls';
 import { homeSearchParams, type HomeView } from '@/frontend/home-view';
@@ -29,7 +29,35 @@ export async function fetchPublicJobs(
   page: number,
   filters: JobFilters,
 ): Promise<JobsApiResponse | null> {
-  return fetchPublicJobsCached<JobsApiResponse>(page, filters);
+  const result = await fetchPublicJobsCached<JobsApiResponse>(page, filters);
+  if (!result?.data.length || result.designReview) return result;
+
+  const params = new URLSearchParams();
+  for (const { id } of result.data) params.append('id', id);
+  try {
+    const response = await fetch(
+      `${getJobsBackendUrl()}/api/jobs/visitors/counts?${params}`,
+      {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(1000),
+      },
+    );
+    if (!response.ok) return result;
+    const { counts } = (await response.json()) as {
+      counts: Record<string, number | null>;
+    };
+    return {
+      ...result,
+      data: result.data.map((job) => ({
+        ...job,
+        recentVisitorCount: Object.hasOwn(counts, job.id)
+          ? counts[job.id]
+          : null,
+      })),
+    };
+  } catch {
+    return result;
+  }
 }
 
 export function CatalogueGrid({

@@ -38,8 +38,10 @@ export function listPublicJobs(
   pageSize: number,
   filters?: JobFilters,
   database: typeof prisma = prisma,
+  now = new Date(),
+  visitorCounts?: ReadonlyMap<string, number>,
 ) {
-  const conditions: Prisma.PostWhereInput[] = [activeApplicationWhere()];
+  const conditions: Prisma.PostWhereInput[] = [activeApplicationWhere(now)];
   if (filters?.q) {
     const keyword = filters.q.replace(/[\\%_]/g, '\\$&');
     conditions.push({
@@ -67,7 +69,7 @@ export function listPublicJobs(
   // Sorting applies to the entire matching set before pagination.
   // Unknown values (missing deadline / unknown first publication) sort last.
   const orderBy: Prisma.PostOrderByWithRelationInput[] = filters
-    ? filters.sort === 'newest'
+    ? filters.sort === 'newest' || filters.sort === 'popular'
       ? [{ publishedAt: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }]
       : [
           {
@@ -83,16 +85,55 @@ export function listPublicJobs(
   return database.$transaction(
     async (db) => {
       const totalItems = await db.post.count({ where });
-      const posts = await db.post.findMany({
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        where,
-        orderBy,
-        select: {
-          ...publicFields,
-          reviewedDetails: true,
-        },
-      });
+      const skip = (page - 1) * pageSize;
+      const select = { ...publicFields, reviewedDetails: true } as const;
+      const posts = await (async () => {
+        if (filters?.sort !== 'popular' || !visitorCounts?.size) {
+          return db.post.findMany({
+            skip,
+            take: pageSize,
+            where,
+            orderBy,
+            select,
+          });
+        }
+        const candidates = await db.post.findMany({
+          where: { AND: [where, { id: { in: [...visitorCounts.keys()] } }] },
+          orderBy,
+          select: { id: true },
+        });
+        // Stable sort keeps publication time and ID as tie-breakers.
+        candidates.sort(
+          (a, b) =>
+            (visitorCounts.get(b.id) ?? 0) - (visitorCounts.get(a.id) ?? 0),
+        );
+        const rankedIds = candidates
+          .slice(skip, skip + pageSize)
+          .map(({ id }) => id);
+        const ranked = rankedIds.length
+          ? await db.post.findMany({ where: { id: { in: rankedIds } }, select })
+          : [];
+        const byId = new Map(ranked.map((job) => [job.id, job]));
+        const ordered = rankedIds.flatMap((id) => {
+          const job = byId.get(id);
+          return job ? [job] : [];
+        });
+        const remaining = pageSize - ordered.length;
+        if (remaining > 0) {
+          ordered.push(
+            ...(await db.post.findMany({
+              where: {
+                AND: [where, { id: { notIn: candidates.map(({ id }) => id) } }],
+              },
+              orderBy,
+              skip: Math.max(0, skip - candidates.length),
+              take: remaining,
+              select,
+            })),
+          );
+        }
+        return ordered;
+      })();
       const data = posts.map((post) => {
         const reviewed = post.reviewedDetails as Record<string, unknown> | null;
         const appointmentType =

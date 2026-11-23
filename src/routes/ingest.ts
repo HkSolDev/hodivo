@@ -78,6 +78,9 @@ export async function handleIngest(
       try {
         const published = await ingestReviewedCandidate(body);
         // Publication has committed; cache refresh is best-effort after it.
+        await Promise.all(
+          published.post_ids.map((id) => notifyJobsRevalidated(env, id)),
+        );
         await notifyJobsRevalidated(env);
         sendJson(res, 200, published);
       } catch (error) {
@@ -186,36 +189,10 @@ export async function handleIngest(
       return;
     }
 
-    const source = await prisma.source.upsert({
-      where: { url: body.source_url },
-      update: {
-        name: body.source_name,
-        rawHash: body.raw_hash ?? null,
-        notificationPdfUrl: body.notification_pdf_url ?? null,
-        officialSiteUrl: body.official_site_url ?? null,
-        applyUrl: body.apply_url ?? null,
-      },
-      create: {
-        url: body.source_url,
-        name: body.source_name,
-        rawHash: body.raw_hash ?? null,
-        notificationPdfUrl: body.notification_pdf_url ?? null,
-        officialSiteUrl: body.official_site_url ?? null,
-        applyUrl: body.apply_url ?? null,
-      },
-    });
-
-    // An empty posts array almost always means the LLM call failed or
-    // returned garbage upstream — never treat that as "this notification
-    // now has zero posts" and wipe out previously good data.
-    if (body.posts.length === 0) {
-      sendJson(res, 200, { sourceId: source.id, created: 0, skipped: [] });
-      return;
-    }
-
+    const { posts, source_url: sourceUrl, source_name: sourceName } = body;
     const sourceText = body.source_text ?? '';
     const skipped: string[] = [];
-    const toCreate: Prisma.PostCreateManyInput[] = [];
+    const toCreate: Omit<Prisma.PostCreateManyInput, 'sourceId'>[] = [];
 
     for (const raw of body.posts) {
       if (!raw.post_name || !raw.post_name.trim()) {
@@ -235,7 +212,6 @@ export async function handleIngest(
 
       const organization = raw.recruiting_body?.trim() || null;
       toCreate.push({
-        sourceId: source.id,
         postName: raw.post_name.trim(),
         organization:
           organization && sourceText.includes(organization)
@@ -266,12 +242,43 @@ export async function handleIngest(
     // matching old rows to new ones isn't attempted here (that's the
     // separate dedup task). Replacing the set atomically keeps this
     // idempotent: a retry or duplicate send never leaves duplicate Posts.
-    await prisma.$transaction([
-      prisma.post.deleteMany({ where: { sourceId: source.id } }),
-      prisma.post.createMany({ data: toCreate }),
-    ]);
+    const { source, affectedJobs } = await prisma.$transaction(async (db) => {
+      const source = await db.source.upsert({
+        where: { url: sourceUrl },
+        update: {
+          name: sourceName,
+          rawHash: body.raw_hash ?? null,
+          notificationPdfUrl: body.notification_pdf_url ?? null,
+          officialSiteUrl: body.official_site_url ?? null,
+          applyUrl: body.apply_url ?? null,
+        },
+        create: {
+          url: sourceUrl,
+          name: sourceName,
+          rawHash: body.raw_hash ?? null,
+          notificationPdfUrl: body.notification_pdf_url ?? null,
+          officialSiteUrl: body.official_site_url ?? null,
+          applyUrl: body.apply_url ?? null,
+        },
+      });
+      const affectedJobs = await db.post.findMany({
+        where: { sourceId: source.id },
+        select: { id: true },
+      });
+      // An empty extraction can mean the upstream extractor failed.
+      if (posts.length === 0) return { source, affectedJobs };
 
-    await notifyJobsRevalidated(env);
+      await db.post.deleteMany({ where: { sourceId: source.id } });
+      await db.post.createMany({
+        data: toCreate.map((post) => ({ ...post, sourceId: source.id })),
+      });
+      return { source, affectedJobs };
+    });
+
+    await Promise.all(
+      affectedJobs.map(({ id }) => notifyJobsRevalidated(env, id)),
+    );
+    if (posts.length || affectedJobs.length) await notifyJobsRevalidated(env);
     sendJson(res, 200, {
       sourceId: source.id,
       created: toCreate.length,

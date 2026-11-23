@@ -81,3 +81,19 @@ test('inline bullet qualifications split into a scannable list with chips', () =
   assert.match(html, /\+1 more in details/);
   assert.doesNotMatch(html, /•/);
 });
+
+test('visitor text follows vacancy and pay details and omits unavailable counts', () => {
+  const render = (recentVisitorCount: number | null) =>
+    renderToStaticMarkup(
+      createElement(JobCard, {
+        job: { ...job, payLevel: 'Level 8', recentVisitorCount },
+      }),
+    );
+  assert.match(
+    render(1),
+    /Pay: Level 8<\/p><p[^>]*data-job-visitors[^>]*>1 visitor in the last 7 days/,
+  );
+  assert.match(render(6), /6 visitors in the last 7 days/);
+  assert.doesNotMatch(render(0), /data-job-visitors/);
+  assert.doesNotMatch(render(null), /data-job-visitors/);
+});

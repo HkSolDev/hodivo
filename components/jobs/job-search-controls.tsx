@@ -342,6 +342,7 @@ export function JobSortControl({
           }}
         >
           <option value="newest">Newest</option>
+          <option value="popular">Popular</option>
           <option value="soonest">Deadline: soonest first</option>
           <option value="furthest">Deadline: furthest first</option>
         </select>

@@ -382,7 +382,7 @@ test('Mobile discovery: compact layouts, accessible filters, truth in fields, an
       try {
         await page.setViewportSize({ width: 390, height: 844 });
         await page.goto(`${origin}/?q=Inspector&qualification=BACHELORS`, {
-          waitUntil: 'networkidle',
+          waitUntil: 'domcontentloaded',
         });
 
         await expect(
@@ -391,7 +391,7 @@ test('Mobile discovery: compact layouts, accessible filters, truth in fields, an
         await expect(page.locator('[data-job-card]')).toHaveCount(1);
 
         // Refresh
-        await page.reload({ waitUntil: 'networkidle' });
+        await page.reload({ waitUntil: 'domcontentloaded' });
         await expect(
           page.getByRole('searchbox', { name: 'Search all jobs' }),
         ).toHaveValue('Inspector');
@@ -406,7 +406,7 @@ test('Mobile discovery: compact layouts, accessible filters, truth in fields, an
         await expect(page).toHaveURL(/jobs\/post-full/);
 
         // Back navigation
-        await page.goBack({ waitUntil: 'networkidle' });
+        await page.goBack({ waitUntil: 'domcontentloaded' });
         await expect(page).toHaveURL(/q=Inspector/);
         await expect(
           page.getByRole('searchbox', { name: 'Search all jobs' }),

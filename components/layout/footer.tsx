@@ -8,6 +8,8 @@ export function Footer() {
       <Link href="/how-it-works">How Hodivo works</Link>
       <Link href="/typing">Typing practice</Link>
       <Link href="/typing/exam">Typing exam simulation</Link>
+      <Link href="/typing/leaderboard">Typing leaderboard</Link>
+      <Link href="/typing/progress">Typing progress</Link>
       <Link href="/tools/prepare-file" prefetch={false}>
         Resize files
       </Link>
