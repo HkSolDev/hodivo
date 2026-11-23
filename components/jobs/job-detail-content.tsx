@@ -11,6 +11,10 @@ import { JobShareActions } from './job-share-actions';
 import { JobSectionNav, type JobNavSection } from './job-section-nav';
 import { normalizeYoutubeResources } from './youtube-embed';
 import { YoutubePrepPlayer } from './youtube-prep-player';
+import {
+  HistoricalCutoffsCard,
+  type HistoricalCutoffItem,
+} from './historical-cutoffs-card';
 
 type EducationOption = {
   minimum_level?: string | null;
@@ -112,6 +116,7 @@ export interface ReviewedDetails {
   apply_url?: string | null;
   official_syllabus?: ReviewedSyllabusItem[] | null;
   youtube_resources?: ReviewedYoutubeResource[] | null;
+  historical_cutoffs?: HistoricalCutoffItem[] | null;
 }
 
 export interface JobDetailData {
@@ -469,6 +474,16 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
   const youtubeResources = normalizeYoutubeResources(
     reviewed?.youtube_resources,
   );
+  const historicalCutoffs = Array.isArray(reviewed?.historical_cutoffs)
+    ? reviewed.historical_cutoffs.filter(
+        (item) =>
+          item &&
+          (item.post ||
+            item.stage ||
+            typeof item.examYear === 'number' ||
+            (item.cutoffs && Object.keys(item.cutoffs).length > 0)),
+      )
+    : [];
 
   // Application steps
   const applicationSteps =
@@ -515,6 +530,9 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
 
   const navSections: JobNavSection[] = [
     { id: 'qualification', label: 'Qualification' },
+    ...(historicalCutoffs.length
+      ? [{ id: 'historical-cutoffs', label: 'Cutoffs' }]
+      : []),
     { id: 'age', label: 'Age' },
     ...(hasApplicantRequirements
       ? [{ id: 'applicant-requirements', label: 'Applicant' }]
@@ -798,6 +816,7 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
             </p>
           </JobDetailSection>
 
+          <HistoricalCutoffsCard items={historicalCutoffs} />
           <JobDetailSection id="age" title="Age requirements and relaxations">
             {baseAge ? (
               <p className={styles.intro}>
