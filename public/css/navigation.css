@@ -1,8 +1,9 @@
 .app-header {
+  --navigation-surface: color-mix(in srgb, var(--soft) 55%, var(--surface));
   position: sticky;
   top: 0;
   z-index: 40;
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  background: color-mix(in srgb, var(--navigation-surface) 92%, transparent);
 }
 .app-header .site-header {
   min-height: 76px;
@@ -17,7 +18,7 @@
   .app-header {
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
-    border-bottom: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+    box-shadow: inset 0 -1px color-mix(in srgb, var(--line) 85%, transparent);
   }
   .app-header:has(.header-mode-switcher) .site-header,
   body:has(#typing-title) .app-header .site-header {
@@ -370,11 +371,6 @@
   background: var(--soft-hover);
 }
 @media (min-width: 760px) {
-  .app-header {
-    position: sticky;
-    top: 0;
-    z-index: 40;
-  }
   .primary-navigation a[href='/sign-in'] {
     display: none;
   }
@@ -505,7 +501,7 @@
     padding: var(--space-2) max(var(--space-2), env(safe-area-inset-right, 0px))
       max(var(--space-2), env(safe-area-inset-bottom, 0px))
       max(var(--space-2), env(safe-area-inset-left, 0px));
-    background: var(--surface);
+    background: var(--navigation-surface);
     border-top: 1px solid var(--line);
   }
   body:has(#typing-title) .primary-navigation,

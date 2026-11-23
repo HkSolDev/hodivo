@@ -78,11 +78,19 @@ await test('public presentation removes portal branding and exposes only recogni
     'https://ssc.gov.in@evil.test/a',
     'javascript:alert(1)',
     'https://ssc.gov.in:444/a',
+    'https://ssc.gov.in:80/a',
+    'https://unrelated.example/a',
+    'https://ssc.gov.in.unrelated.example/a',
+    'https://jobs.freejobalert.com/a',
+    'http://uppbpb.gov.in/a',
+    'http://careers.bhel.in/a',
+    'not a URL',
   ])
     assert.equal(officialPublicUrl(value), null);
   for (const value of [
     'https://ssc.gov.in/a.pdf',
-    'http://uppbpb.gov.in/a',
+    'https://coconutboard.gov.in/a',
+    'https://careers.bhel.in/',
     'https://iiitp.ac.in/a',
     'https://www.ibps.in/a',
   ])
