@@ -1,7 +1,4 @@
 .app-header {
-  position: sticky;
-  top: 0;
-  z-index: 40;
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -17,6 +14,11 @@
   gap: var(--space-3) var(--space-4);
 }
 @media (min-width: 760px) {
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
   .app-header:has(.header-mode-switcher) .site-header,
   body:has(#typing-title) .app-header .site-header {
     min-height: 56px;
@@ -368,6 +370,11 @@
   background: var(--soft-hover);
 }
 @media (min-width: 760px) {
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
   .primary-navigation a[href='/sign-in'] {
     display: none;
   }
