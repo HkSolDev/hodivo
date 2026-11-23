@@ -133,7 +133,7 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
         name: 'Main navigation',
         exact: true,
       });
-      for (const width of [390, 834, 1440]) {
+      for (const width of [390, 759, 760, 834, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         await page.goto(origin);
         await expect(
@@ -161,6 +161,13 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
         assert.equal(metrics.overflow, false);
         assert.equal(metrics.position === 'fixed', width < 760);
         assert.equal(metrics.headerHeight, width < 760 ? 68 : 76);
+        if (width >= 760) {
+          const typing = navigation.locator('a[href="/typing"]').first();
+          await typing.hover();
+          await expect(navigation.getByLabel('Typing modes')).toBeVisible();
+          await navigation.locator('a[href="/saved"]').hover();
+          await expect(navigation.getByLabel('Typing modes')).toHaveCount(0);
+        }
         if (width < 760) {
           assert.equal(metrics.bottom, 900);
           assert(
@@ -170,6 +177,17 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
             ),
           );
         }
+        await page.goto(`${origin}/?q=Technical`);
+        const cardColors = await page
+          .locator('[data-job-card]')
+          .evaluateAll((cards) =>
+            cards
+              .slice(0, 3)
+              .map((card) => getComputedStyle(card).backgroundColor),
+          );
+        assert.equal(cardColors.length, 3);
+        assert.notEqual(cardColors[0], cardColors[1]);
+        assert.equal(cardColors[0], cardColors[2]);
         await navigation.locator('a[href="/saved"]').focus();
         assert.equal(
           await page

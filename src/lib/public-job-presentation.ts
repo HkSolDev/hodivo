@@ -13,12 +13,7 @@ export function officialPublicUrl(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   try {
     const url = new URL(value);
-    if (
-      !['https:', 'http:'].includes(url.protocol) ||
-      url.username ||
-      url.password ||
-      (url.port && !['80', '443'].includes(url.port))
-    )
+    if (url.protocol !== 'https:' || url.username || url.password || url.port)
       return null;
     const host = url.hostname.toLowerCase();
     // IBPS and major PSUs/DFIs use their own official .in / .co.in domains.
@@ -30,7 +25,9 @@ export function officialPublicUrl(value: unknown): string | null {
       'nlcindia.in',
       'nsic.co.in',
     ];
-    return /\.(?:gov|nic|ac|edu|res)\.in$/.test(host) ||
+    // BHEL identifies this exact recruiting host in its public fraud notice.
+    return host === 'careers.bhel.in' ||
+      /\.(?:gov|nic|ac|edu|res)\.in$/.test(host) ||
       allowedHosts.some((d) => host === d || host.endsWith(`.${d}`))
       ? url.href
       : null;
