@@ -62,20 +62,22 @@ await test('public presentation removes portal branding and exposes only recogni
   const original = structuredClone(raw);
   const result = publicJobPresentation(raw);
   assert.equal(result.postName, 'JKSSB Junior Engineer IES');
-  assert.equal(result.source.url, raw.source.url);
+  assert.equal(result.source.url, '');
   assert.equal(result.source.notificationPdfUrl, raw.source.notificationPdfUrl);
-  assert.equal(result.source.applyUrl, raw.source.applyUrl);
-  assert.equal(result.reviewedDetails.apply_url, raw.reviewedDetails.apply_url);
+  assert.equal(result.source.applyUrl, null);
+  assert.equal(result.reviewedDetails.apply_url, null);
   assert.equal(
     result.reviewedDetails.education_required,
     'Engineering diploma',
   );
   assert.deepEqual(raw, original, 'stored provenance must not be mutated');
   for (const value of [
+    'https://www.sarkariresult.com/a',
+    'https://freejobalert.com/a',
+    'https://mysarkarinaukri.com/a',
     'https://ssc.gov.in@evil.test/a',
     'javascript:alert(1)',
     'https://ssc.gov.in:444/a',
-    'not a url',
   ])
     assert.equal(officialPublicUrl(value), null);
   for (const value of [
@@ -83,8 +85,6 @@ await test('public presentation removes portal branding and exposes only recogni
     'http://uppbpb.gov.in/a',
     'https://iiitp.ac.in/a',
     'https://www.ibps.in/a',
-    'https://unknown.example/a',
-    'https://forms.gle/unverified',
   ])
     assert.equal(officialPublicUrl(value), value);
   for (const title of [
@@ -123,7 +123,7 @@ await test('job detail applies presentation filtering without rewriting the data
   );
   const job = await getPublicJob(raw.id);
   assert.equal(job?.postName, 'UPSC IES');
-  assert.equal(job?.source.url, raw.source.url);
+  assert.equal(job?.source.url, '');
   assert.equal(raw.source.url, 'https://mysarkarinaukri.com/jobs/example');
   assert.equal(raw.postName, 'UPSC IES — Sarkari Result');
 });

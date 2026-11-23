@@ -20,6 +20,14 @@ export function officialPublicUrl(value: unknown): string | null {
       (url.port && !['80', '443'].includes(url.port))
     )
       return null;
+    const host = url.hostname.toLowerCase();
+    if (
+      ['sarkariresult.com', 'freejobalert.com', 'mysarkarinaukri.com'].some(
+        (blocked) => host === blocked || host.endsWith(`.${blocked}`),
+      )
+    ) {
+      return null;
+    }
     return url.href;
   } catch {
     return null;
