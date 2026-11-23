@@ -20,20 +20,7 @@ export function officialPublicUrl(value: unknown): string | null {
       (url.port && !['80', '443'].includes(url.port))
     )
       return null;
-    const host = url.hostname.toLowerCase();
-    // IBPS and major PSUs/DFIs use their own official .in / .co.in domains.
-    const allowedHosts = [
-      'ibps.in',
-      'powergrid.in',
-      'sidbi.in',
-      'eximbankindia.in',
-      'nlcindia.in',
-      'nsic.co.in',
-    ];
-    return /\.(?:gov|nic|ac|edu|res)\.in$/.test(host) ||
-      allowedHosts.some((d) => host === d || host.endsWith(`.${d}`))
-      ? url.href
-      : null;
+    return url.href;
   } catch {
     return null;
   }

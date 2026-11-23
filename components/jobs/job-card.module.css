@@ -246,6 +246,17 @@
   }
 }
 
+:global(.home-page) .card:nth-child(even),
+.card:nth-child(even) {
+  background: color-mix(in srgb, var(--ink) 10%, var(--surface));
+}
+
+:global(.home-page) .card:nth-child(even) .qualChip,
+.card:nth-child(even) .qualChip {
+  background: var(--surface);
+  border-color: var(--control-line);
+}
+
 @media (max-width: 759px) {
   :global(.home-page) .card {
     display: flex;
@@ -253,17 +264,6 @@
     gap: var(--space-3);
     padding: 16px;
     min-width: 0;
-  }
-
-  :global(.home-page) .card:nth-child(even),
-  .card:nth-child(even) {
-    background: color-mix(in srgb, var(--ink) 10%, var(--surface));
-  }
-
-  :global(.home-page) .card:nth-child(even) .qualChip,
-  .card:nth-child(even) .qualChip {
-    background: var(--surface);
-    border-color: var(--control-line);
   }
 
   .card {
