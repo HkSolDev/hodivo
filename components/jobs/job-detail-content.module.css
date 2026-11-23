@@ -54,6 +54,8 @@
 }
 
 .sections {
+  --job-section-tab-height: 2.25rem;
+  --job-section-scroll-margin: calc(var(--site-header-height) + var(--space-5));
   display: grid;
   gap: var(--space-5);
 }
@@ -72,7 +74,7 @@
 }
 
 .card {
-  scroll-margin-top: var(--space-5);
+  scroll-margin-top: var(--job-section-scroll-margin);
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
@@ -336,15 +338,18 @@
     grid-column: 2;
     grid-row: 1;
     position: sticky;
-    top: var(--space-5);
-    max-height: calc(100vh - 2.5rem);
+    top: calc(var(--site-header-height) + var(--space-5));
+    max-height: calc(100dvh - var(--site-header-height) - 2.5rem);
     overflow-y: auto;
   }
 }
 
 @media (max-width: 1049px) {
-  .card {
-    scroll-margin-top: 4rem;
+  .sections:has(> nav) {
+    --job-section-scroll-margin: calc(
+      var(--site-header-height) + var(--job-section-tab-height) + 2 *
+        var(--space-2) + 1px + var(--space-5)
+    );
   }
 }
 

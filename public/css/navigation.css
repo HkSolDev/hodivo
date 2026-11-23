@@ -1,3 +1,6 @@
+:root {
+  --site-header-height: 76px;
+}
 .app-header {
   --navigation-surface: color-mix(in srgb, var(--soft) 55%, var(--surface));
   position: sticky;
@@ -6,7 +9,7 @@
   background: color-mix(in srgb, var(--navigation-surface) 92%, transparent);
 }
 .app-header .site-header {
-  min-height: 76px;
+  min-height: var(--site-header-height);
   padding-block: var(--space-2);
   border: 0;
   display: flex;
@@ -424,6 +427,9 @@
   }
 }
 @media (max-width: 759px) {
+  :root {
+    --site-header-height: 68px;
+  }
   html:has(.primary-navigation) {
     scroll-padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   }
@@ -435,7 +441,7 @@
     padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
   }
   .app-header .site-header {
-    min-height: 68px;
+    min-height: var(--site-header-height);
     align-items: center;
     flex-wrap: nowrap;
   }
