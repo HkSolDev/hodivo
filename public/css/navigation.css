@@ -407,6 +407,17 @@
 .nav-pending-dot[data-pending='true'] {
   opacity: 1;
 }
+@media (min-width: 760px) and (max-width: 1049px) {
+  .app-header .site-header,
+  .site-header > .header-actions {
+    flex-wrap: nowrap;
+    column-gap: var(--space-2);
+  }
+  .primary-navigation > a,
+  .nav-typing-group > a {
+    padding-inline: var(--space-2);
+  }
+}
 @media (min-width: 1050px) {
   .primary-navigation {
     gap: 0.5rem;
