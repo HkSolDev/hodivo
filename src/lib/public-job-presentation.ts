@@ -21,10 +21,17 @@ export function officialPublicUrl(value: unknown): string | null {
     )
       return null;
     const host = url.hostname.toLowerCase();
-    // IBPS is an official source in the worker registry but uses a plain .in host.
+    // IBPS and major PSUs/DFIs use their own official .in / .co.in domains.
+    const allowedHosts = [
+      'ibps.in',
+      'powergrid.in',
+      'sidbi.in',
+      'eximbankindia.in',
+      'nlcindia.in',
+      'nsic.co.in',
+    ];
     return /\.(?:gov|nic|ac|edu|res)\.in$/.test(host) ||
-      host === 'ibps.in' ||
-      host.endsWith('.ibps.in')
+      allowedHosts.some((d) => host === d || host.endsWith(`.${d}`))
       ? url.href
       : null;
   } catch {
