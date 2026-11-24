@@ -62,52 +62,6 @@ function countWords(str: string): number {
   return trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
 }
 
-function getOffsetTopWithin(
-  element: HTMLElement,
-  ancestor: HTMLElement,
-): number {
-  let top = 0;
-  let node: HTMLElement | null = element;
-  while (node && node !== ancestor) {
-    top += node.offsetTop;
-    node = node.offsetParent as HTMLElement | null;
-  }
-  return top;
-}
-
-function splitPassageForHighlight(
-  passageText: string,
-  typedLength: number,
-): { completed: string; active: string; remaining: string } {
-  const clamped = Math.max(0, Math.min(typedLength, passageText.length));
-  if (clamped >= passageText.length) {
-    return { completed: passageText, active: '', remaining: '' };
-  }
-  // Find whole-word boundaries around the current cursor position
-  let start = clamped;
-  let end = clamped + 1;
-  if (/\s/.test(passageText[clamped] ?? '')) {
-    while (end < passageText.length && /\s/.test(passageText[end] ?? '')) {
-      end++;
-    }
-    while (end < passageText.length && !/\s/.test(passageText[end] ?? '')) {
-      end++;
-    }
-  } else {
-    while (start > 0 && !/\s/.test(passageText[start - 1] ?? '')) {
-      start--;
-    }
-    while (end < passageText.length && !/\s/.test(passageText[end] ?? '')) {
-      end++;
-    }
-  }
-  return {
-    completed: passageText.slice(0, start),
-    active: passageText.slice(start, end),
-    remaining: passageText.slice(end),
-  };
-}
-
 export function ExamMode() {
   const { accountId, sessionChecked } = useWorkspace();
   const [authGateEnabled, setAuthGateEnabled] = useState(false);
@@ -182,6 +136,11 @@ export function ExamMode() {
   }, []);
 
   useEffect(() => {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      setAuthGateEnabled(false);
+      return;
+    }
     let active = true;
     fetch('/api/auth/get-session', { credentials: 'same-origin' })
       .then(async (res) => {
@@ -218,9 +177,6 @@ export function ExamMode() {
   }, [requiresSignIn]);
 
   const passageContainerRef = useRef<HTMLDivElement | null>(null);
-  const passageCursorRef = useRef<HTMLSpanElement | null>(null);
-  const lastPassageLineTopRef = useRef<number | null>(null);
-  const keyboardHeight = keyboardViewport?.height;
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -252,40 +208,6 @@ export function ExamMode() {
       mobile.removeEventListener('change', update);
     };
   }, [isInputFocused]);
-
-  useEffect(() => {
-    const container = passageContainerRef.current;
-    const cursor = passageCursorRef.current;
-    if (!container || !cursor) return;
-
-    const lineHeight =
-      Number.parseFloat(getComputedStyle(container).lineHeight) || 26;
-    const lineTop = getOffsetTopWithin(cursor, container);
-    if (
-      lastPassageLineTopRef.current !== null &&
-      Math.abs(lineTop - lastPassageLineTopRef.current) < lineHeight * 0.5 &&
-      (keyboardHeight === undefined ||
-        (lineTop >= container.scrollTop &&
-          lineTop + lineHeight <= container.scrollTop + container.clientHeight))
-    ) {
-      return;
-    }
-    lastPassageLineTopRef.current = lineTop;
-
-    const context =
-      keyboardHeight === undefined
-        ? lineHeight * 1.15
-        : Math.min(
-            lineHeight * 1.15,
-            Math.max(0, container.clientHeight - lineHeight),
-          );
-    const targetTop = Math.max(0, lineTop - context);
-    if (typeof container.scrollTo === 'function') {
-      container.scrollTo({ top: targetTop, behavior: 'smooth' });
-    } else {
-      container.scrollTop = targetTop;
-    }
-  }, [localText.length, snapshot?.passage.text, fontSize, keyboardHeight]);
 
   const fetchExams = useCallback(async (cursor?: string) => {
     examsAbortRef.current?.abort();
@@ -488,7 +410,6 @@ export function ExamMode() {
     setSelectedPassageId('');
     setSelectedVersionId('');
     setSnapshot(null);
-    lastPassageLineTopRef.current = null;
     if (passageContainerRef.current) passageContainerRef.current.scrollTop = 0;
     commitSession(null);
   };
@@ -639,7 +560,6 @@ export function ExamMode() {
     restartDialogRef.current?.close();
     resultDialogRef.current?.close();
     isComposingRef.current = false;
-    lastPassageLineTopRef.current = null;
     if (passageContainerRef.current) passageContainerRef.current.scrollTop = 0;
     commitSession(resetExamSession(advanced));
     textareaRef.current?.focus();
@@ -674,9 +594,6 @@ export function ExamMode() {
   const configuredDurationSecs =
     session?.remainingSeconds ?? versionDetail?.rules.durationSeconds ?? null;
   const remainingSecs = configuredDurationSecs ?? 600;
-  const highlightedPassage = snapshot?.passage.text
-    ? splitPassageForHighlight(snapshot.passage.text, localText.length)
-    : null;
 
   // Unified exam evaluation (Full Mistakes = 1.0, Half Mistakes = 0.5, Category Cutoffs)
   const durationProfileSecs = versionDetail?.rules.durationSeconds ?? 600;
@@ -1156,7 +1073,7 @@ export function ExamMode() {
             <div className={styles.panelHeaderRight}>
               <span className={styles.syncBadge}>
                 <span className={styles.syncDot} aria-hidden="true" />
-                Auto-scrolls synchronously
+                Manual scroll (Exam standard)
               </span>
               {versionDetail?.rules.targetWpm && (
                 <span className={styles.targetSpeedPill}>

@@ -376,24 +376,21 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
         const text = snapshot.passage.text.slice(0, 180);
         await answer.pressSequentially(text);
         await expect(answer).toHaveValue(text);
-        const activeWord = mobile
-          .getByRole('region', { name: 'Official Master Passage' })
-          .locator('[class*="passageActiveWord"]');
+        const passageSection = mobile.getByRole('region', {
+          name: 'Official Master Passage',
+        });
         await expect
           .poll(() =>
-            activeWord.evaluate((word) => {
-              const line = word.getClientRects()[0];
-              const passage = word.parentElement!;
-              const pane = passage.getBoundingClientRect();
+            passageSection.evaluate((section) => {
+              const pane = section.getBoundingClientRect();
               const answerBox = document
                 .getElementById('typing-textarea')!
                 .getBoundingClientRect();
               return (
-                passage.scrollTop > 0 &&
                 pane.top >= 32 &&
-                line.top >= pane.top &&
-                line.bottom <= pane.bottom &&
+                pane.height > 0 &&
                 pane.bottom <= answerBox.top &&
+                answerBox.height > 0 &&
                 answerBox.bottom <= 320
               );
             }),

@@ -281,10 +281,10 @@ export function evaluateExamAttempt(params: {
           Math.min(
             100,
             (totalEquivalentMistakes / denominatorWords) * 100,
-          ).toFixed(1),
+          ).toFixed(2),
         );
   const accuracyPercent =
-    typedLen === 0 ? 0 : Number(Math.max(0, 100 - errorPercent).toFixed(1));
+    typedLen === 0 ? 0 : Number(Math.max(0, 100 - errorPercent).toFixed(2));
 
   const elapsedMins = Math.max(elapsedSeconds / 60, 1 / 60);
   const grossWpm =

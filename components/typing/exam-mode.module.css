@@ -789,22 +789,6 @@
   color: var(--exam-text-muted);
 }
 
-.passageCompleted {
-  color: var(--exam-emerald);
-  font-weight: 500;
-}
-
-.passageActiveWord {
-  background: var(--exam-accent-blue);
-  color: #ffffff;
-  font-weight: 700;
-  border-radius: 3px;
-}
-
-.passageRemaining {
-  color: var(--exam-text-main);
-}
-
 /* Candidate Input Console Textarea */
 .textareaWrap {
   position: relative;
@@ -825,7 +809,7 @@
   resize: none;
   padding: 14px 18px;
   font-family: var(--exam-font-mono);
-  font-size: var(--passage-font-size);
+  font-size: calc(var(--passage-font-size) - 1.5px);
   line-height: var(--passage-line-height);
   color: var(--exam-text-main);
   background: transparent;

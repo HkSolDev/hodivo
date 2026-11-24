@@ -41,6 +41,8 @@ test('evaluateExamAttempt classifies case, punctuation, merge, and split errors 
   assert.equal(result.fullMistakes, 0);
   assert.equal(result.halfMistakes, 4);
   assert.equal(result.totalEquivalentMistakes, 2);
+  assert.equal(result.errorPercent, 25);
+  assert.equal(result.accuracyPercent, 75);
 });
 
 test('evaluateExamAttempt classifies substitutions, omissions, and extra words as Full Mistakes (1.0)', () => {
@@ -65,6 +67,8 @@ test('evaluateExamAttempt classifies substitutions, omissions, and extra words a
   assert.equal(result.fullMistakes, 3);
   assert.equal(result.halfMistakes, 0);
   assert.equal(result.totalEquivalentMistakes, 3);
+  assert.equal(result.errorPercent, 37.5);
+  assert.equal(result.accuracyPercent, 62.5);
 });
 
 test('SSC CHSL vs SSC CGL DEST profiles apply their respective WPM and category error cutoffs', () => {
@@ -94,4 +98,14 @@ test('SSC CHSL vs SSC CGL DEST profiles apply their respective WPM and category 
   // 10% error: meets CGL DEST UR (20%)
   assert.equal(cglResult.errorPercent, 10);
   assert.equal(cglResult.overallStatus, 'QUALIFIED_ALL');
+
+  // 7-word passage with 1 full mistake = 14.29% error rate (2 decimal places per SSC notice)
+  const sevenWordResult = evaluateExamAttempt({
+    masterText: 'One two three four five six seven.',
+    typedText: 'One two three four five six wrong.',
+    elapsedSeconds: 10,
+    examSlug: 'ssc-cgl',
+  });
+  assert.equal(sevenWordResult.errorPercent, 14.29);
+  assert.equal(sevenWordResult.accuracyPercent, 85.71);
 });
