@@ -1170,21 +1170,8 @@ export function ExamMode() {
               <p className={styles.passagePlaceholder}>
                 Loading master passage...
               </p>
-            ) : highlightedPassage ? (
-              <>
-                <span className={styles.passageCompleted}>
-                  {highlightedPassage.completed}
-                </span>
-                <span
-                  ref={passageCursorRef}
-                  className={styles.passageActiveWord}
-                >
-                  {highlightedPassage.active}
-                </span>
-                <span className={styles.passageRemaining}>
-                  {highlightedPassage.remaining}
-                </span>
-              </>
+            ) : snapshot?.passage.text ? (
+              snapshot.passage.text
             ) : (
               <span className={styles.passagePlaceholder}>
                 Select a ready exam version to load passage.
