@@ -2,7 +2,13 @@
 
 import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, type FocusEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FocusEvent,
+  type ReactNode,
+} from 'react';
 import { useWorkspace } from '@/components/providers/workspace-provider';
 
 const TYPING_MODES = [
@@ -243,7 +249,22 @@ export function PrimaryNavigation() {
   const pathname = usePathname();
   const { accountName } = useWorkspace();
   const [typingDropdownOpen, setTypingDropdownOpen] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const signedIn = accountName !== null;
+
+  useEffect(() => {
+    if (hoverTimerRef.current !== null) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setTypingDropdownOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current);
+    };
+  }, []);
   const active =
     pathname === '/sign-in'
       ? '/sign-in'
@@ -257,14 +278,37 @@ export function PrimaryNavigation() {
               (pathname === href || pathname.startsWith(`${href}/`)),
           )?.href;
 
+  const clearHoverTimer = () => {
+    if (hoverTimerRef.current !== null) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  };
+
   const openTypingDropdownDesktop = () => {
     if (typeof window !== 'undefined' && window.innerWidth >= 760) {
       setTypingDropdownOpen(true);
     }
   };
 
+  const handleTypingMouseEnter = () => {
+    clearHoverTimer();
+    if (typeof window !== 'undefined' && window.innerWidth >= 760) {
+      hoverTimerRef.current = setTimeout(() => {
+        hoverTimerRef.current = null;
+        setTypingDropdownOpen(true);
+      }, 120);
+    }
+  };
+
+  const handleTypingMouseLeave = () => {
+    clearHoverTimer();
+    setTypingDropdownOpen(false);
+  };
+
   const handleTypingBlur = (event: FocusEvent<HTMLDivElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget)) {
+      clearHoverTimer();
       setTypingDropdownOpen(false);
     }
   };
@@ -283,8 +327,8 @@ export function PrimaryNavigation() {
               <div
                 key={href}
                 className="nav-typing-group"
-                onMouseEnter={openTypingDropdownDesktop}
-                onMouseLeave={() => setTypingDropdownOpen(false)}
+                onMouseEnter={handleTypingMouseEnter}
+                onMouseLeave={handleTypingMouseLeave}
                 onFocus={openTypingDropdownDesktop}
                 onBlur={handleTypingBlur}
               >
