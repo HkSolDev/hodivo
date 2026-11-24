@@ -87,9 +87,17 @@ export function JobCard({
             </p>
           )}
         </div>
-        <p className={styles.deadline} data-job-deadline>
-          {applyBy ? `Apply by ${applyBy}` : 'Deadline not specified'}
-        </p>
+        <div className={styles.primaryStatusRow}>
+          <p className={styles.deadline} data-job-deadline>
+            {applyBy ? `Apply by ${applyBy}` : 'Deadline not specified'}
+          </p>
+          {job.vacancies != null && (
+            <span className={styles.vacancyPill} data-job-vacancies>
+              {job.vacancies.toLocaleString('en-IN')}{' '}
+              {job.vacancies === 1 ? 'vacancy' : 'vacancies'}
+            </span>
+          )}
+        </div>
         {matchSummary}
       </div>
       <div className={styles.facts}>
@@ -125,12 +133,9 @@ export function JobCard({
             )}
           </div>
         )}
-        {(job.vacancies != null || job.payLevel) && (
+        {job.payLevel && (
           <p className={`small ${styles.extra}`} data-job-extra>
-            {job.vacancies != null &&
-              `${job.vacancies.toLocaleString('en-IN')} vacancies`}
-            {job.vacancies != null && job.payLevel && ' · '}
-            {job.payLevel && `Pay: ${job.payLevel}`}
+            {`Pay: ${job.payLevel}`}
           </p>
         )}
         {Number.isSafeInteger(visitors) && visitors > 0 && (

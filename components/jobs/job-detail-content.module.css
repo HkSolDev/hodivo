@@ -72,7 +72,7 @@
 }
 
 .card {
-  scroll-margin-top: var(--space-5);
+  scroll-margin-top: 6rem;
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
@@ -344,7 +344,7 @@
 
 @media (max-width: 1049px) {
   .card {
-    scroll-margin-top: 4rem;
+    scroll-margin-top: 8.25rem;
   }
 }
 
