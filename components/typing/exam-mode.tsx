@@ -589,8 +589,8 @@ export function ExamMode() {
     isLoadingSnapshot;
   const passageLength = snapshot?.passage.text.length ?? 0;
   const typedLength = session?.text.length ?? 0;
-  const remainingStrokes = Math.max(0, passageLength - typedLength);
   const wordCount = countWords(session?.text ?? '');
+  const isExamRunning = session?.phase === 'running';
   const configuredDurationSecs =
     session?.remainingSeconds ?? versionDetail?.rules.durationSeconds ?? null;
   const remainingSecs = configuredDurationSecs ?? 600;
@@ -670,6 +670,7 @@ export function ExamMode() {
       } ${fontSize === 'small' ? styles.fontSizeSmall : fontSize === 'large' ? styles.fontSizeLarge : styles.fontSizeNormal}${keyboardViewport ? ` ${styles.keyboardLayout}` : ''}`}
       style={keyboardViewport ?? undefined}
       data-typing-exam-viewport="true"
+      data-typing-exam-running={isExamRunning ? 'true' : undefined}
     >
       {/* Top Consolidated Exam HUD Toolbar */}
       <section className={styles.hudSection}>
@@ -679,129 +680,136 @@ export function ExamMode() {
             <div className={styles.headerLeft}>
               <div className={styles.brandBadge}>
                 <span className={styles.brandPulse} aria-hidden="true" />
-                Official Exam
+                {isExamRunning
+                  ? (versionDetail?.label ?? 'Official Exam')
+                  : 'Official Exam'}
               </div>
-              <div className={styles.selectorRow}>
-                <label htmlFor="exam-select" className={styles.srOnly}>
-                  Exam
-                </label>
-                <select
-                  id="exam-select"
-                  className={styles.selectControl}
-                  value={selectedExamId}
-                  disabled={
-                    isSessionActive || isLoadingExams || exams.length === 0
-                  }
-                  onChange={(e) => {
-                    if (e.target.value === selectedExamId) return;
-                    clearSelection();
-                    setSelectedVersionId('');
-                    setVersions([]);
-                    setVersionsNextCursor(null);
-                    setSelectedExamId(e.target.value);
-                  }}
-                >
-                  <option value="">Select an exam</option>
-                  {exams.map((ex) => (
-                    <option key={ex.id} value={ex.id}>
-                      {ex.name} {ex.organization ? `(${ex.organization})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {examsNextCursor && (
-                  <button
-                    type="button"
-                    className={styles.btnInline}
-                    disabled={isSessionActive || isLoadingMoreExams}
-                    onClick={() => void fetchExams(examsNextCursor)}
-                  >
-                    {isLoadingMoreExams ? 'Loading...' : 'More Exams'}
-                  </button>
-                )}
-
-                <label htmlFor="version-select" className={styles.srOnly}>
-                  Version
-                </label>
-                <select
-                  id="version-select"
-                  className={styles.selectControl}
-                  value={selectedVersionId}
-                  disabled={
-                    isSessionActive ||
-                    isLoadingVersions ||
-                    versions.length === 0
-                  }
-                  onChange={(e) => {
-                    if (e.target.value === selectedVersionId) return;
-                    clearSelection();
-                    setSelectedVersionId(e.target.value);
-                  }}
-                >
-                  <option value="">Select a version</option>
-                  {versions.map((ver) => (
-                    <option key={ver.id} value={ver.id}>
-                      {ver.label} {ver.examYear ? `(${ver.examYear})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {versionsNextCursor && (
-                  <button
-                    type="button"
-                    className={styles.btnInline}
-                    disabled={isSessionActive || isLoadingMoreVersions}
-                    onClick={() =>
-                      selectedExamId &&
-                      void fetchVersions(selectedExamId, versionsNextCursor)
+              {!isExamRunning && (
+                <div className={styles.selectorRow}>
+                  <label htmlFor="exam-select" className={styles.srOnly}>
+                    Exam
+                  </label>
+                  <select
+                    id="exam-select"
+                    className={styles.selectControl}
+                    value={selectedExamId}
+                    disabled={
+                      isSessionActive || isLoadingExams || exams.length === 0
                     }
+                    onChange={(e) => {
+                      if (e.target.value === selectedExamId) return;
+                      clearSelection();
+                      setSelectedVersionId('');
+                      setVersions([]);
+                      setVersionsNextCursor(null);
+                      setSelectedExamId(e.target.value);
+                    }}
                   >
-                    {isLoadingMoreVersions ? 'Loading...' : 'More Versions'}
-                  </button>
-                )}
-
-                {passages.length > 0 && (
-                  <>
-                    <label htmlFor="passage-select" className={styles.srOnly}>
-                      Passage
-                    </label>
-                    <select
-                      id="passage-select"
-                      className={styles.selectControl}
-                      value={selectedPassageId}
-                      disabled={isPassageSelectLocked}
-                      onChange={(e) => {
-                        const nextId = e.target.value;
-                        setSelectedPassageId(nextId);
-                        if (versionDetail?.readiness.canStart) {
-                          void loadPassageForVersion(versionDetail, nextId);
-                        }
-                      }}
-                    >
-                      <option value="">
-                        Random passage ({passages.length} available)
+                    <option value="">Select an exam</option>
+                    {exams.map((ex) => (
+                      <option key={ex.id} value={ex.id}>
+                        {ex.name}{' '}
+                        {ex.organization ? `(${ex.organization})` : ''}
                       </option>
-                      {passages.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.title} (
-                          {p.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
-                            ? 'Previous Year'
-                            : p.sourceKind === 'RECONSTRUCTED'
-                              ? 'Reconstructed'
-                              : 'Practice'}
-                          )
+                    ))}
+                  </select>
+                  {examsNextCursor && (
+                    <button
+                      type="button"
+                      className={styles.btnInline}
+                      disabled={isSessionActive || isLoadingMoreExams}
+                      onClick={() => void fetchExams(examsNextCursor)}
+                    >
+                      {isLoadingMoreExams ? 'Loading...' : 'More Exams'}
+                    </button>
+                  )}
+
+                  <label htmlFor="version-select" className={styles.srOnly}>
+                    Version
+                  </label>
+                  <select
+                    id="version-select"
+                    className={styles.selectControl}
+                    value={selectedVersionId}
+                    disabled={
+                      isSessionActive ||
+                      isLoadingVersions ||
+                      versions.length === 0
+                    }
+                    onChange={(e) => {
+                      if (e.target.value === selectedVersionId) return;
+                      clearSelection();
+                      setSelectedVersionId(e.target.value);
+                    }}
+                  >
+                    <option value="">Select a version</option>
+                    {versions.map((ver) => (
+                      <option key={ver.id} value={ver.id}>
+                        {ver.label} {ver.examYear ? `(${ver.examYear})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {versionsNextCursor && (
+                    <button
+                      type="button"
+                      className={styles.btnInline}
+                      disabled={isSessionActive || isLoadingMoreVersions}
+                      onClick={() =>
+                        selectedExamId &&
+                        void fetchVersions(selectedExamId, versionsNextCursor)
+                      }
+                    >
+                      {isLoadingMoreVersions ? 'Loading...' : 'More Versions'}
+                    </button>
+                  )}
+
+                  {passages.length > 0 && (
+                    <>
+                      <label htmlFor="passage-select" className={styles.srOnly}>
+                        Passage
+                      </label>
+                      <select
+                        id="passage-select"
+                        className={styles.selectControl}
+                        value={selectedPassageId}
+                        disabled={isPassageSelectLocked}
+                        onChange={(e) => {
+                          const nextId = e.target.value;
+                          setSelectedPassageId(nextId);
+                          if (versionDetail?.readiness.canStart) {
+                            void loadPassageForVersion(versionDetail, nextId);
+                          }
+                        }}
+                      >
+                        <option value="">
+                          Random passage ({passages.length} available)
                         </option>
-                      ))}
-                    </select>
-                  </>
-                )}
-              </div>
+                        {passages.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} (
+                            {p.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
+                              ? 'Previous Year'
+                              : p.sourceKind === 'RECONSTRUCTED'
+                                ? 'Reconstructed'
+                                : 'Practice'}
+                            )
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className={styles.headerRight}>
-              <span className={styles.headerSub}>
-                {versionDetail
-                  ? `${versionDetail.rules.durationSeconds ?? 'Unspecified'}s · ${versionDetail.rules.targetWpm ?? 'Standard'} WPM target`
-                  : 'Select an exam version to inspect rules'}
-              </span>
+              {!isExamRunning && (
+                <span className={styles.headerSub}>
+                  {versionDetail
+                    ? `${versionDetail.rules.durationSeconds ?? 'Unspecified'}s · ${versionDetail.rules.targetWpm ?? 'Standard'} WPM target`
+                    : 'Select an exam version to inspect rules'}
+                </span>
+              )}
 
               {/* Digital High-Contrast Precision Timer */}
               <div
@@ -872,62 +880,33 @@ export function ExamMode() {
                 </div>
               </div>
 
-              {/* Backspace Constraint Pill */}
-              <div className={styles.rulePill}>
-                <span className={styles.ruleDot} />
-                <span>
-                  Rule:{' '}
-                  <strong>
-                    Backspace:{' '}
-                    {versionDetail?.rules.backspacePolicy ?? 'Unspecified'}
-                  </strong>
-                </span>
-              </div>
+              {!isExamRunning && (
+                <>
+                  {/* Backspace Constraint Pill */}
+                  <div className={styles.rulePill}>
+                    <span className={styles.ruleDot} />
+                    <span>
+                      Rule:{' '}
+                      <strong>
+                        Backspace:{' '}
+                        {versionDetail?.rules.backspacePolicy ?? 'Unspecified'}
+                      </strong>
+                    </span>
+                  </div>
 
-              <span className={styles.passageTitlePill}>
-                <span className={styles.toolbarLabel}>Passage:</span>
-                <strong>
-                  {snapshot?.passage.title ?? 'No passage selected'}
-                </strong>
-              </span>
-            </div>
-
-            {/* Telemetry Stroke / Character Counter Matrix */}
-            <div className={styles.telemetryMatrix}>
-              <div className={styles.statPill}>
-                <span>Total Strokes:</span>
-                <strong className={styles.statValue}>
-                  {passageLength.toLocaleString()}
-                </strong>
-              </div>
-              <span className={styles.statDivider} aria-hidden="true" />
-              <div className={styles.statPill}>
-                <span>Typed:</span>
-                <strong className={`${styles.statValue} ${styles.statTyped}`}>
-                  {typedLength.toLocaleString()}
-                </strong>
-              </div>
-              <span className={styles.statDivider} aria-hidden="true" />
-              <div className={styles.statPill}>
-                <span>Remaining:</span>
-                <strong
-                  className={`${styles.statValue} ${styles.statRemaining}`}
-                >
-                  {remainingStrokes.toLocaleString()}
-                </strong>
-              </div>
-              <span className={styles.statDivider} aria-hidden="true" />
-              <div className={styles.statPill}>
-                <span>Words:</span>
-                <strong className={styles.statValue}>
-                  {wordCount.toLocaleString()}
-                </strong>
-              </div>
+                  <span className={styles.passageTitlePill}>
+                    <span className={styles.toolbarLabel}>Passage:</span>
+                    <strong>
+                      {snapshot?.passage.title ?? 'No passage selected'}
+                    </strong>
+                  </span>
+                </>
+              )}
             </div>
           </nav>
 
           {/* Compact Instructions & Session Launch Strip */}
-          {versionDetail && (
+          {versionDetail && !isExamRunning && (
             <section
               className={styles.instructionsBar}
               aria-label="Exam instructions"
@@ -1066,21 +1045,25 @@ export function ExamMode() {
               <h2 id="passage-heading" className={styles.panelTitle}>
                 Official Master Passage
               </h2>
-              <span className={styles.panelBadge}>
-                Read-only Examination Script
-              </span>
-            </div>
-            <div className={styles.panelHeaderRight}>
-              <span className={styles.syncBadge}>
-                <span className={styles.syncDot} aria-hidden="true" />
-                Manual scroll (Exam standard)
-              </span>
-              {versionDetail?.rules.targetWpm && (
-                <span className={styles.targetSpeedPill}>
-                  Target: {versionDetail.rules.targetWpm} WPM
+              {!isExamRunning && (
+                <span className={styles.panelBadge}>
+                  Read-only Examination Script
                 </span>
               )}
             </div>
+            {!isExamRunning && (
+              <div className={styles.panelHeaderRight}>
+                <span className={styles.syncBadge}>
+                  <span className={styles.syncDot} aria-hidden="true" />
+                  Manual scroll (Exam standard)
+                </span>
+                {versionDetail?.rules.targetWpm && (
+                  <span className={styles.targetSpeedPill}>
+                    Target: {versionDetail.rules.targetWpm} WPM
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div ref={passageContainerRef} className={styles.passageContent}>
             {isLoadingVersionDetail || isLoadingSnapshot ? (
@@ -1125,34 +1108,32 @@ export function ExamMode() {
               <h2 id="input-heading" className={styles.panelTitle}>
                 Candidate Input Console
               </h2>
-              <span
-                className={`${styles.sessionStatusTag} ${
-                  session?.phase === 'running'
-                    ? styles.sessionStatusRunning
-                    : session?.phase === 'finished'
+              {!isExamRunning && (
+                <span
+                  className={`${styles.sessionStatusTag} ${
+                    session?.phase === 'finished'
                       ? styles.sessionStatusFinished
                       : ''
-                }`}
-              >
-                {session?.phase === 'running'
-                  ? 'Session Active'
-                  : session?.phase === 'finished'
+                  }`}
+                >
+                  {session?.phase === 'finished'
                     ? 'Completed'
                     : 'Awaiting Keystroke'}
-              </span>
+                </span>
+              )}
             </div>
-            <div className={styles.panelHeaderRight}>
-              <span className={styles.panelHint}>
-                {session?.phase === 'running'
-                  ? 'Test in progress · Editing permitted'
-                  : session?.phase === 'finished'
+            {!isExamRunning && (
+              <div className={styles.panelHeaderRight}>
+                <span className={styles.panelHint}>
+                  {session?.phase === 'finished'
                     ? 'Test submitted / expired · Read-only'
                     : 'Clock starts automatically on first keystroke'}
-              </span>
-              <span className={styles.prohibitedPill}>
-                Copy-Paste Prohibited
-              </span>
-            </div>
+                </span>
+                <span className={styles.prohibitedPill}>
+                  Copy-Paste Prohibited
+                </span>
+              </div>
+            )}
           </div>
           <div className={styles.textareaWrap}>
             <textarea
@@ -1222,15 +1203,17 @@ export function ExamMode() {
 
       {/* Pinned Bottom Simulation Action & Integrity Bar */}
       <footer className={styles.footer}>
-        <div className={styles.footerLeft}>
-          <Link href="/typing" className={styles.exitLink}>
-            ← Return to Practice Mode
-          </Link>
-          <span className={styles.footerWarning}>
-            Exiting or reloading will immediately forfeit this simulation
-            attempt.
-          </span>
-        </div>
+        {!isExamRunning && (
+          <div className={styles.footerLeft}>
+            <Link href="/typing" className={styles.exitLink}>
+              ← Return to Practice Mode
+            </Link>
+            <span className={styles.footerWarning}>
+              Exiting or reloading will immediately forfeit this simulation
+              attempt.
+            </span>
+          </div>
+        )}
 
         <div className={styles.footerActions}>
           <button
@@ -1250,14 +1233,25 @@ export function ExamMode() {
           >
             Restart examination
           </button>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={handleOpenSubmit}
-            disabled={!session || session.phase !== 'running'}
-          >
-            Submit examination
-          </button>
+          {session?.phase === 'ready' ? (
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={() => textareaRef.current?.focus()}
+              disabled={requiresSignIn}
+            >
+              Start examination
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={handleOpenSubmit}
+              disabled={!session || session.phase !== 'running'}
+            >
+              Submit examination
+            </button>
+          )}
         </div>
       </footer>
 
@@ -1398,7 +1392,11 @@ export function ExamMode() {
         ref={resultDialogRef}
         className={`${styles.dialog} ${styles.dialogResult}`}
         aria-labelledby="result-dialog-title"
-        onClose={() => resultDialogRef.current?.close()}
+        onClose={() => {
+          if (sessionRef.current?.phase === 'finished') {
+            performReset();
+          }
+        }}
       >
         <div className={styles.dialogHeader}>
           <h3 id="result-dialog-title" className={styles.dialogTitle}>
@@ -1523,10 +1521,7 @@ export function ExamMode() {
           <button
             type="button"
             className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => {
-              resultDialogRef.current?.close();
-              handleOpenRestart();
-            }}
+            onClick={() => resultDialogRef.current?.close()}
           >
             Restart examination
           </button>

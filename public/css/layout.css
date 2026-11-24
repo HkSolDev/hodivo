@@ -256,8 +256,10 @@ body:has(#typing-exam-title) {
 body:has(#typing-title) > footer,
 body:has(#typing-title) .site-footer,
 body:has(#typing-exam-title) > footer,
-body:has(#typing-exam-title) .site-footer {
-  display: none;
+body:has(#typing-exam-title) .site-footer,
+body:has([data-typing-exam-running='true']) .app-header,
+body:has([data-typing-exam-running='true']) .primary-navigation {
+  display: none !important;
 }
 
 body:has(#typing-title) > main,

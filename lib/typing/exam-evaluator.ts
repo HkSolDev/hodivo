@@ -31,10 +31,7 @@ export const EXAM_EVALUATION_PROFILES: Record<string, ExamEvaluationProfile> = {
     defaultDurationSeconds: 600,
     strokesPerWord: 5,
     halfMistakeWeight: 0.5,
-    categoryCutoffs: [
-      { category: 'UR', maxErrorPercent: 7 },
-      { category: 'OBC / EWS / SC / ST / PwD', maxErrorPercent: 10 },
-    ],
+    categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: 7 }],
   },
   'ssc-cgl': {
     examSlug: 'ssc-cgl',
@@ -43,11 +40,7 @@ export const EXAM_EVALUATION_PROFILES: Record<string, ExamEvaluationProfile> = {
     defaultDurationSeconds: 900,
     strokesPerWord: 5,
     halfMistakeWeight: 0.5,
-    categoryCutoffs: [
-      { category: 'UR', maxErrorPercent: 20 },
-      { category: 'OBC / EWS', maxErrorPercent: 25 },
-      { category: 'SC / ST / PwD', maxErrorPercent: 30 },
-    ],
+    categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: 20 }],
   },
   'rrb-ntpc': {
     examSlug: 'rrb-ntpc',
@@ -56,7 +49,7 @@ export const EXAM_EVALUATION_PROFILES: Record<string, ExamEvaluationProfile> = {
     defaultDurationSeconds: 600,
     strokesPerWord: 5,
     halfMistakeWeight: 0.5,
-    categoryCutoffs: [{ category: 'All Categories', maxErrorPercent: 5 }],
+    categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: 5 }],
   },
 };
 
@@ -67,10 +60,7 @@ const DEFAULT_EVALUATION_PROFILE: ExamEvaluationProfile = {
   defaultDurationSeconds: 600,
   strokesPerWord: 5,
   halfMistakeWeight: 0.5,
-  categoryCutoffs: [
-    { category: 'UR', maxErrorPercent: 7 },
-    { category: 'Reserved', maxErrorPercent: 10 },
-  ],
+  categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: 7 }],
 };
 
 export interface CategoryQualificationResult {
@@ -116,7 +106,7 @@ export function resolveExamEvaluationProfile(
       defaultTargetWpm: rules?.targetWpm ?? base.defaultTargetWpm,
       defaultDurationSeconds:
         rules?.durationSeconds ?? base.defaultDurationSeconds,
-      categoryCutoffs: [{ category: 'Standard', maxErrorPercent: maxError }],
+      categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: maxError }],
     };
   }
   return base;
@@ -314,7 +304,7 @@ export function evaluateExamAttempt(params: {
   let statusLabel = 'Below Cut-off';
   if (urQualified) {
     overallStatus = 'QUALIFIED_ALL';
-    statusLabel = 'Qualified (UR & All)';
+    statusLabel = 'Qualified (General)';
   } else if (anyQualified) {
     overallStatus = 'QUALIFIED_RESERVED';
     const passedCats = categoryResults
