@@ -512,12 +512,10 @@ input.passageIdInput:focus {
   scroll-padding-block: var(--space-3);
   background: var(--surface);
   font:
-    400 clamp(1.0625rem, 1.25vw + 0.75rem, 1.15rem) / 1.72 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    'Liberation Mono',
-    monospace;
+    400 clamp(1.0625rem, 1.25vw + 0.75rem, 1.15rem) / 1.72 Arial,
+    Tahoma,
+    'Segoe UI',
+    sans-serif;
   overflow-wrap: anywhere;
   user-select: none;
   transition:
@@ -785,12 +783,10 @@ input.passageIdInput:focus {
   background: var(--page);
   color: var(--ink);
   font:
-    400 1.0625rem / 1.55 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    'Liberation Mono',
-    monospace;
+    400 0.9375rem / 1.55 Arial,
+    Tahoma,
+    'Segoe UI',
+    sans-serif;
   resize: none;
   overflow-y: auto;
   transition:

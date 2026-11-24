@@ -34,16 +34,8 @@
     BlinkMacSystemFont,
     sans-serif
   );
-  --exam-font-mono: var(
-    --mono,
-    'JetBrains Mono',
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace
-  );
-  --passage-font-size: 15px;
+  --exam-font-mono: Arial, Tahoma, 'Segoe UI', sans-serif;
+  --passage-font-size: 16px;
   --passage-line-height: 1.82;
 
   flex: 1;
@@ -92,7 +84,7 @@
 }
 
 .fontSizeNormal {
-  --passage-font-size: 15px;
+  --passage-font-size: 16px;
 }
 
 .fontSizeLarge {
