@@ -29,6 +29,7 @@ import {
   type SessionSnapshot,
 } from '@/lib/typing/session';
 import { PassageView } from './passage-view';
+import { PillSwitch } from './pill-switch';
 import styles from './typing-practice.module.css';
 
 const DURATION_PRESETS = [
@@ -89,6 +90,7 @@ export function TypingPractice() {
     DEFAULT_CUSTOM_DURATION_MINUTES,
   );
   const [note, setNote] = useState<string | null>(null);
+  const [highlightErrors, setHighlightErrors] = useState(true);
   const [isFocused, setIsFocused] = useState(false);
   const [keyboardViewport, setKeyboardViewport] = useState<{
     height: number;
@@ -200,6 +202,17 @@ export function TypingPractice() {
         return;
       }
       if (event.inputType.startsWith('insert') && event.data) {
+        if (
+          event.data === ' ' &&
+          isRedundantSpaceInsertion(
+            textarea.value,
+            textarea.selectionStart,
+            textarea.selectionEnd,
+          )
+        ) {
+          event.preventDefault();
+          return;
+        }
         pendingInsertionRef.current = {
           text: event.data,
           position: textarea.selectionStart,
@@ -323,6 +336,17 @@ export function TypingPractice() {
     if (event.key === 'Escape') {
       event.preventDefault();
       event.currentTarget.blur();
+      return;
+    }
+    if (
+      event.key === ' ' &&
+      isRedundantSpaceInsertion(
+        event.currentTarget.value,
+        event.currentTarget.selectionStart,
+        event.currentTarget.selectionEnd,
+      )
+    ) {
+      event.preventDefault();
       return;
     }
     const modifierHeld = event.ctrlKey || event.metaKey;
@@ -864,6 +888,19 @@ export function TypingPractice() {
                 )}
             </div>
             <div className={styles.passageHeaderRight}>
+              <PillSwitch
+                checked={highlightErrors}
+                onChange={setHighlightErrors}
+                label="Highlight"
+                shortLabel="Color"
+                ariaLabel="Live error highlight"
+                title={
+                  highlightErrors
+                    ? 'Live error highlight is On — click to practice without green/red hints'
+                    : 'Live error highlight is Off — results still appear when finished'
+                }
+              />
+              <span className={styles.headerMetaDivider} aria-hidden="true" />
               <span>
                 Words: <strong>{wordCount}</strong>
               </span>
@@ -877,6 +914,7 @@ export function TypingPractice() {
             target={snapshot.target}
             typedText={snapshot.typedText}
             keyboardHeight={keyboardViewport?.height}
+            showFeedback={highlightErrors || snapshot.status === 'finished'}
           />
 
           {snapshot.status === 'finished' &&
@@ -1178,6 +1216,19 @@ export function TypingPractice() {
         </div>
       </div>
     </div>
+  );
+}
+
+function isRedundantSpaceInsertion(
+  value: string,
+  selectionStart: number,
+  selectionEnd: number,
+): boolean {
+  if (selectionStart !== selectionEnd) return false;
+  return (
+    selectionStart === 0 ||
+    value[selectionStart - 1] === ' ' ||
+    value[selectionStart] === ' '
   );
 }
 

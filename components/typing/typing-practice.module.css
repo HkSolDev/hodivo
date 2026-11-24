@@ -490,7 +490,7 @@ input.passageIdInput:focus {
 .passageHeaderRight {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.625rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.6875rem;
 }
@@ -498,6 +498,115 @@ input.passageIdInput:focus {
 .passageHeaderRight strong {
   color: var(--ink);
   font-weight: 600;
+}
+
+.headerMetaDivider {
+  width: 1px;
+  height: 0.875rem;
+  background: var(--line);
+  flex: none;
+}
+
+/* Reusable Apple-style Miniature Pill Switch */
+.pillSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.25rem 0.15rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.pillSwitch:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.4);
+  color: var(--ink);
+}
+
+.pillSwitch:focus-visible {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+}
+
+.pillSwitchOn {
+  border-color: rgba(37, 99, 235, 0.28);
+  color: var(--ink);
+}
+
+:global([data-theme='dark']) .pillSwitchOn {
+  border-color: rgba(96, 165, 250, 0.32);
+}
+
+.pillSwitchText {
+  letter-spacing: -0.01em;
+}
+
+.pillSwitchShortText {
+  display: none;
+  letter-spacing: -0.01em;
+}
+
+.pillSwitchTrack {
+  position: relative;
+  width: 1.625rem;
+  height: 0.9375rem;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.38);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12);
+  transition: background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  flex: none;
+}
+
+:global([data-theme='dark']) .pillSwitchTrack {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+.pillSwitchOn .pillSwitchTrack {
+  background: #2563eb;
+}
+
+:global([data-theme='dark']) .pillSwitchOn .pillSwitchTrack {
+  background: #3b82f6;
+}
+
+.pillSwitchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 0.6875rem;
+  height: 0.6875rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.25),
+    0 0 0 0.5px rgba(15, 23, 42, 0.06);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pillSwitchOn .pillSwitchThumb {
+  transform: translateX(0.6875rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pillSwitch,
+  .pillSwitchTrack,
+  .pillSwitchThumb {
+    transition: none;
+  }
 }
 
 /* Scrollable Passage Text Viewport */
@@ -610,6 +719,10 @@ input.passageIdInput:focus {
 
 .untyped {
   color: var(--ink-secondary);
+}
+
+.typedNeutral {
+  color: var(--ink);
 }
 
 /* Lower Block: Pinned Compact Typing Input Console (36% height) */
@@ -1237,9 +1350,41 @@ input.passageIdInput:focus {
   }
 
   .passageHeader {
-    height: 1.75rem;
+    height: 1.95rem;
     padding-inline: 0.625rem;
     font-size: 0.6875rem;
+  }
+
+  .passageHeaderRight {
+    gap: 0.4rem;
+  }
+
+  .pillSwitch {
+    padding: 0.125rem 0.2rem 0.125rem 0.4rem;
+    gap: 0.3rem;
+    font-size: 0.625rem;
+  }
+
+  .pillSwitchText {
+    display: none;
+  }
+
+  .pillSwitchShortText {
+    display: inline;
+  }
+
+  .pillSwitchTrack {
+    width: 1.45rem;
+    height: 0.85rem;
+  }
+
+  .pillSwitchThumb {
+    width: 0.6rem;
+    height: 0.6rem;
+  }
+
+  .pillSwitchOn .pillSwitchThumb {
+    transform: translateX(0.6rem);
   }
 
   .passage {

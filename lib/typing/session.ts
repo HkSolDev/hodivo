@@ -4,6 +4,7 @@
 // browser component and tests share one implementation.
 import { createClock, type TimeSource, type TypingClock } from './clock';
 import { isSupportedTypingText } from './custom-input';
+import { evaluate } from './evaluate';
 import { computeSessionScore, type SessionScore } from './scoring';
 
 export type SessionStatus = 'idle' | 'running' | 'paused' | 'finished';
@@ -164,11 +165,12 @@ export function createTypingSession(
       status = 'running';
     }
 
-    // Correctness is judged against the target position at insertion time,
-    // so corrected mistakes stay in the attempt history.
+    // Correctness is judged against the word-aligned target position at
+    // insertion time, so corrected mistakes stay in the attempt history
+    // without shifting subsequent words after a missing or extra letter.
     for (let index = 0; index < insertedText.length; index++) {
       const position = insertStart + index;
-      if (insertedText[index] === target[position]) {
+      if (insertedText[index] === expectedCharAt(target, nextText, position)) {
         correctAttempts++;
       } else {
         incorrectAttempts++;
@@ -178,7 +180,7 @@ export function createTypingSession(
     typedText = nextText;
 
     let finished = false;
-    if (nextText.length >= target.length) {
+    if (target.length > 0 && evaluate(target, nextText).done) {
       finish('target');
       finished = true;
     }
@@ -227,6 +229,49 @@ export function createTypingSession(
 interface TextEdit {
   start: number;
   inserted: string;
+}
+
+function expectedCharAt(
+  target: string,
+  typed: string,
+  position: number,
+): string | undefined {
+  const targetWords = target.match(/\S+/g);
+  if (!targetWords || targetWords.length === 0) return target[position];
+
+  let index = 0;
+  while (index < typed.length && typed[index] === ' ') {
+    index++;
+  }
+  if (position < index) return undefined;
+
+  let wordIdx = 0;
+  let wordStart = index;
+  while (index < position) {
+    if (typed[index] === ' ') {
+      while (index < position && typed[index] === ' ') {
+        index++;
+      }
+      wordIdx++;
+      wordStart = index;
+    } else {
+      index++;
+    }
+  }
+
+  const targetWord = targetWords[wordIdx];
+  if (targetWord === undefined) return undefined;
+  const charOffset = position - wordStart;
+
+  if (typed[position] === ' ') {
+    return wordIdx < targetWords.length - 1 &&
+      charOffset >= targetWord.length &&
+      typed[position - 1] !== ' '
+      ? ' '
+      : undefined;
+  }
+
+  return targetWord[charOffset];
 }
 
 // Locates the single changed region between two strings by walking the shared
