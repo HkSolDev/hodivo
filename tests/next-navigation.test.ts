@@ -122,6 +122,55 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
   ).toBeFocused();
   await page.getByRole('link', { name: 'View details' }).click();
   await expect(page.locator('.job-detail h1')).toHaveText(job.postName);
+  await t.test(
+    'job section tabs stay below the header on narrow screens',
+    async () => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      for (const width of [390, 759, 760, 834]) {
+        await page.setViewportSize({ width, height: 600 });
+        const tabs = page.getByRole('navigation', {
+          name: 'Jump to job section',
+        });
+        await tabs.evaluate((element) => {
+          window.scrollBy(0, element.getBoundingClientRect().top + 50);
+        });
+        await expect
+          .poll(
+            () =>
+              tabs.evaluate((element) => {
+                const headerBottom = document
+                  .querySelector('.app-header')!
+                  .getBoundingClientRect().bottom;
+                return Math.abs(
+                  element.getBoundingClientRect().top - headerBottom,
+                );
+              }),
+            {
+              message: `Section tabs should be below the header at ${width}px`,
+            },
+          )
+          .toBeLessThanOrEqual(1);
+
+        await tabs
+          .getByRole('link', { name: 'Qualification', exact: true })
+          .click();
+        await expect(page).toHaveURL(/#qualification$/);
+        await expect
+          .poll(() =>
+            tabs.evaluate((element) => {
+              const section = document.getElementById('qualification')!;
+              return (
+                section.getBoundingClientRect().top -
+                element.getBoundingClientRect().bottom
+              );
+            }),
+          )
+          .toBeGreaterThanOrEqual(0);
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.emulateMedia({ reducedMotion: null });
+    },
+  );
   await page.goBack();
   await expect(page.locator('[data-job-card]')).toHaveCount(1);
   await expect(page.locator('[data-job-title]')).toHaveText(job.postName);

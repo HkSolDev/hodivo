@@ -4,7 +4,7 @@
   background: var(--surface);
   box-shadow: var(--shadow-xs);
   overflow: hidden;
-  scroll-margin-top: var(--space-5);
+  scroll-margin-top: var(--job-section-scroll-margin);
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
@@ -164,12 +164,6 @@
   .bottomToggle {
     margin: 1.25rem;
     width: calc(100% - 2.5rem);
-  }
-}
-
-@media (max-width: 1049px) {
-  .section {
-    scroll-margin-top: 4rem;
   }
 }
 
