@@ -3,6 +3,7 @@
 import {
   useState,
   useEffect,
+  useMemo,
   useRef,
   useCallback,
   type ChangeEvent,
@@ -38,6 +39,7 @@ import {
 import { saveTypingAttempt } from '../../lib/typing/attempts-api';
 import { AttemptComparison, type AttemptSaveState } from './attempt-comparison';
 import { evaluateExamAttempt } from '../../lib/typing/exam-evaluator';
+import { ExamMistakeReview } from './exam-mistake-review';
 import { useWorkspace } from '../providers/workspace-provider';
 import { AuthBar } from '../auth/auth-bar';
 import styles from './exam-mode.module.css';
@@ -98,6 +100,7 @@ export function ExamMode() {
   const savedExamRunRef = useRef(false);
   const [session, setSession] = useState<ExamSession | null>(null);
   const [localText, setLocalText] = useState('');
+  const [resultTab, setResultTab] = useState<'summary' | 'mistakes'>('summary');
   const [fontSize, setFontSize] = useState<'small' | 'normal' | 'large'>(
     'normal',
   );
@@ -559,6 +562,7 @@ export function ExamMode() {
     }
     restartDialogRef.current?.close();
     resultDialogRef.current?.close();
+    setResultTab('summary');
     isComposingRef.current = false;
     if (passageContainerRef.current) passageContainerRef.current.scrollTop = 0;
     commitSession(resetExamSession(advanced));
@@ -595,18 +599,32 @@ export function ExamMode() {
     session?.remainingSeconds ?? versionDetail?.rules.durationSeconds ?? null;
   const remainingSecs = configuredDurationSecs ?? 600;
 
-  // Unified exam evaluation (Full Mistakes = 1.0, Half Mistakes = 0.5, Category Cutoffs)
+  // Unified exam evaluation (Full Mistakes = 1.0, Half Mistakes = 0.5, General Cutoff)
   const durationProfileSecs = versionDetail?.rules.durationSeconds ?? 600;
   const elapsedSecs = Math.max(0, durationProfileSecs - remainingSecs);
   const selectedExamSlug =
     exams.find((ex) => ex.id === selectedExamId)?.slug ?? null;
-  const evaluation = evaluateExamAttempt({
-    masterText: snapshot?.passage.text ?? '',
-    typedText: session?.text ?? '',
-    elapsedSeconds: elapsedSecs,
-    examSlug: selectedExamSlug,
-    rules: versionDetail?.rules ?? null,
-  });
+  const masterText = snapshot?.passage.text ?? '';
+  const submittedText = session?.text ?? '';
+  const versionRules = versionDetail?.rules ?? null;
+  const evaluation = useMemo(
+    () =>
+      evaluateExamAttempt({
+        masterText: phase === 'finished' ? masterText : '',
+        typedText: phase === 'finished' ? submittedText : '',
+        elapsedSeconds: elapsedSecs,
+        examSlug: selectedExamSlug,
+        rules: versionRules,
+      }),
+    [
+      phase,
+      masterText,
+      submittedText,
+      elapsedSecs,
+      selectedExamSlug,
+      versionRules,
+    ],
+  );
 
   useEffect(() => {
     if (
@@ -1404,109 +1422,152 @@ export function ExamMode() {
           </h3>
         </div>
         <div className={styles.dialogBody}>
-          <div className={styles.resultBanner}>
-            <div className={styles.resultBadge}>
-              {session?.finishReason === 'expired'
-                ? 'Time Expired'
-                : 'Submitted'}
-            </div>
-            <p className={styles.resultSummary}>
-              Official scoring is unavailable.
-            </p>
+          <div
+            className={styles.resultSegmented}
+            role="tablist"
+            aria-label="Result view"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'summary'}
+              className={`${styles.resultSegBtn}${resultTab === 'summary' ? ` ${styles.resultSegBtnActive}` : ''}`}
+              onClick={() => setResultTab('summary')}
+            >
+              Summary
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'mistakes'}
+              className={`${styles.resultSegBtn}${resultTab === 'mistakes' ? ` ${styles.resultSegBtnActive}` : ''}`}
+              onClick={() => setResultTab('mistakes')}
+            >
+              Mistakes ({evaluation.fullMistakes + evaluation.halfMistakes})
+            </button>
           </div>
 
-          <div className={styles.scoreGrid}>
-            <div
-              className={`${styles.scoreCard} ${
-                evaluation.netWpm >= evaluation.targetWpm
-                  ? styles.scoreCardHero
-                  : evaluation.netWpm >= 27
-                    ? styles.scoreCardWarn
-                    : styles.scoreCardDanger
-              }`}
-            >
-              <span className={styles.scoreCardLabel}>Net Speed (Est.)</span>
-              <strong className={styles.scoreCardVal}>
-                {evaluation.netWpm} WPM
-              </strong>
-              <span className={styles.scoreCardSub}>
-                Target benchmark: {evaluation.targetWpm} WPM
-              </span>
-            </div>
-            <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
-              <span className={styles.scoreCardLabel}>Gross Speed</span>
-              <strong className={styles.scoreCardVal}>
-                {evaluation.grossWpm} WPM
-              </strong>
-              <span className={styles.scoreCardSub}>Raw keystroke pace</span>
-            </div>
-            <div
-              className={`${styles.scoreCard} ${
-                evaluation.overallStatus === 'QUALIFIED_ALL'
-                  ? styles.scoreCardHero
-                  : evaluation.overallStatus === 'QUALIFIED_RESERVED'
-                    ? styles.scoreCardWarn
-                    : evaluation.accuracyPercent >= 90
-                      ? styles.scoreCardWarn
-                      : styles.scoreCardDanger
-              }`}
-            >
-              <span className={styles.scoreCardLabel}>
-                SSC Mistakes & Accuracy
-              </span>
-              <strong className={styles.scoreCardVal}>
-                {evaluation.accuracyPercent}%
-              </strong>
-              <span className={styles.scoreCardSub}>
-                {evaluation.fullMistakes} Full · {evaluation.halfMistakes} Half
-                ({evaluation.errorPercent}% error)
-              </span>
-            </div>
-            <div
-              className={`${styles.scoreCard} ${
-                evaluation.overallStatus === 'QUALIFIED_ALL'
-                  ? styles.scoreCardHero
-                  : evaluation.overallStatus === 'QUALIFIED_RESERVED'
-                    ? styles.scoreCardWarn
-                    : styles.scoreCardDanger
-              }`}
-            >
-              <span className={styles.scoreCardLabel}>Evaluation Status</span>
-              <strong className={styles.scoreCardVal}>
-                {evaluation.statusLabel}
-              </strong>
-              <span className={styles.scoreCardSub}>
-                {evaluation.statusDetail}
-              </span>
-            </div>
-            <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
-              <span className={styles.scoreCardLabel}>
-                Final answer characters
-              </span>
-              <strong className={styles.scoreCardVal}>
-                {typedLength.toLocaleString()}
-              </strong>
-              <span className={styles.scoreCardSub}>
-                Passage length: {passageLength.toLocaleString()}
-              </span>
-            </div>
-            <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
-              <span className={styles.scoreCardLabel}>Total Words Typed</span>
-              <strong className={styles.scoreCardVal}>
-                {wordCount.toLocaleString()}
-              </strong>
-              <span className={styles.scoreCardSub}>
-                Time taken: {elapsedSecs}s / {durationProfileSecs}s
-              </span>
-            </div>
-          </div>
-          {snapshot && (
-            <AttemptComparison
-              passageId={snapshot.passage.id}
-              mode="EXAM"
-              currentNetWpm={evaluation.netWpm}
-              currentErrorPercent={evaluation.errorPercent}
-              saveState={saveState}
+          {resultTab === 'summary' ? (
+            <>
+              <div className={styles.resultBanner}>
+                <div className={styles.resultBadge}>
+                  {session?.finishReason === 'expired'
+                    ? 'Time Expired'
+                    : 'Submitted'}
+                </div>
+                <p className={styles.resultSummary}>
+                  Official scoring is unavailable.
+                </p>
+              </div>
+
+              <div className={styles.scoreGrid}>
+                <div
+                  className={`${styles.scoreCard} ${
+                    evaluation.netWpm >= evaluation.targetWpm
+                      ? styles.scoreCardHero
+                      : evaluation.netWpm >= 27
+                        ? styles.scoreCardWarn
+                        : styles.scoreCardDanger
+                  }`}
+                >
+                  <span className={styles.scoreCardLabel}>
+                    Net Speed (Est.)
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.netWpm} WPM
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    Target benchmark: {evaluation.targetWpm} WPM
+                  </span>
+                </div>
+                <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
+                  <span className={styles.scoreCardLabel}>Gross Speed</span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.grossWpm} WPM
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    Raw keystroke pace
+                  </span>
+                </div>
+                <div
+                  className={`${styles.scoreCard} ${
+                    evaluation.overallStatus === 'QUALIFIED_ALL'
+                      ? styles.scoreCardHero
+                      : evaluation.overallStatus === 'QUALIFIED_RESERVED'
+                        ? styles.scoreCardWarn
+                        : evaluation.accuracyPercent >= 90
+                          ? styles.scoreCardWarn
+                          : styles.scoreCardDanger
+                  }`}
+                >
+                  <span className={styles.scoreCardLabel}>
+                    SSC Mistakes & Accuracy
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.accuracyPercent}%
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    {evaluation.fullMistakes} Full · {evaluation.halfMistakes}{' '}
+                    Half ({evaluation.errorPercent}% error)
+                  </span>
+                </div>
+                <div
+                  className={`${styles.scoreCard} ${
+                    evaluation.overallStatus === 'QUALIFIED_ALL'
+                      ? styles.scoreCardHero
+                      : evaluation.overallStatus === 'QUALIFIED_RESERVED'
+                        ? styles.scoreCardWarn
+                        : styles.scoreCardDanger
+                  }`}
+                >
+                  <span className={styles.scoreCardLabel}>
+                    Evaluation Status
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.statusLabel}
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    {evaluation.statusDetail}
+                  </span>
+                </div>
+                <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
+                  <span className={styles.scoreCardLabel}>
+                    Final answer characters
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {typedLength.toLocaleString()}
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    Passage length: {passageLength.toLocaleString()}
+                  </span>
+                </div>
+                <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
+                  <span className={styles.scoreCardLabel}>
+                    Total Words Typed
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {wordCount.toLocaleString()}
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    Time taken: {elapsedSecs}s / {durationProfileSecs}s
+                  </span>
+                </div>
+              </div>
+              {snapshot && (
+                <AttemptComparison
+                  passageId={snapshot.passage.id}
+                  mode="EXAM"
+                  currentNetWpm={evaluation.netWpm}
+                  currentErrorPercent={evaluation.errorPercent}
+                  saveState={saveState}
+                />
+              )}
+            </>
+          ) : (
+            <ExamMistakeReview
+              items={evaluation.reviewItems}
+              fullCount={evaluation.fullMistakes}
+              halfCount={evaluation.halfMistakes}
             />
           )}
         </div>

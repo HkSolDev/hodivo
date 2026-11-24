@@ -43,6 +43,16 @@ test('evaluateExamAttempt classifies case, punctuation, merge, and split errors 
   assert.equal(result.totalEquivalentMistakes, 2);
   assert.equal(result.errorPercent, 25);
   assert.equal(result.accuracyPercent, 75);
+  assert.equal(
+    result.reviewItems.filter((item) => item.weight === 0.5).length,
+    result.halfMistakes,
+  );
+  assert.deepEqual(
+    result.reviewItems
+      .filter((item) => item.weight > 0)
+      .map((item) => item.kind),
+    ['case', 'punctuation', 'merge', 'split'],
+  );
 });
 
 test('evaluateExamAttempt classifies substitutions, omissions, and extra words as Full Mistakes (1.0)', () => {
@@ -69,6 +79,16 @@ test('evaluateExamAttempt classifies substitutions, omissions, and extra words a
   assert.equal(result.totalEquivalentMistakes, 3);
   assert.equal(result.errorPercent, 37.5);
   assert.equal(result.accuracyPercent, 62.5);
+  assert.equal(
+    result.reviewItems.filter((item) => item.weight === 1).length,
+    result.fullMistakes,
+  );
+  assert.deepEqual(
+    result.reviewItems
+      .filter((item) => item.weight > 0)
+      .map((item) => item.kind),
+    ['omission', 'substitution', 'addition'],
+  );
 });
 
 test('SSC CHSL vs SSC CGL DEST profiles apply their respective WPM and category error cutoffs', () => {

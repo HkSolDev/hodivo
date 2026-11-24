@@ -265,7 +265,10 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
     'running session hides setup navigation and restart resets back to ready state',
     async () => {
       await expect(
-        page.getByRole('button', { name: 'Choose another version', exact: true }),
+        page.getByRole('button', {
+          name: 'Choose another version',
+          exact: true,
+        }),
       ).toHaveCount(0);
       await page
         .getByRole('button', { name: 'Restart examination', exact: true })
