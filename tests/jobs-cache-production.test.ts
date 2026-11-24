@@ -166,7 +166,7 @@ test(
       assert.equal(response.status, 200);
       return (await response.json()).data as FixtureJob[];
     };
-    const listingKeys = () => redis.keys('hodivo:jobs:listing:v1:*');
+    const listingKeys = () => redis.keys('hodivo:jobs:listing:v2:*');
     const counts = () => ({
       upstream: reads.filter((path) => path === '/api/jobs').length,
       listing: listingQueries.length,
@@ -207,7 +207,7 @@ test(
     assert.deepEqual(counts(), { upstream: 1, listing: 2, versions: 0 });
     const warmListingKeys = (await listingKeys()).sort();
     const detailKeys = (id: string) =>
-      redis.keys(`hodivo:jobs:detail:v1:${id}:*`);
+      redis.keys(`hodivo:jobs:detail:v2:${id}:*`);
     const requestDetail = (id: string) => fetch(apiOrigin + `/api/jobs/${id}`);
     const list = '/?sort=soonest&q=Headmaster';
     assert.match(await read(list), /Headmaster/);
@@ -1040,7 +1040,7 @@ test(
       ).ids,
       ['popular-01'],
     );
-    const [popularKey] = await redis.keys('hodivo:jobs:popular:v1:*');
+    const [popularKey] = await redis.keys('hodivo:jobs:popular:v2:*');
     assert.ok(popularKey);
     const ttl = await redis.pTTL(popularKey);
     await setTimeout(25);
@@ -1084,8 +1084,8 @@ test(
     await assertVisitors(newestWithFixture, 6);
     await assertVisitors(popularWithFixture, 6);
     await fetch(apiOrigin + '/api/jobs/popular-00');
-    const detailKeys = await redis.keys('hodivo:jobs:detail:v1:*');
-    const newestKeys = await redis.keys('hodivo:jobs:listing:v1:*');
+    const detailKeys = await redis.keys('hodivo:jobs:detail:v2:*');
+    const newestKeys = await redis.keys('hodivo:jobs:listing:v2:*');
     assert.ok(detailKeys.length && newestKeys.length);
     const unrelatedEntries = await redis.mGet([...detailKeys, ...newestKeys]);
 

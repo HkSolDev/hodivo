@@ -32,6 +32,7 @@ export function createPublicJobsCache(url: string) {
     }
   }
 
+  // v2 retires cached payloads built before the HTTPS-only link policy.
   async function readDetail(id: string, database = prisma) {
     const load = () => getPublicJob(id, database);
     if (!redis.isReady) return load();
@@ -46,7 +47,7 @@ export function createPublicJobsCache(url: string) {
         WHERE p.id = ${id}
       `;
       return row
-        ? `hodivo:jobs:detail:v1:${id}:${row.post}:${row.source}`
+        ? `hodivo:jobs:detail:v2:${id}:${row.post}:${row.source}`
         : null;
     }
 
@@ -109,8 +110,8 @@ export function createPublicJobsCache(url: string) {
     if (!revision) return load();
     const date = indiaDateKey(now);
     const key = snapshot
-      ? `hodivo:jobs:popular:v1:${date}:${pageSize}:${revision}:${snapshot.revision}`
-      : `hodivo:jobs:listing:v1:${date}:${pageSize}:${revision}`;
+      ? `hodivo:jobs:popular:v2:${date}:${pageSize}:${revision}:${snapshot.revision}`
+      : `hodivo:jobs:listing:v2:${date}:${pageSize}:${revision}`;
     const stored = await withDeadline(redis.get(key));
     if (stored) {
       try {

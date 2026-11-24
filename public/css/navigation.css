@@ -1,4 +1,8 @@
+:root {
+  --site-header-height: 76px;
+}
 .app-header {
+  --navigation-surface: color-mix(in srgb, var(--soft) 55%, var(--surface));
   position: sticky;
   top: 0;
   z-index: 40;
@@ -16,7 +20,7 @@
     0 6px 24px rgba(0, 0, 0, 0.28);
 }
 .app-header .site-header {
-  min-height: 76px;
+  min-height: var(--site-header-height);
   padding-block: var(--space-2);
   border: 0;
   display: flex;
@@ -412,11 +416,6 @@
   background: var(--soft-hover);
 }
 @media (min-width: 760px) {
-  .app-header {
-    position: sticky;
-    top: 0;
-    z-index: 40;
-  }
   .primary-navigation a[href='/sign-in'] {
     display: none;
   }
@@ -453,12 +452,26 @@
 .nav-pending-dot[data-pending='true'] {
   opacity: 1;
 }
+@media (min-width: 760px) and (max-width: 1049px) {
+  .app-header .site-header,
+  .site-header > .header-actions {
+    flex-wrap: nowrap;
+    column-gap: var(--space-2);
+  }
+  .primary-navigation > a,
+  .nav-typing-group > a {
+    padding-inline: var(--space-2);
+  }
+}
 @media (min-width: 1050px) {
   .primary-navigation {
     gap: 0.5rem;
   }
 }
 @media (max-width: 759px) {
+  :root {
+    --site-header-height: 68px;
+  }
   html:has(.primary-navigation) {
     scroll-padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   }
@@ -473,7 +486,7 @@
     padding-bottom: 0 !important;
   }
   .app-header .site-header {
-    min-height: 68px;
+    min-height: var(--site-header-height);
     align-items: center;
     flex-wrap: nowrap;
   }
