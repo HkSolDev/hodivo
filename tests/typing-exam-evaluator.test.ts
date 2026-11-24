@@ -21,7 +21,7 @@ test('evaluateExamAttempt counts exact match with 0 full and 0 half mistakes', (
   assert.equal(result.errorPercent, 0);
   assert.equal(result.accuracyPercent, 100);
   assert.equal(result.overallStatus, 'QUALIFIED_ALL');
-  assert.equal(result.statusLabel, 'Qualified (UR & All)');
+  assert.equal(result.statusLabel, 'Qualified (General)');
 });
 
 test('evaluateExamAttempt classifies case, punctuation, merge, and split errors as Half Mistakes (0.5)', () => {
@@ -41,6 +41,18 @@ test('evaluateExamAttempt classifies case, punctuation, merge, and split errors 
   assert.equal(result.fullMistakes, 0);
   assert.equal(result.halfMistakes, 4);
   assert.equal(result.totalEquivalentMistakes, 2);
+  assert.equal(result.errorPercent, 25);
+  assert.equal(result.accuracyPercent, 75);
+  assert.equal(
+    result.reviewItems.filter((item) => item.weight === 0.5).length,
+    result.halfMistakes,
+  );
+  assert.deepEqual(
+    result.reviewItems
+      .filter((item) => item.weight > 0)
+      .map((item) => item.kind),
+    ['case', 'punctuation', 'merge', 'split'],
+  );
 });
 
 test('evaluateExamAttempt classifies substitutions, omissions, and extra words as Full Mistakes (1.0)', () => {
@@ -65,6 +77,18 @@ test('evaluateExamAttempt classifies substitutions, omissions, and extra words a
   assert.equal(result.fullMistakes, 3);
   assert.equal(result.halfMistakes, 0);
   assert.equal(result.totalEquivalentMistakes, 3);
+  assert.equal(result.errorPercent, 37.5);
+  assert.equal(result.accuracyPercent, 62.5);
+  assert.equal(
+    result.reviewItems.filter((item) => item.weight === 1).length,
+    result.fullMistakes,
+  );
+  assert.deepEqual(
+    result.reviewItems
+      .filter((item) => item.weight > 0)
+      .map((item) => item.kind),
+    ['omission', 'substitution', 'addition'],
+  );
 });
 
 test('SSC CHSL vs SSC CGL DEST profiles apply their respective WPM and category error cutoffs', () => {
@@ -81,9 +105,9 @@ test('SSC CHSL vs SSC CGL DEST profiles apply their respective WPM and category 
     elapsedSeconds: 10,
     examSlug: 'ssc-chsl',
   });
-  // 10% error: exceeds CHSL UR (7%), meets CHSL Reserved (10%)
+  // 10% error: exceeds CHSL General (UR) cutoff (7%)
   assert.equal(chslResult.errorPercent, 10);
-  assert.equal(chslResult.overallStatus, 'QUALIFIED_RESERVED');
+  assert.equal(chslResult.overallStatus, 'BELOW_CUTOFF');
 
   const cglResult = evaluateExamAttempt({
     masterText,
@@ -91,7 +115,17 @@ test('SSC CHSL vs SSC CGL DEST profiles apply their respective WPM and category 
     elapsedSeconds: 10,
     examSlug: 'ssc-cgl',
   });
-  // 10% error: meets CGL DEST UR (20%)
+  // 10% error: meets CGL DEST General (UR) cutoff (20%)
   assert.equal(cglResult.errorPercent, 10);
   assert.equal(cglResult.overallStatus, 'QUALIFIED_ALL');
+
+  // 7-word passage with 1 full mistake = 14.29% error rate (2 decimal places per SSC notice)
+  const sevenWordResult = evaluateExamAttempt({
+    masterText: 'One two three four five six seven.',
+    typedText: 'One two three four five six wrong.',
+    elapsedSeconds: 10,
+    examSlug: 'ssc-cgl',
+  });
+  assert.equal(sevenWordResult.errorPercent, 14.29);
+  assert.equal(sevenWordResult.accuracyPercent, 85.71);
 });

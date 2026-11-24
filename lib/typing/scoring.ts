@@ -1,7 +1,8 @@
-// Practice scoring formulas preserved from the original project:
+// Practice scoring formulas:
 // grossWpm = (insertedAttempts / 5) / minutes; netWpm = max(0, grossWpm -
-// incorrectAttempts / minutes); accuracy = correct / inserted * 100 (100 if
-// zero attempts). Speed is unavailable while no active time has elapsed.
+// (incorrectAttempts / 5) / minutes) = (correctAttempts / 5) / minutes;
+// accuracy = correct / inserted * 100 (100 if zero attempts).
+// Speed is unavailable while no active time has elapsed.
 export interface AttemptCounts {
   insertedAttempts: number;
   correctAttempts: number;
@@ -29,7 +30,7 @@ export function computeSessionScore(
 
   const minutes = elapsedMs / 60000;
   const grossWpm = counts.insertedAttempts / 5 / minutes;
-  const netWpm = Math.max(0, grossWpm - counts.incorrectAttempts / minutes);
+  const netWpm = Math.max(0, grossWpm - counts.incorrectAttempts / 5 / minutes);
 
   return { grossWpm, netWpm, accuracy };
 }

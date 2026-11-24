@@ -262,17 +262,28 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
     },
   );
   await t.test(
-    'changing a running version warns, cancellation preserves text and confirmation discards locally',
+    'running session hides setup navigation and restart resets back to ready state',
     async () => {
+      await expect(
+        page.getByRole('button', {
+          name: 'Choose another version',
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      await page
+        .getByRole('button', { name: 'Restart examination', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Confirm restart', exact: true })
+        .click();
+      await expect(input).toHaveValue('');
       await page
         .getByRole('button', { name: 'Choose another version', exact: true })
         .click();
       await expect(
         page.getByRole('dialog', { name: 'Choose another version?' }),
       ).toBeVisible();
-      await page.clock.fastForward(1000);
       await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-      await expect(input).toHaveValue('Abc');
       await page
         .getByRole('button', { name: 'Choose another version', exact: true })
         .click();
@@ -376,24 +387,21 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
         const text = snapshot.passage.text.slice(0, 180);
         await answer.pressSequentially(text);
         await expect(answer).toHaveValue(text);
-        const activeWord = mobile
-          .getByRole('region', { name: 'Official Master Passage' })
-          .locator('[class*="passageActiveWord"]');
+        const passageSection = mobile.getByRole('region', {
+          name: 'Official Master Passage',
+        });
         await expect
           .poll(() =>
-            activeWord.evaluate((word) => {
-              const line = word.getClientRects()[0];
-              const passage = word.parentElement!;
-              const pane = passage.getBoundingClientRect();
+            passageSection.evaluate((section) => {
+              const pane = section.getBoundingClientRect();
               const answerBox = document
                 .getElementById('typing-textarea')!
                 .getBoundingClientRect();
               return (
-                passage.scrollTop > 0 &&
                 pane.top >= 32 &&
-                line.top >= pane.top &&
-                line.bottom <= pane.bottom &&
+                pane.height > 0 &&
                 pane.bottom <= answerBox.top &&
+                answerBox.height > 0 &&
                 answerBox.bottom <= 320
               );
             }),
@@ -429,12 +437,6 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
       const calls = requests.filter((r) => r.url.endsWith('/passage')).length;
       await page
         .getByRole('button', { name: 'Close summary', exact: true })
-        .click();
-      await page
-        .getByRole('button', { name: 'Restart examination', exact: true })
-        .click();
-      await page
-        .getByRole('button', { name: 'Confirm restart', exact: true })
         .click();
       await expect(input).toHaveValue('');
       await expect(input).toBeEditable();

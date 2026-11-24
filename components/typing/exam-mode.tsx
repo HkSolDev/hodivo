@@ -3,6 +3,7 @@
 import {
   useState,
   useEffect,
+  useMemo,
   useRef,
   useCallback,
   type ChangeEvent,
@@ -38,6 +39,7 @@ import {
 import { saveTypingAttempt } from '../../lib/typing/attempts-api';
 import { AttemptComparison, type AttemptSaveState } from './attempt-comparison';
 import { evaluateExamAttempt } from '../../lib/typing/exam-evaluator';
+import { ExamMistakeReview } from './exam-mistake-review';
 import { useWorkspace } from '../providers/workspace-provider';
 import { AuthBar } from '../auth/auth-bar';
 import styles from './exam-mode.module.css';
@@ -60,52 +62,6 @@ function formatRemainingTime(seconds: number): string {
 function countWords(str: string): number {
   const trimmed = str.trim();
   return trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
-}
-
-function getOffsetTopWithin(
-  element: HTMLElement,
-  ancestor: HTMLElement,
-): number {
-  let top = 0;
-  let node: HTMLElement | null = element;
-  while (node && node !== ancestor) {
-    top += node.offsetTop;
-    node = node.offsetParent as HTMLElement | null;
-  }
-  return top;
-}
-
-function splitPassageForHighlight(
-  passageText: string,
-  typedLength: number,
-): { completed: string; active: string; remaining: string } {
-  const clamped = Math.max(0, Math.min(typedLength, passageText.length));
-  if (clamped >= passageText.length) {
-    return { completed: passageText, active: '', remaining: '' };
-  }
-  // Find whole-word boundaries around the current cursor position
-  let start = clamped;
-  let end = clamped + 1;
-  if (/\s/.test(passageText[clamped] ?? '')) {
-    while (end < passageText.length && /\s/.test(passageText[end] ?? '')) {
-      end++;
-    }
-    while (end < passageText.length && !/\s/.test(passageText[end] ?? '')) {
-      end++;
-    }
-  } else {
-    while (start > 0 && !/\s/.test(passageText[start - 1] ?? '')) {
-      start--;
-    }
-    while (end < passageText.length && !/\s/.test(passageText[end] ?? '')) {
-      end++;
-    }
-  }
-  return {
-    completed: passageText.slice(0, start),
-    active: passageText.slice(start, end),
-    remaining: passageText.slice(end),
-  };
 }
 
 export function ExamMode() {
@@ -144,6 +100,7 @@ export function ExamMode() {
   const savedExamRunRef = useRef(false);
   const [session, setSession] = useState<ExamSession | null>(null);
   const [localText, setLocalText] = useState('');
+  const [resultTab, setResultTab] = useState<'summary' | 'mistakes'>('summary');
   const [fontSize, setFontSize] = useState<'small' | 'normal' | 'large'>(
     'normal',
   );
@@ -182,6 +139,11 @@ export function ExamMode() {
   }, []);
 
   useEffect(() => {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      setAuthGateEnabled(false);
+      return;
+    }
     let active = true;
     fetch('/api/auth/get-session', { credentials: 'same-origin' })
       .then(async (res) => {
@@ -218,9 +180,6 @@ export function ExamMode() {
   }, [requiresSignIn]);
 
   const passageContainerRef = useRef<HTMLDivElement | null>(null);
-  const passageCursorRef = useRef<HTMLSpanElement | null>(null);
-  const lastPassageLineTopRef = useRef<number | null>(null);
-  const keyboardHeight = keyboardViewport?.height;
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -252,40 +211,6 @@ export function ExamMode() {
       mobile.removeEventListener('change', update);
     };
   }, [isInputFocused]);
-
-  useEffect(() => {
-    const container = passageContainerRef.current;
-    const cursor = passageCursorRef.current;
-    if (!container || !cursor) return;
-
-    const lineHeight =
-      Number.parseFloat(getComputedStyle(container).lineHeight) || 26;
-    const lineTop = getOffsetTopWithin(cursor, container);
-    if (
-      lastPassageLineTopRef.current !== null &&
-      Math.abs(lineTop - lastPassageLineTopRef.current) < lineHeight * 0.5 &&
-      (keyboardHeight === undefined ||
-        (lineTop >= container.scrollTop &&
-          lineTop + lineHeight <= container.scrollTop + container.clientHeight))
-    ) {
-      return;
-    }
-    lastPassageLineTopRef.current = lineTop;
-
-    const context =
-      keyboardHeight === undefined
-        ? lineHeight * 1.15
-        : Math.min(
-            lineHeight * 1.15,
-            Math.max(0, container.clientHeight - lineHeight),
-          );
-    const targetTop = Math.max(0, lineTop - context);
-    if (typeof container.scrollTo === 'function') {
-      container.scrollTo({ top: targetTop, behavior: 'smooth' });
-    } else {
-      container.scrollTop = targetTop;
-    }
-  }, [localText.length, snapshot?.passage.text, fontSize, keyboardHeight]);
 
   const fetchExams = useCallback(async (cursor?: string) => {
     examsAbortRef.current?.abort();
@@ -488,7 +413,6 @@ export function ExamMode() {
     setSelectedPassageId('');
     setSelectedVersionId('');
     setSnapshot(null);
-    lastPassageLineTopRef.current = null;
     if (passageContainerRef.current) passageContainerRef.current.scrollTop = 0;
     commitSession(null);
   };
@@ -638,8 +562,8 @@ export function ExamMode() {
     }
     restartDialogRef.current?.close();
     resultDialogRef.current?.close();
+    setResultTab('summary');
     isComposingRef.current = false;
-    lastPassageLineTopRef.current = null;
     if (passageContainerRef.current) passageContainerRef.current.scrollTop = 0;
     commitSession(resetExamSession(advanced));
     textareaRef.current?.focus();
@@ -669,27 +593,38 @@ export function ExamMode() {
     isLoadingSnapshot;
   const passageLength = snapshot?.passage.text.length ?? 0;
   const typedLength = session?.text.length ?? 0;
-  const remainingStrokes = Math.max(0, passageLength - typedLength);
   const wordCount = countWords(session?.text ?? '');
+  const isExamRunning = session?.phase === 'running';
   const configuredDurationSecs =
     session?.remainingSeconds ?? versionDetail?.rules.durationSeconds ?? null;
   const remainingSecs = configuredDurationSecs ?? 600;
-  const highlightedPassage = snapshot?.passage.text
-    ? splitPassageForHighlight(snapshot.passage.text, localText.length)
-    : null;
 
-  // Unified exam evaluation (Full Mistakes = 1.0, Half Mistakes = 0.5, Category Cutoffs)
+  // Unified exam evaluation (Full Mistakes = 1.0, Half Mistakes = 0.5, General Cutoff)
   const durationProfileSecs = versionDetail?.rules.durationSeconds ?? 600;
   const elapsedSecs = Math.max(0, durationProfileSecs - remainingSecs);
   const selectedExamSlug =
     exams.find((ex) => ex.id === selectedExamId)?.slug ?? null;
-  const evaluation = evaluateExamAttempt({
-    masterText: snapshot?.passage.text ?? '',
-    typedText: session?.text ?? '',
-    elapsedSeconds: elapsedSecs,
-    examSlug: selectedExamSlug,
-    rules: versionDetail?.rules ?? null,
-  });
+  const masterText = snapshot?.passage.text ?? '';
+  const submittedText = session?.text ?? '';
+  const versionRules = versionDetail?.rules ?? null;
+  const evaluation = useMemo(
+    () =>
+      evaluateExamAttempt({
+        masterText: phase === 'finished' ? masterText : '',
+        typedText: phase === 'finished' ? submittedText : '',
+        elapsedSeconds: elapsedSecs,
+        examSlug: selectedExamSlug,
+        rules: versionRules,
+      }),
+    [
+      phase,
+      masterText,
+      submittedText,
+      elapsedSecs,
+      selectedExamSlug,
+      versionRules,
+    ],
+  );
 
   useEffect(() => {
     if (
@@ -753,6 +688,7 @@ export function ExamMode() {
       } ${fontSize === 'small' ? styles.fontSizeSmall : fontSize === 'large' ? styles.fontSizeLarge : styles.fontSizeNormal}${keyboardViewport ? ` ${styles.keyboardLayout}` : ''}`}
       style={keyboardViewport ?? undefined}
       data-typing-exam-viewport="true"
+      data-typing-exam-running={isExamRunning ? 'true' : undefined}
     >
       {/* Top Consolidated Exam HUD Toolbar */}
       <section className={styles.hudSection}>
@@ -762,129 +698,136 @@ export function ExamMode() {
             <div className={styles.headerLeft}>
               <div className={styles.brandBadge}>
                 <span className={styles.brandPulse} aria-hidden="true" />
-                Official Exam
+                {isExamRunning
+                  ? (versionDetail?.label ?? 'Official Exam')
+                  : 'Official Exam'}
               </div>
-              <div className={styles.selectorRow}>
-                <label htmlFor="exam-select" className={styles.srOnly}>
-                  Exam
-                </label>
-                <select
-                  id="exam-select"
-                  className={styles.selectControl}
-                  value={selectedExamId}
-                  disabled={
-                    isSessionActive || isLoadingExams || exams.length === 0
-                  }
-                  onChange={(e) => {
-                    if (e.target.value === selectedExamId) return;
-                    clearSelection();
-                    setSelectedVersionId('');
-                    setVersions([]);
-                    setVersionsNextCursor(null);
-                    setSelectedExamId(e.target.value);
-                  }}
-                >
-                  <option value="">Select an exam</option>
-                  {exams.map((ex) => (
-                    <option key={ex.id} value={ex.id}>
-                      {ex.name} {ex.organization ? `(${ex.organization})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {examsNextCursor && (
-                  <button
-                    type="button"
-                    className={styles.btnInline}
-                    disabled={isSessionActive || isLoadingMoreExams}
-                    onClick={() => void fetchExams(examsNextCursor)}
-                  >
-                    {isLoadingMoreExams ? 'Loading...' : 'More Exams'}
-                  </button>
-                )}
-
-                <label htmlFor="version-select" className={styles.srOnly}>
-                  Version
-                </label>
-                <select
-                  id="version-select"
-                  className={styles.selectControl}
-                  value={selectedVersionId}
-                  disabled={
-                    isSessionActive ||
-                    isLoadingVersions ||
-                    versions.length === 0
-                  }
-                  onChange={(e) => {
-                    if (e.target.value === selectedVersionId) return;
-                    clearSelection();
-                    setSelectedVersionId(e.target.value);
-                  }}
-                >
-                  <option value="">Select a version</option>
-                  {versions.map((ver) => (
-                    <option key={ver.id} value={ver.id}>
-                      {ver.label} {ver.examYear ? `(${ver.examYear})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {versionsNextCursor && (
-                  <button
-                    type="button"
-                    className={styles.btnInline}
-                    disabled={isSessionActive || isLoadingMoreVersions}
-                    onClick={() =>
-                      selectedExamId &&
-                      void fetchVersions(selectedExamId, versionsNextCursor)
+              {!isExamRunning && (
+                <div className={styles.selectorRow}>
+                  <label htmlFor="exam-select" className={styles.srOnly}>
+                    Exam
+                  </label>
+                  <select
+                    id="exam-select"
+                    className={styles.selectControl}
+                    value={selectedExamId}
+                    disabled={
+                      isSessionActive || isLoadingExams || exams.length === 0
                     }
+                    onChange={(e) => {
+                      if (e.target.value === selectedExamId) return;
+                      clearSelection();
+                      setSelectedVersionId('');
+                      setVersions([]);
+                      setVersionsNextCursor(null);
+                      setSelectedExamId(e.target.value);
+                    }}
                   >
-                    {isLoadingMoreVersions ? 'Loading...' : 'More Versions'}
-                  </button>
-                )}
-
-                {passages.length > 0 && (
-                  <>
-                    <label htmlFor="passage-select" className={styles.srOnly}>
-                      Passage
-                    </label>
-                    <select
-                      id="passage-select"
-                      className={styles.selectControl}
-                      value={selectedPassageId}
-                      disabled={isPassageSelectLocked}
-                      onChange={(e) => {
-                        const nextId = e.target.value;
-                        setSelectedPassageId(nextId);
-                        if (versionDetail?.readiness.canStart) {
-                          void loadPassageForVersion(versionDetail, nextId);
-                        }
-                      }}
-                    >
-                      <option value="">
-                        Random passage ({passages.length} available)
+                    <option value="">Select an exam</option>
+                    {exams.map((ex) => (
+                      <option key={ex.id} value={ex.id}>
+                        {ex.name}{' '}
+                        {ex.organization ? `(${ex.organization})` : ''}
                       </option>
-                      {passages.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.title} (
-                          {p.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
-                            ? 'Previous Year'
-                            : p.sourceKind === 'RECONSTRUCTED'
-                              ? 'Reconstructed'
-                              : 'Practice'}
-                          )
+                    ))}
+                  </select>
+                  {examsNextCursor && (
+                    <button
+                      type="button"
+                      className={styles.btnInline}
+                      disabled={isSessionActive || isLoadingMoreExams}
+                      onClick={() => void fetchExams(examsNextCursor)}
+                    >
+                      {isLoadingMoreExams ? 'Loading...' : 'More Exams'}
+                    </button>
+                  )}
+
+                  <label htmlFor="version-select" className={styles.srOnly}>
+                    Version
+                  </label>
+                  <select
+                    id="version-select"
+                    className={styles.selectControl}
+                    value={selectedVersionId}
+                    disabled={
+                      isSessionActive ||
+                      isLoadingVersions ||
+                      versions.length === 0
+                    }
+                    onChange={(e) => {
+                      if (e.target.value === selectedVersionId) return;
+                      clearSelection();
+                      setSelectedVersionId(e.target.value);
+                    }}
+                  >
+                    <option value="">Select a version</option>
+                    {versions.map((ver) => (
+                      <option key={ver.id} value={ver.id}>
+                        {ver.label} {ver.examYear ? `(${ver.examYear})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {versionsNextCursor && (
+                    <button
+                      type="button"
+                      className={styles.btnInline}
+                      disabled={isSessionActive || isLoadingMoreVersions}
+                      onClick={() =>
+                        selectedExamId &&
+                        void fetchVersions(selectedExamId, versionsNextCursor)
+                      }
+                    >
+                      {isLoadingMoreVersions ? 'Loading...' : 'More Versions'}
+                    </button>
+                  )}
+
+                  {passages.length > 0 && (
+                    <>
+                      <label htmlFor="passage-select" className={styles.srOnly}>
+                        Passage
+                      </label>
+                      <select
+                        id="passage-select"
+                        className={styles.selectControl}
+                        value={selectedPassageId}
+                        disabled={isPassageSelectLocked}
+                        onChange={(e) => {
+                          const nextId = e.target.value;
+                          setSelectedPassageId(nextId);
+                          if (versionDetail?.readiness.canStart) {
+                            void loadPassageForVersion(versionDetail, nextId);
+                          }
+                        }}
+                      >
+                        <option value="">
+                          Random passage ({passages.length} available)
                         </option>
-                      ))}
-                    </select>
-                  </>
-                )}
-              </div>
+                        {passages.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} (
+                            {p.sourceKind === 'OFFICIAL_PREVIOUS_YEAR'
+                              ? 'Previous Year'
+                              : p.sourceKind === 'RECONSTRUCTED'
+                                ? 'Reconstructed'
+                                : 'Practice'}
+                            )
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className={styles.headerRight}>
-              <span className={styles.headerSub}>
-                {versionDetail
-                  ? `${versionDetail.rules.durationSeconds ?? 'Unspecified'}s · ${versionDetail.rules.targetWpm ?? 'Standard'} WPM target`
-                  : 'Select an exam version to inspect rules'}
-              </span>
+              {!isExamRunning && (
+                <span className={styles.headerSub}>
+                  {versionDetail
+                    ? `${versionDetail.rules.durationSeconds ?? 'Unspecified'}s · ${versionDetail.rules.targetWpm ?? 'Standard'} WPM target`
+                    : 'Select an exam version to inspect rules'}
+                </span>
+              )}
 
               {/* Digital High-Contrast Precision Timer */}
               <div
@@ -955,62 +898,33 @@ export function ExamMode() {
                 </div>
               </div>
 
-              {/* Backspace Constraint Pill */}
-              <div className={styles.rulePill}>
-                <span className={styles.ruleDot} />
-                <span>
-                  Rule:{' '}
-                  <strong>
-                    Backspace:{' '}
-                    {versionDetail?.rules.backspacePolicy ?? 'Unspecified'}
-                  </strong>
-                </span>
-              </div>
+              {!isExamRunning && (
+                <>
+                  {/* Backspace Constraint Pill */}
+                  <div className={styles.rulePill}>
+                    <span className={styles.ruleDot} />
+                    <span>
+                      Rule:{' '}
+                      <strong>
+                        Backspace:{' '}
+                        {versionDetail?.rules.backspacePolicy ?? 'Unspecified'}
+                      </strong>
+                    </span>
+                  </div>
 
-              <span className={styles.passageTitlePill}>
-                <span className={styles.toolbarLabel}>Passage:</span>
-                <strong>
-                  {snapshot?.passage.title ?? 'No passage selected'}
-                </strong>
-              </span>
-            </div>
-
-            {/* Telemetry Stroke / Character Counter Matrix */}
-            <div className={styles.telemetryMatrix}>
-              <div className={styles.statPill}>
-                <span>Total Strokes:</span>
-                <strong className={styles.statValue}>
-                  {passageLength.toLocaleString()}
-                </strong>
-              </div>
-              <span className={styles.statDivider} aria-hidden="true" />
-              <div className={styles.statPill}>
-                <span>Typed:</span>
-                <strong className={`${styles.statValue} ${styles.statTyped}`}>
-                  {typedLength.toLocaleString()}
-                </strong>
-              </div>
-              <span className={styles.statDivider} aria-hidden="true" />
-              <div className={styles.statPill}>
-                <span>Remaining:</span>
-                <strong
-                  className={`${styles.statValue} ${styles.statRemaining}`}
-                >
-                  {remainingStrokes.toLocaleString()}
-                </strong>
-              </div>
-              <span className={styles.statDivider} aria-hidden="true" />
-              <div className={styles.statPill}>
-                <span>Words:</span>
-                <strong className={styles.statValue}>
-                  {wordCount.toLocaleString()}
-                </strong>
-              </div>
+                  <span className={styles.passageTitlePill}>
+                    <span className={styles.toolbarLabel}>Passage:</span>
+                    <strong>
+                      {snapshot?.passage.title ?? 'No passage selected'}
+                    </strong>
+                  </span>
+                </>
+              )}
             </div>
           </nav>
 
           {/* Compact Instructions & Session Launch Strip */}
-          {versionDetail && (
+          {versionDetail && !isExamRunning && (
             <section
               className={styles.instructionsBar}
               aria-label="Exam instructions"
@@ -1149,42 +1063,33 @@ export function ExamMode() {
               <h2 id="passage-heading" className={styles.panelTitle}>
                 Official Master Passage
               </h2>
-              <span className={styles.panelBadge}>
-                Read-only Examination Script
-              </span>
-            </div>
-            <div className={styles.panelHeaderRight}>
-              <span className={styles.syncBadge}>
-                <span className={styles.syncDot} aria-hidden="true" />
-                Auto-scrolls synchronously
-              </span>
-              {versionDetail?.rules.targetWpm && (
-                <span className={styles.targetSpeedPill}>
-                  Target: {versionDetail.rules.targetWpm} WPM
+              {!isExamRunning && (
+                <span className={styles.panelBadge}>
+                  Read-only Examination Script
                 </span>
               )}
             </div>
+            {!isExamRunning && (
+              <div className={styles.panelHeaderRight}>
+                <span className={styles.syncBadge}>
+                  <span className={styles.syncDot} aria-hidden="true" />
+                  Manual scroll (Exam standard)
+                </span>
+                {versionDetail?.rules.targetWpm && (
+                  <span className={styles.targetSpeedPill}>
+                    Target: {versionDetail.rules.targetWpm} WPM
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div ref={passageContainerRef} className={styles.passageContent}>
             {isLoadingVersionDetail || isLoadingSnapshot ? (
               <p className={styles.passagePlaceholder}>
                 Loading master passage...
               </p>
-            ) : highlightedPassage ? (
-              <>
-                <span className={styles.passageCompleted}>
-                  {highlightedPassage.completed}
-                </span>
-                <span
-                  ref={passageCursorRef}
-                  className={styles.passageActiveWord}
-                >
-                  {highlightedPassage.active}
-                </span>
-                <span className={styles.passageRemaining}>
-                  {highlightedPassage.remaining}
-                </span>
-              </>
+            ) : snapshot?.passage.text ? (
+              snapshot.passage.text
             ) : (
               <span className={styles.passagePlaceholder}>
                 Select a ready exam version to load passage.
@@ -1221,34 +1126,32 @@ export function ExamMode() {
               <h2 id="input-heading" className={styles.panelTitle}>
                 Candidate Input Console
               </h2>
-              <span
-                className={`${styles.sessionStatusTag} ${
-                  session?.phase === 'running'
-                    ? styles.sessionStatusRunning
-                    : session?.phase === 'finished'
+              {!isExamRunning && (
+                <span
+                  className={`${styles.sessionStatusTag} ${
+                    session?.phase === 'finished'
                       ? styles.sessionStatusFinished
                       : ''
-                }`}
-              >
-                {session?.phase === 'running'
-                  ? 'Session Active'
-                  : session?.phase === 'finished'
+                  }`}
+                >
+                  {session?.phase === 'finished'
                     ? 'Completed'
                     : 'Awaiting Keystroke'}
-              </span>
+                </span>
+              )}
             </div>
-            <div className={styles.panelHeaderRight}>
-              <span className={styles.panelHint}>
-                {session?.phase === 'running'
-                  ? 'Test in progress · Editing permitted'
-                  : session?.phase === 'finished'
+            {!isExamRunning && (
+              <div className={styles.panelHeaderRight}>
+                <span className={styles.panelHint}>
+                  {session?.phase === 'finished'
                     ? 'Test submitted / expired · Read-only'
                     : 'Clock starts automatically on first keystroke'}
-              </span>
-              <span className={styles.prohibitedPill}>
-                Copy-Paste Prohibited
-              </span>
-            </div>
+                </span>
+                <span className={styles.prohibitedPill}>
+                  Copy-Paste Prohibited
+                </span>
+              </div>
+            )}
           </div>
           <div className={styles.textareaWrap}>
             <textarea
@@ -1318,15 +1221,17 @@ export function ExamMode() {
 
       {/* Pinned Bottom Simulation Action & Integrity Bar */}
       <footer className={styles.footer}>
-        <div className={styles.footerLeft}>
-          <Link href="/typing" className={styles.exitLink}>
-            ← Return to Practice Mode
-          </Link>
-          <span className={styles.footerWarning}>
-            Exiting or reloading will immediately forfeit this simulation
-            attempt.
-          </span>
-        </div>
+        {!isExamRunning && (
+          <div className={styles.footerLeft}>
+            <Link href="/typing" className={styles.exitLink}>
+              ← Return to Practice Mode
+            </Link>
+            <span className={styles.footerWarning}>
+              Exiting or reloading will immediately forfeit this simulation
+              attempt.
+            </span>
+          </div>
+        )}
 
         <div className={styles.footerActions}>
           <button
@@ -1346,14 +1251,25 @@ export function ExamMode() {
           >
             Restart examination
           </button>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={handleOpenSubmit}
-            disabled={!session || session.phase !== 'running'}
-          >
-            Submit examination
-          </button>
+          {session?.phase === 'ready' ? (
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={() => textareaRef.current?.focus()}
+              disabled={requiresSignIn}
+            >
+              Start examination
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={handleOpenSubmit}
+              disabled={!session || session.phase !== 'running'}
+            >
+              Submit examination
+            </button>
+          )}
         </div>
       </footer>
 
@@ -1494,7 +1410,11 @@ export function ExamMode() {
         ref={resultDialogRef}
         className={`${styles.dialog} ${styles.dialogResult}`}
         aria-labelledby="result-dialog-title"
-        onClose={() => resultDialogRef.current?.close()}
+        onClose={() => {
+          if (sessionRef.current?.phase === 'finished') {
+            performReset();
+          }
+        }}
       >
         <div className={styles.dialogHeader}>
           <h3 id="result-dialog-title" className={styles.dialogTitle}>
@@ -1502,109 +1422,152 @@ export function ExamMode() {
           </h3>
         </div>
         <div className={styles.dialogBody}>
-          <div className={styles.resultBanner}>
-            <div className={styles.resultBadge}>
-              {session?.finishReason === 'expired'
-                ? 'Time Expired'
-                : 'Submitted'}
-            </div>
-            <p className={styles.resultSummary}>
-              Official scoring is unavailable.
-            </p>
+          <div
+            className={styles.resultSegmented}
+            role="tablist"
+            aria-label="Result view"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'summary'}
+              className={`${styles.resultSegBtn}${resultTab === 'summary' ? ` ${styles.resultSegBtnActive}` : ''}`}
+              onClick={() => setResultTab('summary')}
+            >
+              Summary
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'mistakes'}
+              className={`${styles.resultSegBtn}${resultTab === 'mistakes' ? ` ${styles.resultSegBtnActive}` : ''}`}
+              onClick={() => setResultTab('mistakes')}
+            >
+              Mistakes ({evaluation.fullMistakes + evaluation.halfMistakes})
+            </button>
           </div>
 
-          <div className={styles.scoreGrid}>
-            <div
-              className={`${styles.scoreCard} ${
-                evaluation.netWpm >= evaluation.targetWpm
-                  ? styles.scoreCardHero
-                  : evaluation.netWpm >= 27
-                    ? styles.scoreCardWarn
-                    : styles.scoreCardDanger
-              }`}
-            >
-              <span className={styles.scoreCardLabel}>Net Speed (Est.)</span>
-              <strong className={styles.scoreCardVal}>
-                {evaluation.netWpm} WPM
-              </strong>
-              <span className={styles.scoreCardSub}>
-                Target benchmark: {evaluation.targetWpm} WPM
-              </span>
-            </div>
-            <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
-              <span className={styles.scoreCardLabel}>Gross Speed</span>
-              <strong className={styles.scoreCardVal}>
-                {evaluation.grossWpm} WPM
-              </strong>
-              <span className={styles.scoreCardSub}>Raw keystroke pace</span>
-            </div>
-            <div
-              className={`${styles.scoreCard} ${
-                evaluation.overallStatus === 'QUALIFIED_ALL'
-                  ? styles.scoreCardHero
-                  : evaluation.overallStatus === 'QUALIFIED_RESERVED'
-                    ? styles.scoreCardWarn
-                    : evaluation.accuracyPercent >= 90
-                      ? styles.scoreCardWarn
-                      : styles.scoreCardDanger
-              }`}
-            >
-              <span className={styles.scoreCardLabel}>
-                SSC Mistakes & Accuracy
-              </span>
-              <strong className={styles.scoreCardVal}>
-                {evaluation.accuracyPercent}%
-              </strong>
-              <span className={styles.scoreCardSub}>
-                {evaluation.fullMistakes} Full · {evaluation.halfMistakes} Half
-                ({evaluation.errorPercent}% error)
-              </span>
-            </div>
-            <div
-              className={`${styles.scoreCard} ${
-                evaluation.overallStatus === 'QUALIFIED_ALL'
-                  ? styles.scoreCardHero
-                  : evaluation.overallStatus === 'QUALIFIED_RESERVED'
-                    ? styles.scoreCardWarn
-                    : styles.scoreCardDanger
-              }`}
-            >
-              <span className={styles.scoreCardLabel}>Evaluation Status</span>
-              <strong className={styles.scoreCardVal}>
-                {evaluation.statusLabel}
-              </strong>
-              <span className={styles.scoreCardSub}>
-                {evaluation.statusDetail}
-              </span>
-            </div>
-            <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
-              <span className={styles.scoreCardLabel}>
-                Final answer characters
-              </span>
-              <strong className={styles.scoreCardVal}>
-                {typedLength.toLocaleString()}
-              </strong>
-              <span className={styles.scoreCardSub}>
-                Passage length: {passageLength.toLocaleString()}
-              </span>
-            </div>
-            <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
-              <span className={styles.scoreCardLabel}>Total Words Typed</span>
-              <strong className={styles.scoreCardVal}>
-                {wordCount.toLocaleString()}
-              </strong>
-              <span className={styles.scoreCardSub}>
-                Time taken: {elapsedSecs}s / {durationProfileSecs}s
-              </span>
-            </div>
-          </div>
-          {snapshot && (
-            <AttemptComparison
-              passageId={snapshot.passage.id}
-              mode="EXAM"
-              currentNetWpm={evaluation.netWpm}
-              currentErrorPercent={evaluation.errorPercent}
-              saveState={saveState}
+          {resultTab === 'summary' ? (
+            <>
+              <div className={styles.resultBanner}>
+                <div className={styles.resultBadge}>
+                  {session?.finishReason === 'expired'
+                    ? 'Time Expired'
+                    : 'Submitted'}
+                </div>
+                <p className={styles.resultSummary}>
+                  Official scoring is unavailable.
+                </p>
+              </div>
+
+              <div className={styles.scoreGrid}>
+                <div
+                  className={`${styles.scoreCard} ${
+                    evaluation.netWpm >= evaluation.targetWpm
+                      ? styles.scoreCardHero
+                      : evaluation.netWpm >= 27
+                        ? styles.scoreCardWarn
+                        : styles.scoreCardDanger
+                  }`}
+                >
+                  <span className={styles.scoreCardLabel}>
+                    Net Speed (Est.)
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.netWpm} WPM
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    Target benchmark: {evaluation.targetWpm} WPM
+                  </span>
+                </div>
+                <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
+                  <span className={styles.scoreCardLabel}>Gross Speed</span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.grossWpm} WPM
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    Raw keystroke pace
+                  </span>
+                </div>
+                <div
+                  className={`${styles.scoreCard} ${
+                    evaluation.overallStatus === 'QUALIFIED_ALL'
+                      ? styles.scoreCardHero
+                      : evaluation.overallStatus === 'QUALIFIED_RESERVED'
+                        ? styles.scoreCardWarn
+                        : evaluation.accuracyPercent >= 90
+                          ? styles.scoreCardWarn
+                          : styles.scoreCardDanger
+                  }`}
+                >
+                  <span className={styles.scoreCardLabel}>
+                    SSC Mistakes & Accuracy
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.accuracyPercent}%
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    {evaluation.fullMistakes} Full · {evaluation.halfMistakes}{' '}
+                    Half ({evaluation.errorPercent}% error)
+                  </span>
+                </div>
+                <div
+                  className={`${styles.scoreCard} ${
+                    evaluation.overallStatus === 'QUALIFIED_ALL'
+                      ? styles.scoreCardHero
+                      : evaluation.overallStatus === 'QUALIFIED_RESERVED'
+                        ? styles.scoreCardWarn
+                        : styles.scoreCardDanger
+                  }`}
+                >
+                  <span className={styles.scoreCardLabel}>
+                    Evaluation Status
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.statusLabel}
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    {evaluation.statusDetail}
+                  </span>
+                </div>
+                <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
+                  <span className={styles.scoreCardLabel}>
+                    Final answer characters
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {typedLength.toLocaleString()}
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    Passage length: {passageLength.toLocaleString()}
+                  </span>
+                </div>
+                <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
+                  <span className={styles.scoreCardLabel}>
+                    Total Words Typed
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {wordCount.toLocaleString()}
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    Time taken: {elapsedSecs}s / {durationProfileSecs}s
+                  </span>
+                </div>
+              </div>
+              {snapshot && (
+                <AttemptComparison
+                  passageId={snapshot.passage.id}
+                  mode="EXAM"
+                  currentNetWpm={evaluation.netWpm}
+                  currentErrorPercent={evaluation.errorPercent}
+                  saveState={saveState}
+                />
+              )}
+            </>
+          ) : (
+            <ExamMistakeReview
+              items={evaluation.reviewItems}
+              fullCount={evaluation.fullMistakes}
+              halfCount={evaluation.halfMistakes}
             />
           )}
         </div>
@@ -1619,10 +1582,7 @@ export function ExamMode() {
           <button
             type="button"
             className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => {
-              resultDialogRef.current?.close();
-              handleOpenRestart();
-            }}
+            onClick={() => resultDialogRef.current?.close()}
           >
             Restart examination
           </button>

@@ -52,10 +52,12 @@ export const PassageView = memo(function PassageView({
   target,
   typedText,
   keyboardHeight,
+  showFeedback = true,
 }: {
   target: string;
   typedText: string;
   keyboardHeight?: number;
+  showFeedback?: boolean;
 }) {
   const groups = useMemo(
     () => groupPassageChars(evaluate(target, typedText).chars),
@@ -110,11 +112,16 @@ export const PassageView = memo(function PassageView({
       {groups.map((group, groupIndex) => {
         if (group.kind === 'newline') {
           const char = group.chars[0];
+          const charClass =
+            !showFeedback &&
+            (char.state === 'correct' || char.state === 'incorrect')
+              ? styles.typedNeutral
+              : styles[char.state];
           return (
             <span key={groupIndex}>
               <span
                 ref={char.state === 'current' ? currentRef : undefined}
-                className={styles[char.state]}
+                className={charClass}
               >
                 {' '}
               </span>
@@ -140,7 +147,7 @@ export const PassageView = memo(function PassageView({
             ? ''
             : hasCurrent
               ? ` ${styles.wordActive}`
-              : allTyped
+              : showFeedback && allTyped
                 ? hasIncorrect
                   ? ` ${styles.wordError}`
                   : ` ${styles.wordCorrect}`
@@ -155,15 +162,22 @@ export const PassageView = memo(function PassageView({
                 : `${styles.word}${wordStatusClass}`
             }
           >
-            {group.chars.map((char, charIndex) => (
-              <span
-                key={charIndex}
-                ref={char.state === 'current' ? currentRef : undefined}
-                className={styles[char.state]}
-              >
-                {char.ch}
-              </span>
-            ))}
+            {group.chars.map((char, charIndex) => {
+              const charClass =
+                !showFeedback &&
+                (char.state === 'correct' || char.state === 'incorrect')
+                  ? styles.typedNeutral
+                  : styles[char.state];
+              return (
+                <span
+                  key={charIndex}
+                  ref={char.state === 'current' ? currentRef : undefined}
+                  className={charClass}
+                >
+                  {char.ch}
+                </span>
+              );
+            })}
           </span>
         );
       })}

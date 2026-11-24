@@ -28,6 +28,12 @@ const { Footer }: typeof import('../components/layout/footer') = await tsImport(
   { parentURL: import.meta.url, tsconfig: 'tsconfig.next.json' },
 );
 
+const { PassageView }: typeof import('../components/typing/passage-view') =
+  await tsImport('../components/typing/passage-view.tsx', {
+    parentURL: import.meta.url,
+    tsconfig: 'tsconfig.next.json',
+  });
+
 function createTimedSession(target: string, durationMs: number) {
   let time = 0;
   const session = createTypingSession({ target, durationMs }, () => time);
@@ -71,7 +77,7 @@ test('acceptance: c x delete a t for cat in 6000ms keeps corrected errors in his
   assert.equal(snapshot.incorrectAttempts, 1);
   assert.equal(snapshot.elapsedMs, 6000);
   assert.equal(Math.round(snapshot.score.grossWpm ?? NaN), 8);
-  assert.equal(Math.round(snapshot.score.netWpm ?? NaN), 0);
+  assert.equal(Math.round(snapshot.score.netWpm ?? NaN), 6);
   assert.equal(Math.round(snapshot.score.accuracy), 75);
 });
 
@@ -353,6 +359,7 @@ test('server-rendered practice page, footer link and no-JS message stay literal 
   assert.match(pageHtml, /Enable JavaScript to use this page/);
   assert.match(pageHtml, /<label class="typingLabel">Type the passage here/);
   assert.match(pageHtml, /aria-label="Passage to type"/);
+  assert.match(pageHtml, /role="switch"[^>]*aria-label="Live error highlight"/);
   // Catalogue requests start after hydration; SSR never invents a passage.
   assert.match(pageHtml, /disabled/);
   assert.doesNotMatch(pageHtml, /Custom text|Practice this passage/);
@@ -361,4 +368,61 @@ test('server-rendered practice page, footer link and no-JS message stay literal 
   const footerHtml = renderToStaticMarkup(createElement(Footer));
   assert.match(footerHtml, /href="\/typing"/);
   assert.match(footerHtml, /Typing practice/);
+});
+
+test('evaluate aligns word-by-word so missing or extra letters do not shift subsequent words', () => {
+  const missing = evaluate('explore all', 'eplore all');
+  const allWordStates = missing.chars.slice(-3).map((c) => c.state);
+  assert.deepEqual(allWordStates, ['correct', 'correct', 'correct']);
+  assert.equal(missing.done, true);
+
+  const extra = evaluate('explore all', 'exploree all');
+  assert.deepEqual(extra.chars[7], { ch: 'e', state: 'incorrect' });
+  const extraAllStates = extra.chars.slice(-3).map((c) => c.state);
+  assert.deepEqual(extraAllStates, ['correct', 'correct', 'correct']);
+  assert.equal(extra.done, true);
+
+  const doubleSpace = evaluate('cat dog', 'cat  dog');
+  assert.equal(doubleSpace.correct, 7);
+  assert.equal(doubleSpace.incorrect, 0);
+  assert.equal(doubleSpace.done, true);
+
+  const sessionMissing = createTimedSession('explore all', 60000);
+  for (let i = 1; i <= 'eplore '.length; i++) {
+    sessionMissing.session.applyEdit('eplore '.slice(0, i));
+  }
+  assert.equal(sessionMissing.session.snapshot().status, 'running');
+  for (let i = 1; i <= 'all'.length; i++) {
+    sessionMissing.session.applyEdit('eplore ' + 'all'.slice(0, i));
+  }
+  const missingSnap = sessionMissing.session.snapshot();
+  assert.equal(missingSnap.status, 'finished');
+  assert.equal(missingSnap.correctAttempts, 4);
+
+  const sessionExtra = createTimedSession('explore all', 60000);
+  sessionExtra.session.applyEdit('exploree al');
+  assert.equal(sessionExtra.session.snapshot().status, 'running');
+  sessionExtra.session.applyEdit('exploree all');
+  assert.equal(sessionExtra.session.snapshot().status, 'finished');
+
+  const highlightedHtml = renderToStaticMarkup(
+    createElement(PassageView, {
+      target: 'cat dog',
+      typedText: 'cxt ',
+      showFeedback: true,
+    }),
+  );
+  assert.match(highlightedHtml, /class="correct"/);
+  assert.match(highlightedHtml, /class="incorrect"/);
+
+  const blindHtml = renderToStaticMarkup(
+    createElement(PassageView, {
+      target: 'cat dog',
+      typedText: 'cxt ',
+      showFeedback: false,
+    }),
+  );
+  assert.doesNotMatch(blindHtml, /class="correct"|class="incorrect"/);
+  assert.match(blindHtml, /class="typedNeutral"/);
+  assert.match(blindHtml, /class="current"/);
 });

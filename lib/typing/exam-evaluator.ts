@@ -31,10 +31,7 @@ export const EXAM_EVALUATION_PROFILES: Record<string, ExamEvaluationProfile> = {
     defaultDurationSeconds: 600,
     strokesPerWord: 5,
     halfMistakeWeight: 0.5,
-    categoryCutoffs: [
-      { category: 'UR', maxErrorPercent: 7 },
-      { category: 'OBC / EWS / SC / ST / PwD', maxErrorPercent: 10 },
-    ],
+    categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: 7 }],
   },
   'ssc-cgl': {
     examSlug: 'ssc-cgl',
@@ -43,11 +40,7 @@ export const EXAM_EVALUATION_PROFILES: Record<string, ExamEvaluationProfile> = {
     defaultDurationSeconds: 900,
     strokesPerWord: 5,
     halfMistakeWeight: 0.5,
-    categoryCutoffs: [
-      { category: 'UR', maxErrorPercent: 20 },
-      { category: 'OBC / EWS', maxErrorPercent: 25 },
-      { category: 'SC / ST / PwD', maxErrorPercent: 30 },
-    ],
+    categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: 20 }],
   },
   'rrb-ntpc': {
     examSlug: 'rrb-ntpc',
@@ -56,7 +49,7 @@ export const EXAM_EVALUATION_PROFILES: Record<string, ExamEvaluationProfile> = {
     defaultDurationSeconds: 600,
     strokesPerWord: 5,
     halfMistakeWeight: 0.5,
-    categoryCutoffs: [{ category: 'All Categories', maxErrorPercent: 5 }],
+    categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: 5 }],
   },
 };
 
@@ -67,16 +60,30 @@ const DEFAULT_EVALUATION_PROFILE: ExamEvaluationProfile = {
   defaultDurationSeconds: 600,
   strokesPerWord: 5,
   halfMistakeWeight: 0.5,
-  categoryCutoffs: [
-    { category: 'UR', maxErrorPercent: 7 },
-    { category: 'Reserved', maxErrorPercent: 10 },
-  ],
+  categoryCutoffs: [{ category: 'General (UR)', maxErrorPercent: 7 }],
 };
 
 export interface CategoryQualificationResult {
   category: string;
   maxErrorPercent: number;
   qualified: boolean;
+}
+
+export type ExamMistakeKind =
+  | 'match'
+  | 'substitution'
+  | 'omission'
+  | 'addition'
+  | 'case'
+  | 'punctuation'
+  | 'merge'
+  | 'split';
+
+export interface ExamReviewItem {
+  kind: ExamMistakeKind;
+  weight: 0 | 0.5 | 1;
+  expected: string;
+  typed: string;
 }
 
 export interface ExamEvaluationResult {
@@ -96,6 +103,7 @@ export interface ExamEvaluationResult {
   statusLabel: string;
   statusDetail: string;
   categoryResults: CategoryQualificationResult[];
+  reviewItems: ExamReviewItem[];
 }
 
 export function resolveExamEvaluationProfile(
@@ -116,7 +124,9 @@ export function resolveExamEvaluationProfile(
       defaultTargetWpm: rules?.targetWpm ?? base.defaultTargetWpm,
       defaultDurationSeconds:
         rules?.durationSeconds ?? base.defaultDurationSeconds,
-      categoryCutoffs: [{ category: 'Standard', maxErrorPercent: maxError }],
+      categoryCutoffs: [
+        { category: 'General (UR)', maxErrorPercent: maxError },
+      ],
     };
   }
   return base;
@@ -131,20 +141,14 @@ function tokenizeWords(text: string): string[] {
   return trimmed.length === 0 ? [] : trimmed.split(/\s+/);
 }
 
-/**
- * Classify the mistake penalty between a single master word and a single typed word:
- * - 0: exact match
- * - 0.5 (Half Mistake): case-only mismatch OR punctuation-only mismatch on the same core word
- * - 1.0 (Full Mistake): spelling / substitution error
- */
-function wordMismatchPenalty(
+function classifyWordMismatch(
   masterWord: string,
   typedWord: string,
-): 0 | 0.5 | 1 {
-  if (masterWord === typedWord) return 0;
+): { weight: 0 | 0.5 | 1; kind: ExamMistakeKind } {
+  if (masterWord === typedWord) return { weight: 0, kind: 'match' };
 
   if (masterWord.toLowerCase() === typedWord.toLowerCase()) {
-    return 0.5;
+    return { weight: 0.5, kind: 'case' };
   }
 
   const masterCore = stripPunctuation(masterWord);
@@ -153,10 +157,10 @@ function wordMismatchPenalty(
     masterCore.length > 0 &&
     masterCore.toLowerCase() === typedCore.toLowerCase()
   ) {
-    return 0.5;
+    return { weight: 0.5, kind: 'punctuation' };
   }
 
-  return 1;
+  return { weight: 1, kind: 'substitution' };
 }
 
 /**
@@ -193,6 +197,7 @@ export function evaluateExamAttempt(params: {
 
   let fullMistakes = 0;
   let halfMistakes = 0;
+  const reviewItems: ExamReviewItem[] = [];
 
   // Greedy windowed word alignment handling omissions, additions, merges, splits, and substitutions
   let i = 0;
@@ -200,20 +205,42 @@ export function evaluateExamAttempt(params: {
   while (i < mWords.length || j < tWords.length) {
     if (i >= mWords.length) {
       // Extra inserted words at the end -> Full Mistake each
+      for (let k = j; k < tWords.length; k++) {
+        reviewItems.push({
+          kind: 'addition',
+          weight: 1,
+          expected: '',
+          typed: tWords[k]!,
+        });
+      }
       fullMistakes += tWords.length - j;
       break;
     }
     if (j >= tWords.length) {
       // Omitted words within the attempted window -> Full Mistake each
+      for (let k = i; k < mWords.length; k++) {
+        reviewItems.push({
+          kind: 'omission',
+          weight: 1,
+          expected: mWords[k]!,
+          typed: '',
+        });
+      }
       fullMistakes += mWords.length - i;
       break;
     }
 
     const mw = mWords[i]!;
     const tw = tWords[j]!;
-    const directPenalty = wordMismatchPenalty(mw, tw);
+    const direct = classifyWordMismatch(mw, tw);
 
-    if (directPenalty === 0) {
+    if (direct.weight === 0) {
+      reviewItems.push({
+        kind: 'match',
+        weight: 0,
+        expected: mw,
+        typed: tw,
+      });
       i++;
       j++;
       continue;
@@ -224,6 +251,12 @@ export function evaluateExamAttempt(params: {
       i + 1 < mWords.length &&
       (mw + mWords[i + 1]!).toLowerCase() === tw.toLowerCase()
     ) {
+      reviewItems.push({
+        kind: 'merge',
+        weight: 0.5,
+        expected: `${mw} ${mWords[i + 1]!}`,
+        typed: tw,
+      });
       halfMistakes++;
       i += 2;
       j += 1;
@@ -235,6 +268,12 @@ export function evaluateExamAttempt(params: {
       j + 1 < tWords.length &&
       mw.toLowerCase() === (tw + tWords[j + 1]!).toLowerCase()
     ) {
+      reviewItems.push({
+        kind: 'split',
+        weight: 0.5,
+        expected: mw,
+        typed: `${tw} ${tWords[j + 1]!}`,
+      });
       halfMistakes++;
       i += 1;
       j += 2;
@@ -244,8 +283,14 @@ export function evaluateExamAttempt(params: {
     // Check 1-word omission (candidate skipped mw and typed the next master word) -> 1 Full Mistake for omission
     if (
       i + 1 < mWords.length &&
-      wordMismatchPenalty(mWords[i + 1]!, tw) === 0
+      classifyWordMismatch(mWords[i + 1]!, tw).weight === 0
     ) {
+      reviewItems.push({
+        kind: 'omission',
+        weight: 1,
+        expected: mw,
+        typed: '',
+      });
       fullMistakes++;
       i += 1;
       continue;
@@ -254,14 +299,26 @@ export function evaluateExamAttempt(params: {
     // Check 1-word addition/repetition (candidate inserted an extra word tw before matching mw) -> 1 Full Mistake
     if (
       j + 1 < tWords.length &&
-      wordMismatchPenalty(mw, tWords[j + 1]!) === 0
+      classifyWordMismatch(mw, tWords[j + 1]!).weight === 0
     ) {
+      reviewItems.push({
+        kind: 'addition',
+        weight: 1,
+        expected: '',
+        typed: tw,
+      });
       fullMistakes++;
       j += 1;
       continue;
     }
 
-    if (directPenalty === 0.5) {
+    reviewItems.push({
+      kind: direct.kind,
+      weight: direct.weight,
+      expected: mw,
+      typed: tw,
+    });
+    if (direct.weight === 0.5) {
       halfMistakes++;
     } else {
       fullMistakes++;
@@ -281,10 +338,10 @@ export function evaluateExamAttempt(params: {
           Math.min(
             100,
             (totalEquivalentMistakes / denominatorWords) * 100,
-          ).toFixed(1),
+          ).toFixed(2),
         );
   const accuracyPercent =
-    typedLen === 0 ? 0 : Number(Math.max(0, 100 - errorPercent).toFixed(1));
+    typedLen === 0 ? 0 : Number(Math.max(0, 100 - errorPercent).toFixed(2));
 
   const elapsedMins = Math.max(elapsedSeconds / 60, 1 / 60);
   const grossWpm =
@@ -314,7 +371,7 @@ export function evaluateExamAttempt(params: {
   let statusLabel = 'Below Cut-off';
   if (urQualified) {
     overallStatus = 'QUALIFIED_ALL';
-    statusLabel = 'Qualified (UR & All)';
+    statusLabel = 'Qualified (General)';
   } else if (anyQualified) {
     overallStatus = 'QUALIFIED_RESERVED';
     const passedCats = categoryResults
@@ -349,5 +406,6 @@ export function evaluateExamAttempt(params: {
     statusLabel,
     statusDetail,
     categoryResults,
+    reviewItems,
   };
 }

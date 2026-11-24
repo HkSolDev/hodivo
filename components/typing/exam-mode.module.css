@@ -34,16 +34,8 @@
     BlinkMacSystemFont,
     sans-serif
   );
-  --exam-font-mono: var(
-    --mono,
-    'JetBrains Mono',
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace
-  );
-  --passage-font-size: 15px;
+  --exam-font-mono: Arial, Tahoma, 'Segoe UI', sans-serif;
+  --passage-font-size: 16px;
   --passage-line-height: 1.82;
 
   flex: 1;
@@ -92,7 +84,7 @@
 }
 
 .fontSizeNormal {
-  --passage-font-size: 15px;
+  --passage-font-size: 16px;
 }
 
 .fontSizeLarge {
@@ -797,22 +789,6 @@
   color: var(--exam-text-muted);
 }
 
-.passageCompleted {
-  color: var(--exam-emerald);
-  font-weight: 500;
-}
-
-.passageActiveWord {
-  background: var(--exam-accent-blue);
-  color: #ffffff;
-  font-weight: 700;
-  border-radius: 3px;
-}
-
-.passageRemaining {
-  color: var(--exam-text-main);
-}
-
 /* Candidate Input Console Textarea */
 .textareaWrap {
   position: relative;
@@ -833,7 +809,7 @@
   resize: none;
   padding: 14px 18px;
   font-family: var(--exam-font-mono);
-  font-size: var(--passage-font-size);
+  font-size: calc(var(--passage-font-size) - 1.5px);
   line-height: var(--passage-line-height);
   color: var(--exam-text-main);
   background: transparent;
@@ -1158,12 +1134,19 @@
 
 .dialogResult {
   max-width: 580px;
+  max-height: 90dvh;
+}
+
+.dialogResult[open] {
+  display: flex;
+  flex-direction: column;
 }
 
 .dialogHeader {
   background: var(--exam-accent-blue);
   color: #ffffff;
   padding: 12px 18px;
+  flex: none;
 }
 
 .dialogTitle {
@@ -1174,6 +1157,8 @@
 
 .dialogBody {
   padding: 18px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .dialogWarningText {
@@ -1321,6 +1306,185 @@
 .scoreCardSub {
   font-size: 11px;
   color: var(--exam-text-muted);
+}
+
+/* Apple-style Result Segmented Control & Mistake Review */
+.resultSegmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--exam-surface-low);
+  border: 1px solid var(--exam-border-subtle);
+  margin-bottom: 14px;
+}
+
+.resultSegBtn {
+  border: none;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--exam-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.resultSegBtn:hover {
+  color: var(--exam-text-main);
+}
+
+.resultSegBtnActive {
+  background: var(--exam-surface-lowest);
+  color: var(--exam-text-main);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.mistakeReview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mistakeFilterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mistakeFilterBtn {
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--exam-border-subtle);
+  background: var(--exam-surface-low);
+  color: var(--exam-text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.mistakeFilterBtnActive {
+  background: var(--exam-accent-blue-soft);
+  border-color: var(--exam-accent-blue);
+  color: var(--exam-accent-blue);
+}
+
+.mistakeList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 290px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.mistakeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--exam-surface-low);
+  border: 1px solid var(--exam-border-subtle);
+}
+
+.mistakeRowMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mistakeWeightBadge {
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mistakeWeightFull {
+  background: var(--exam-error-soft);
+  color: var(--exam-error-text);
+}
+
+.mistakeWeightHalf {
+  background: var(--exam-amber-soft);
+  color: var(--exam-amber);
+}
+
+.mistakeKindLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--exam-text-secondary);
+}
+
+.mistakeDiff {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--exam-font-mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.mistakeExpected {
+  color: var(--exam-emerald);
+  font-weight: 600;
+}
+
+.mistakeArrow {
+  color: var(--exam-text-muted);
+}
+
+.mistakeTyped {
+  color: var(--exam-error-text);
+  font-weight: 600;
+}
+
+.mistakeNone {
+  font-family: var(--exam-font-sans);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--exam-text-muted);
+}
+
+.mistakeEmptyState {
+  text-align: center;
+  padding: 22px 14px;
+  border-radius: 8px;
+  background: var(--exam-emerald-soft);
+  border: 1px solid var(--exam-emerald);
+}
+
+.mistakeEmptyTitle {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--exam-emerald);
+  margin-bottom: 4px;
+}
+
+.mistakeEmptyCopy {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--exam-text-secondary);
 }
 
 /* ==========================================================================
