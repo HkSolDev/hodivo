@@ -84,20 +84,26 @@ export interface ExamReviewItem {
   weight: 0 | 0.5 | 1;
   expected: string;
   typed: string;
+  unattemptedTail?: boolean;
 }
 
 export interface ExamEvaluationResult {
   profileLabel: string;
   targetWpm: number;
+  targetKeystrokes: number | null;
   grossWpm: number;
   netWpm: number;
   accuracyPercent: number;
+  typedAccuracyPercent: number;
   errorPercent: number;
   fullMistakes: number;
+  typedFullMistakes: number;
+  unattemptedWords: number;
   halfMistakes: number;
   totalEquivalentMistakes: number;
   evaluatedWordCount: number;
   typedWordCount: number;
+  completionPercent: number;
   meetsSpeedTarget: boolean;
   overallStatus: 'QUALIFIED_ALL' | 'QUALIFIED_RESERVED' | 'BELOW_CUTOFF';
   statusLabel: string;
@@ -109,27 +115,23 @@ export interface ExamEvaluationResult {
 export function resolveExamEvaluationProfile(
   examSlug?: string | null,
   rules?: ExamRules | null,
+  examName?: string | null,
 ): ExamEvaluationProfile {
   const base =
     (examSlug && EXAM_EVALUATION_PROFILES[examSlug]) ||
     DEFAULT_EVALUATION_PROFILE;
   const maxError = rules?.maxErrorPercent;
-  if (
-    maxError !== null &&
-    maxError !== undefined &&
-    !EXAM_EVALUATION_PROFILES[examSlug ?? '']
-  ) {
-    return {
-      ...base,
-      defaultTargetWpm: rules?.targetWpm ?? base.defaultTargetWpm,
-      defaultDurationSeconds:
-        rules?.durationSeconds ?? base.defaultDurationSeconds,
-      categoryCutoffs: [
-        { category: 'General (UR)', maxErrorPercent: maxError },
-      ],
-    };
-  }
-  return base;
+  return {
+    ...base,
+    familyLabel: examName?.trim() || base.familyLabel,
+    defaultTargetWpm: rules?.targetWpm ?? base.defaultTargetWpm,
+    defaultDurationSeconds:
+      rules?.durationSeconds ?? base.defaultDurationSeconds,
+    categoryCutoffs:
+      maxError !== null && maxError !== undefined
+        ? [{ category: 'General (UR)', maxErrorPercent: maxError }]
+        : base.categoryCutoffs,
+  };
 }
 
 function stripPunctuation(word: string): string {
@@ -173,29 +175,27 @@ export function evaluateExamAttempt(params: {
   typedText: string;
   elapsedSeconds: number;
   examSlug?: string | null;
+  examName?: string | null;
   rules?: ExamRules | null;
 }): ExamEvaluationResult {
-  const { masterText, typedText, elapsedSeconds, examSlug, rules } = params;
-  const profile = resolveExamEvaluationProfile(examSlug, rules);
+  const { masterText, typedText, elapsedSeconds, examSlug, examName, rules } =
+    params;
+  const profile = resolveExamEvaluationProfile(examSlug, rules, examName);
   const targetWpm = rules?.targetWpm ?? profile.defaultTargetWpm;
+  const targetKeystrokes = rules?.targetKeystrokes ?? null;
   const strokesPerWord = profile.strokesPerWord;
 
   const masterWords = tokenizeWords(masterText);
   const typedWords = tokenizeWords(typedText);
   const typedLen = typedText.length;
 
-  // Evaluate against the portion of the master passage attempted (or minimum 1 word if empty)
-  const compareMasterCount =
-    typedWords.length === 0
-      ? 0
-      : Math.min(
-          masterWords.length,
-          Math.max(typedWords.length, Math.ceil(typedLen / strokesPerWord)),
-        );
-  const mWords = masterWords.slice(0, compareMasterCount);
+  // Official SSC / TCS iON full-passage evaluation: compare against the entire
+  // master passage so any unattempted words left at the end count as Omissions (1.0).
+  const mWords = masterWords;
   const tWords = typedWords;
 
   let fullMistakes = 0;
+  let unattemptedWords = 0;
   let halfMistakes = 0;
   const reviewItems: ExamReviewItem[] = [];
 
@@ -217,16 +217,18 @@ export function evaluateExamAttempt(params: {
       break;
     }
     if (j >= tWords.length) {
-      // Omitted words within the attempted window -> Full Mistake each
+      // Unattempted / omitted words remaining in the master passage -> Full Mistake each
       for (let k = i; k < mWords.length; k++) {
         reviewItems.push({
           kind: 'omission',
           weight: 1,
           expected: mWords[k]!,
           typed: '',
+          unattemptedTail: true,
         });
       }
-      fullMistakes += mWords.length - i;
+      unattemptedWords = mWords.length - i;
+      fullMistakes += unattemptedWords;
       break;
     }
 
@@ -327,6 +329,10 @@ export function evaluateExamAttempt(params: {
     j++;
   }
 
+  const typedFullMistakes = Math.max(0, fullMistakes - unattemptedWords);
+  const typedEquivalentMistakes = Number(
+    (typedFullMistakes + halfMistakes * profile.halfMistakeWeight).toFixed(1),
+  );
   const totalEquivalentMistakes = Number(
     (fullMistakes + halfMistakes * profile.halfMistakeWeight).toFixed(1),
   );
@@ -343,15 +349,34 @@ export function evaluateExamAttempt(params: {
   const accuracyPercent =
     typedLen === 0 ? 0 : Number(Math.max(0, 100 - errorPercent).toFixed(2));
 
+  const attemptedDenominator = Math.max(
+    1,
+    mWords.length - unattemptedWords,
+    tWords.length,
+  );
+  const typedErrorPercent =
+    typedLen === 0
+      ? 100
+      : Math.min(100, (typedEquivalentMistakes / attemptedDenominator) * 100);
+  const typedAccuracyPercent =
+    typedLen === 0
+      ? 0
+      : Number(Math.max(0, 100 - typedErrorPercent).toFixed(2));
+  const completionPercent =
+    masterText.length === 0
+      ? 0
+      : Math.min(100, Math.round((typedLen / masterText.length) * 100));
+
   const elapsedMins = Math.max(elapsedSeconds / 60, 1 / 60);
   const grossWpm =
     typedLen > 0 ? Math.round(typedLen / strokesPerWord / elapsedMins) : 0;
+  // Net WPM reflects the speed of words actually typed, deducting only typed mistakes
   const netWpm =
     typedLen > 0
       ? Math.max(
           0,
           Math.round(
-            (typedLen / strokesPerWord - totalEquivalentMistakes) / elapsedMins,
+            (typedLen / strokesPerWord - typedEquivalentMistakes) / elapsedMins,
           ),
         )
       : 0;
@@ -381,26 +406,41 @@ export function evaluateExamAttempt(params: {
     statusLabel = `Qualified (${passedCats})`;
   }
 
+  const maxAllowedError = categoryResults[0]?.maxErrorPercent ?? 7;
   const cutoffSummary = profile.categoryCutoffs
     .map((c) => `${c.category} ≤${c.maxErrorPercent}%`)
     .join(' · ');
 
-  const statusDetail = !meetsSpeedTarget
-    ? `Need ${targetWpm} WPM net (${cutoffSummary})`
-    : `${errorPercent}% error (${cutoffSummary})`;
+  let statusDetail: string;
+  if (urQualified) {
+    statusDetail = `${netWpm} WPM net · ${errorPercent}% error (${cutoffSummary})`;
+  } else if (unattemptedWords > 0 && errorPercent > maxAllowedError) {
+    statusDetail = `Incomplete: ${unattemptedWords} words left (${errorPercent}% error · need ≤${maxAllowedError}%)`;
+  } else if (!meetsSpeedTarget && errorPercent > maxAllowedError) {
+    statusDetail = `Need ${targetWpm} WPM net & ≤${maxAllowedError}% error`;
+  } else if (!meetsSpeedTarget) {
+    statusDetail = `Speed low: ${netWpm} WPM net (need ${targetWpm} WPM)`;
+  } else {
+    statusDetail = `Error high: ${errorPercent}% (need ≤${maxAllowedError}%)`;
+  }
 
   return {
     profileLabel: profile.familyLabel,
     targetWpm,
+    targetKeystrokes,
     grossWpm,
     netWpm,
     accuracyPercent,
+    typedAccuracyPercent,
     errorPercent,
     fullMistakes,
+    typedFullMistakes,
+    unattemptedWords,
     halfMistakes,
     totalEquivalentMistakes,
     evaluatedWordCount: mWords.length,
     typedWordCount: tWords.length,
+    completionPercent,
     meetsSpeedTarget,
     overallStatus,
     statusLabel,

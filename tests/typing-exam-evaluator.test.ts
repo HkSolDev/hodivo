@@ -129,3 +129,64 @@ test('SSC CHSL vs SSC CGL DEST profiles apply their respective WPM and category 
   assert.equal(sevenWordResult.errorPercent, 14.29);
   assert.equal(sevenWordResult.accuracyPercent, 85.71);
 });
+
+test('official full-passage evaluation counts unattempted trailing words as Full Mistake omissions', () => {
+  // 10-word master passage; candidate only types the first 6 words accurately and stops
+  const masterText = 'One two three four five six seven eight nine ten.';
+  const typedText = 'One two three four five six';
+  const result = evaluateExamAttempt({
+    masterText,
+    typedText,
+    elapsedSeconds: 60,
+    examSlug: 'ssc-chsl',
+  });
+
+  // 4 unattempted words ("seven", "eight", "nine", "ten.") = 4 Full Mistakes -> 4 / 10 = 40% error
+  // Net WPM deducts only typed mistakes (0), so 27 chars / 5 / 1 min = 5 WPM
+  assert.equal(result.evaluatedWordCount, 10);
+  assert.equal(result.typedWordCount, 6);
+  assert.equal(result.fullMistakes, 4);
+  assert.equal(result.typedFullMistakes, 0);
+  assert.equal(result.unattemptedWords, 4);
+  assert.equal(result.halfMistakes, 0);
+  assert.equal(result.totalEquivalentMistakes, 4);
+  assert.equal(result.errorPercent, 40);
+  assert.equal(result.accuracyPercent, 60);
+  assert.equal(result.typedAccuracyPercent, 100);
+  assert.equal(result.netWpm, 5);
+  assert.equal(result.overallStatus, 'BELOW_CUTOFF');
+  assert.equal(
+    result.reviewItems.filter((item) => item.unattemptedTail).length,
+    4,
+  );
+});
+
+test('dynamic exam rules override hardcoded profile defaults for any exam', () => {
+  const masterText = 'One two three four five six seven eight nine ten.';
+  const typedText = 'One two three four five six seven eight nine wrong.';
+  const result = evaluateExamAttempt({
+    masterText,
+    typedText,
+    elapsedSeconds: 10,
+    examSlug: 'ssc-chsl',
+    examName: 'High Court Typist 2026',
+    rules: {
+      durationSeconds: 600,
+      targetWpm: 40,
+      targetKeystrokes: 2000,
+      maxErrorPercent: 12,
+      backspacePolicy: 'UNRESTRICTED',
+      editingPolicy: 'native-correction-v1',
+      scoringMethod: null,
+      instructions: null,
+      ruleSourceUrl: null,
+      ruleSourceNote: null,
+    },
+  });
+
+  assert.equal(result.profileLabel, 'High Court Typist 2026');
+  assert.equal(result.targetWpm, 40);
+  assert.equal(result.targetKeystrokes, 2000);
+  // 10% error passes the dynamic 12% cutoff even though ssc-chsl default is 7%
+  assert.equal(result.overallStatus, 'QUALIFIED_ALL');
+});
