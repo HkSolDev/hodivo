@@ -30,12 +30,18 @@ export function ExamMistakeReview({
 }) {
   const [filter, setFilter] = useState<MistakeFilter>('all');
   const mistakes = items.filter((item) => item.weight > 0);
-  const visible =
+  const filtered =
     filter === 'full'
       ? mistakes.filter((item) => item.weight === 1)
       : filter === 'half'
         ? mistakes.filter((item) => item.weight === 0.5)
         : mistakes;
+
+  const tailItems = filtered.filter((item) => item.unattemptedTail);
+  const collapseTail = tailItems.length > 1;
+  const visible = collapseTail
+    ? filtered.filter((item) => !item.unattemptedTail)
+    : filtered;
 
   if (mistakes.length === 0) {
     return (
@@ -112,6 +118,27 @@ export function ExamMistakeReview({
             </li>
           );
         })}
+        {collapseTail && (
+          <li className={`${styles.mistakeRow} ${styles.mistakeRowFull}`}>
+            <div className={styles.mistakeRowMeta}>
+              <span
+                className={`${styles.mistakeWeightBadge} ${styles.mistakeWeightFull}`}
+              >
+                Full · {tailItems.length}.0
+              </span>
+              <span className={styles.mistakeKindLabel}>Unattempted</span>
+            </div>
+            <div className={styles.mistakeDiff}>
+              <span className={styles.mistakeExpected}>
+                {tailItems.length} remaining words
+              </span>
+              <span className={styles.mistakeArrow} aria-hidden="true">
+                →
+              </span>
+              <span className={styles.mistakeNone}>omitted</span>
+            </div>
+          </li>
+        )}
       </ul>
     </div>
   );
