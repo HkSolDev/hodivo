@@ -9,28 +9,33 @@ export function cleanPublicJobTitle(title: string): string {
   return cleaned || title;
 }
 
+const BLOCKED_AGGREGATOR_HOSTS = [
+  'sarkariresult.com',
+  'freejobalert.com',
+  'mysarkarinaukri.com',
+];
+
 export function officialPublicUrl(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   try {
     const url = new URL(value);
-    if (url.protocol !== 'https:' || url.username || url.password || url.port)
+    if (
+      (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+      url.username ||
+      url.password ||
+      url.port
+    ) {
       return null;
+    }
     const host = url.hostname.toLowerCase();
-    // IBPS and major PSUs/DFIs use their own official .in / .co.in domains.
-    const allowedHosts = [
-      'ibps.in',
-      'powergrid.in',
-      'sidbi.in',
-      'eximbankindia.in',
-      'nlcindia.in',
-      'nsic.co.in',
-    ];
-    // BHEL identifies this exact recruiting host in its public fraud notice.
-    return host === 'careers.bhel.in' ||
-      /\.(?:gov|nic|ac|edu|res)\.in$/.test(host) ||
-      allowedHosts.some((d) => host === d || host.endsWith(`.${d}`))
-      ? url.href
-      : null;
+    if (
+      BLOCKED_AGGREGATOR_HOSTS.some(
+        (domain) => host === domain || host.endsWith(`.${domain}`),
+      )
+    ) {
+      return null;
+    }
+    return url.href;
   } catch {
     return null;
   }

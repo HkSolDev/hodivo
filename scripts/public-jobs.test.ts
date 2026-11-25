@@ -42,7 +42,7 @@ await test('public job listing allows ten seconds to acquire its snapshot transa
   });
 });
 
-await test('public presentation removes portal branding and exposes only recognized official destinations', async () => {
+await test('public presentation removes portal branding and allows http/https non-aggregator destinations', async () => {
   const { publicJobPresentation, cleanPublicJobTitle, officialPublicUrl } =
     await import('../src/lib/public-job-presentation.js');
   const raw = {
@@ -73,17 +73,16 @@ await test('public presentation removes portal branding and exposes only recogni
   assert.deepEqual(raw, original, 'stored provenance must not be mutated');
   for (const value of [
     'https://www.sarkariresult.com/a',
+    'http://www.sarkariresult.com/a',
     'https://freejobalert.com/a',
     'https://mysarkarinaukri.com/a',
     'https://ssc.gov.in@evil.test/a',
     'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'ftp://ssc.gov.in/a.pdf',
     'https://ssc.gov.in:444/a',
     'https://ssc.gov.in:80/a',
-    'https://unrelated.example/a',
-    'https://ssc.gov.in.unrelated.example/a',
     'https://jobs.freejobalert.com/a',
-    'http://uppbpb.gov.in/a',
-    'http://careers.bhel.in/a',
     'not a URL',
   ])
     assert.equal(officialPublicUrl(value), null);
@@ -93,6 +92,12 @@ await test('public presentation removes portal branding and exposes only recogni
     'https://careers.bhel.in/',
     'https://iiitp.ac.in/a',
     'https://www.ibps.in/a',
+    'http://uppbpb.gov.in/a',
+    'http://careers.bhel.in/a',
+    'https://afcat.edcil.co.in/AFCAT/',
+    'https://sbi.bank.in/web/careers',
+    'https://apps.cbexams.com/apply',
+    'https://psu-portal.example.org/apply',
   ])
     assert.equal(officialPublicUrl(value), value);
   for (const title of [
