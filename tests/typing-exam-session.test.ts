@@ -54,6 +54,29 @@ test('unready and unsupported snapshots fail closed; invalid clocks are rejected
       },
     }),
   );
+  assert.throws(() =>
+    createExamSession({
+      ...fixture.snapshot,
+      version: {
+        ...fixture.snapshot.version,
+        rules: {
+          ...fixture.snapshot.version.rules,
+          backspacePolicy: 'WORD_LOCK_V2' as never,
+        },
+      },
+    }),
+  );
+  for (const policy of ['DISABLED', 'CURRENT_WORD_ONLY'] as const) {
+    const s = createExamSession({
+      ...fixture.snapshot,
+      version: {
+        ...fixture.snapshot.version,
+        rules: { ...fixture.snapshot.version.rules, backspacePolicy: policy },
+      },
+    });
+    assert.equal(s.phase, 'ready');
+    assert.equal(s.backspaceCount, 0);
+  }
   for (const now of [NaN, Infinity, -1])
     assert.throws(() =>
       advanceExamSession(createExamSession(fixture.snapshot), now),

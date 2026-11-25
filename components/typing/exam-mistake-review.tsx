@@ -7,7 +7,7 @@ import type {
 } from '../../lib/typing/exam-evaluator';
 import styles from './exam-mode.module.css';
 
-type MistakeFilter = 'all' | 'full' | 'half';
+type MistakeFilter = 'all' | 'full' | 'half' | 'unattempted';
 
 const KIND_LABELS: Record<Exclude<ExamMistakeKind, 'match'>, string> = {
   substitution: 'Wrong word',
@@ -21,21 +21,31 @@ const KIND_LABELS: Record<Exclude<ExamMistakeKind, 'match'>, string> = {
 
 export function ExamMistakeReview({
   items,
-  fullCount,
+  typedFullCount,
   halfCount,
+  unattemptedCount,
 }: {
   items: ExamReviewItem[];
-  fullCount: number;
+  typedFullCount: number;
   halfCount: number;
+  unattemptedCount: number;
 }) {
   const [filter, setFilter] = useState<MistakeFilter>('all');
   const mistakes = items.filter((item) => item.weight > 0);
-  const visible =
+  const filtered =
     filter === 'full'
-      ? mistakes.filter((item) => item.weight === 1)
+      ? mistakes.filter((item) => !item.unattemptedTail && item.weight === 1)
       : filter === 'half'
         ? mistakes.filter((item) => item.weight === 0.5)
-        : mistakes;
+        : filter === 'unattempted'
+          ? mistakes.filter((item) => Boolean(item.unattemptedTail))
+          : mistakes;
+
+  const tailItems = filtered.filter((item) => item.unattemptedTail);
+  const collapseTail = tailItems.length > 1;
+  const visible = collapseTail
+    ? filtered.filter((item) => !item.unattemptedTail)
+    : filtered;
 
   if (mistakes.length === 0) {
     return (
@@ -48,6 +58,25 @@ export function ExamMistakeReview({
     );
   }
 
+  const typedMistakeCount = typedFullCount + halfCount;
+  const tabs: { id: MistakeFilter; label: string }[] = [
+    {
+      id: 'all',
+      label:
+        unattemptedCount > 0
+          ? `All (${typedMistakeCount} · +${unattemptedCount} left)`
+          : `All (${typedMistakeCount})`,
+    },
+    { id: 'full', label: `Full 1.0 (${typedFullCount})` },
+    { id: 'half', label: `Half 0.5 (${halfCount})` },
+  ];
+  if (unattemptedCount > 0) {
+    tabs.push({
+      id: 'unattempted',
+      label: `Unattempted (${unattemptedCount})`,
+    });
+  }
+
   return (
     <div className={styles.mistakeReview}>
       <div
@@ -55,13 +84,7 @@ export function ExamMistakeReview({
         role="group"
         aria-label="Filter mistakes"
       >
-        {(
-          [
-            { id: 'all', label: `All (${mistakes.length})` },
-            { id: 'full', label: `Full 1.0 (${fullCount})` },
-            { id: 'half', label: `Half 0.5 (${halfCount})` },
-          ] as const
-        ).map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -74,45 +97,81 @@ export function ExamMistakeReview({
         ))}
       </div>
 
-      <ul className={styles.mistakeList} aria-label="Mistake breakdown">
-        {visible.map((item, idx) => {
-          const isFull = item.weight === 1;
-          return (
-            <li
-              key={`${item.kind}-${idx}-${item.expected}-${item.typed}`}
-              className={`${styles.mistakeRow} ${isFull ? styles.mistakeRowFull : styles.mistakeRowHalf}`}
-            >
+      {visible.length === 0 && !collapseTail ? (
+        <div className={styles.mistakeEmptyState} role="status">
+          <span className={styles.mistakeEmptyTitle}>None in this filter</span>
+          <p className={styles.mistakeEmptyCopy}>
+            {filter === 'half'
+              ? 'No half mistakes (case, punctuation, or spacing) in typed words.'
+              : 'No typed full mistakes in this attempt.'}
+          </p>
+        </div>
+      ) : (
+        <ul className={styles.mistakeList} aria-label="Mistake breakdown">
+          {visible.map((item, idx) => {
+            const isFull = item.weight === 1;
+            return (
+              <li
+                key={`${item.kind}-${idx}-${item.expected}-${item.typed}`}
+                className={`${styles.mistakeRow} ${isFull ? styles.mistakeRowFull : styles.mistakeRowHalf}`}
+              >
+                <div className={styles.mistakeRowMeta}>
+                  <span
+                    className={`${styles.mistakeWeightBadge} ${isFull ? styles.mistakeWeightFull : styles.mistakeWeightHalf}`}
+                  >
+                    {isFull ? 'Full · 1.0' : 'Half · 0.5'}
+                  </span>
+                  <span className={styles.mistakeKindLabel}>
+                    {
+                      KIND_LABELS[
+                        item.kind as Exclude<ExamMistakeKind, 'match'>
+                      ]
+                    }
+                  </span>
+                </div>
+                <div className={styles.mistakeDiff}>
+                  {item.expected ? (
+                    <span className={styles.mistakeExpected}>
+                      {item.expected}
+                    </span>
+                  ) : (
+                    <span className={styles.mistakeNone}>none</span>
+                  )}
+                  <span className={styles.mistakeArrow} aria-hidden="true">
+                    →
+                  </span>
+                  {item.typed ? (
+                    <span className={styles.mistakeTyped}>{item.typed}</span>
+                  ) : (
+                    <span className={styles.mistakeNone}>omitted</span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+          {collapseTail && (
+            <li className={`${styles.mistakeRow} ${styles.mistakeRowFull}`}>
               <div className={styles.mistakeRowMeta}>
                 <span
-                  className={`${styles.mistakeWeightBadge} ${isFull ? styles.mistakeWeightFull : styles.mistakeWeightHalf}`}
+                  className={`${styles.mistakeWeightBadge} ${styles.mistakeWeightFull}`}
                 >
-                  {isFull ? 'Full · 1.0' : 'Half · 0.5'}
+                  Full · {tailItems.length}.0
                 </span>
-                <span className={styles.mistakeKindLabel}>
-                  {KIND_LABELS[item.kind as Exclude<ExamMistakeKind, 'match'>]}
-                </span>
+                <span className={styles.mistakeKindLabel}>Unattempted</span>
               </div>
               <div className={styles.mistakeDiff}>
-                {item.expected ? (
-                  <span className={styles.mistakeExpected}>
-                    {item.expected}
-                  </span>
-                ) : (
-                  <span className={styles.mistakeNone}>none</span>
-                )}
+                <span className={styles.mistakeExpected}>
+                  {tailItems.length} remaining words
+                </span>
                 <span className={styles.mistakeArrow} aria-hidden="true">
                   →
                 </span>
-                {item.typed ? (
-                  <span className={styles.mistakeTyped}>{item.typed}</span>
-                ) : (
-                  <span className={styles.mistakeNone}>omitted</span>
-                )}
+                <span className={styles.mistakeNone}>omitted</span>
               </div>
             </li>
-          );
-        })}
-      </ul>
+          )}
+        </ul>
+      )}
     </div>
   );
 }

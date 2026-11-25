@@ -26,7 +26,7 @@ import {
 } from '../../lib/typing/exam-session';
 import {
   applyExamInput,
-  isSupportedExamInputType,
+  isAllowedExamBeforeInput,
 } from '../../lib/typing/exam-input';
 import {
   loadExams,
@@ -430,7 +430,12 @@ export function ExamMode() {
       if (advanced !== current) commitSession(advanced);
       if (
         advanced.phase === 'finished' ||
-        !isSupportedExamInputType(event.inputType)
+        !isAllowedExamBeforeInput(
+          advanced,
+          event.inputType,
+          textarea.selectionStart,
+          textarea.selectionEnd,
+        )
       )
         event.preventDefault();
     };
@@ -602,8 +607,9 @@ export function ExamMode() {
   // Unified exam evaluation (Full Mistakes = 1.0, Half Mistakes = 0.5, General Cutoff)
   const durationProfileSecs = versionDetail?.rules.durationSeconds ?? 600;
   const elapsedSecs = Math.max(0, durationProfileSecs - remainingSecs);
-  const selectedExamSlug =
-    exams.find((ex) => ex.id === selectedExamId)?.slug ?? null;
+  const selectedExam = exams.find((ex) => ex.id === selectedExamId) ?? null;
+  const selectedExamSlug = selectedExam?.slug ?? null;
+  const selectedExamName = selectedExam?.name ?? null;
   const masterText = snapshot?.passage.text ?? '';
   const submittedText = session?.text ?? '';
   const versionRules = versionDetail?.rules ?? null;
@@ -614,6 +620,7 @@ export function ExamMode() {
         typedText: phase === 'finished' ? submittedText : '',
         elapsedSeconds: elapsedSecs,
         examSlug: selectedExamSlug,
+        examName: selectedExamName,
         rules: versionRules,
       }),
     [
@@ -622,6 +629,7 @@ export function ExamMode() {
       submittedText,
       elapsedSecs,
       selectedExamSlug,
+      selectedExamName,
       versionRules,
     ],
   );
@@ -644,6 +652,7 @@ export function ExamMode() {
     const passedRule =
       evaluation.overallStatus === 'QUALIFIED_ALL' ||
       evaluation.overallStatus === 'QUALIFIED_RESERVED';
+    const recordedBackspaces = session?.backspaceCount ?? 0;
     setSaveState({ status: 'saving' });
     void saveTypingAttempt({
       passageId: snapshot.passage.id,
@@ -654,7 +663,7 @@ export function ExamMode() {
       accuracy: evaluation.accuracyPercent,
       errorPercent: evaluation.errorPercent,
       keystrokes: typedLength,
-      backspaceCount: 0,
+      backspaceCount: recordedBackspaces,
       durationMs: Math.max(1000, elapsedSecs * 1000),
       passedRule,
     }).then((result) => {
@@ -670,6 +679,7 @@ export function ExamMode() {
     phase,
     snapshot,
     versionDetail,
+    session?.backspaceCount,
     evaluation.grossWpm,
     evaluation.netWpm,
     evaluation.accuracyPercent,
@@ -907,7 +917,15 @@ export function ExamMode() {
                       Rule:{' '}
                       <strong>
                         Backspace:{' '}
-                        {versionDetail?.rules.backspacePolicy ?? 'Unspecified'}
+                        {versionDetail?.rules.backspacePolicy === 'DISABLED'
+                          ? 'Disabled'
+                          : versionDetail?.rules.backspacePolicy ===
+                              'CURRENT_WORD_ONLY'
+                            ? 'Current word only'
+                            : versionDetail?.rules.backspacePolicy ===
+                                'UNRESTRICTED'
+                              ? 'Allowed'
+                              : 'Unspecified'}
                       </strong>
                     </span>
                   </div>
@@ -940,10 +958,15 @@ export function ExamMode() {
                       'Read the passage and type it in the answer field.'}
                   </p>
                   <p>
-                    Typing starts the clock. Corrections are allowed in the
-                    supported simulation. Paste and drop are blocked.
-                    Confirmation does not pause the clock. Official scoring is
-                    unavailable.
+                    Typing starts the clock.{' '}
+                    {versionDetail.rules.backspacePolicy === 'DISABLED'
+                      ? 'Backspace and mid-text edits are disabled.'
+                      : versionDetail.rules.backspacePolicy ===
+                          'CURRENT_WORD_ONLY'
+                        ? 'Backspace is allowed only within the current word before pressing Space.'
+                        : 'Corrections are allowed in the supported simulation.'}{' '}
+                    Paste and drop are blocked. Confirmation does not pause the
+                    clock. Official scoring is unavailable.
                   </p>
                   {snapshot && (
                     <p>
@@ -1213,7 +1236,11 @@ export function ExamMode() {
               )
             )}
             <div className={styles.focusGuidePill} aria-hidden="true">
-              Strict Exam Mode · Copy-Paste Prohibited
+              {versionDetail?.rules.backspacePolicy === 'DISABLED'
+                ? 'Backspace Disabled · Copy-Paste Prohibited'
+                : versionDetail?.rules.backspacePolicy === 'CURRENT_WORD_ONLY'
+                  ? 'Current-Word Backspace · Copy-Paste Prohibited'
+                  : 'Strict Exam Mode · Copy-Paste Prohibited'}
             </div>
           </div>
         </section>
@@ -1443,7 +1470,11 @@ export function ExamMode() {
               className={`${styles.resultSegBtn}${resultTab === 'mistakes' ? ` ${styles.resultSegBtnActive}` : ''}`}
               onClick={() => setResultTab('mistakes')}
             >
-              Mistakes ({evaluation.fullMistakes + evaluation.halfMistakes})
+              Mistakes ({evaluation.typedFullMistakes + evaluation.halfMistakes}
+              {evaluation.unattemptedWords > 0
+                ? ` · +${evaluation.unattemptedWords} left`
+                : ''}
+              )
             </button>
           </div>
 
@@ -1456,7 +1487,8 @@ export function ExamMode() {
                     : 'Submitted'}
                 </div>
                 <p className={styles.resultSummary}>
-                  Official scoring is unavailable.
+                  <strong>{evaluation.profileLabel}</strong> ·{' '}
+                  <span>Official scoring is unavailable.</span>
                 </p>
               </div>
 
@@ -1465,7 +1497,8 @@ export function ExamMode() {
                   className={`${styles.scoreCard} ${
                     evaluation.netWpm >= evaluation.targetWpm
                       ? styles.scoreCardHero
-                      : evaluation.netWpm >= 27
+                      : evaluation.netWpm >=
+                          Math.max(20, evaluation.targetWpm - 8)
                         ? styles.scoreCardWarn
                         : styles.scoreCardDanger
                   }`}
@@ -1477,7 +1510,7 @@ export function ExamMode() {
                     {evaluation.netWpm} WPM
                   </strong>
                   <span className={styles.scoreCardSub}>
-                    Target benchmark: {evaluation.targetWpm} WPM
+                    Target: {evaluation.targetWpm} WPM
                   </span>
                 </div>
                 <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
@@ -1486,7 +1519,27 @@ export function ExamMode() {
                     {evaluation.grossWpm} WPM
                   </strong>
                   <span className={styles.scoreCardSub}>
-                    Raw keystroke pace
+                    Raw pace ({elapsedSecs}s / {durationProfileSecs}s)
+                  </span>
+                </div>
+                <div
+                  className={`${styles.scoreCard} ${
+                    evaluation.typedAccuracyPercent >= 95
+                      ? styles.scoreCardHero
+                      : evaluation.typedAccuracyPercent >= 88
+                        ? styles.scoreCardWarn
+                        : styles.scoreCardDanger
+                  }`}
+                >
+                  <span className={styles.scoreCardLabel}>
+                    Attempted Accuracy
+                  </span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.typedAccuracyPercent}%
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    {evaluation.typedFullMistakes} Full ·{' '}
+                    {evaluation.halfMistakes} Half on typed words
                   </span>
                 </div>
                 <div
@@ -1495,20 +1548,19 @@ export function ExamMode() {
                       ? styles.scoreCardHero
                       : evaluation.overallStatus === 'QUALIFIED_RESERVED'
                         ? styles.scoreCardWarn
-                        : evaluation.accuracyPercent >= 90
-                          ? styles.scoreCardWarn
-                          : styles.scoreCardDanger
+                        : styles.scoreCardDanger
                   }`}
                 >
                   <span className={styles.scoreCardLabel}>
-                    SSC Mistakes & Accuracy
+                    Overall Passage Error
                   </span>
                   <strong className={styles.scoreCardVal}>
-                    {evaluation.accuracyPercent}%
+                    {evaluation.errorPercent}%
                   </strong>
                   <span className={styles.scoreCardSub}>
-                    {evaluation.fullMistakes} Full · {evaluation.halfMistakes}{' '}
-                    Half ({evaluation.errorPercent}% error)
+                    {evaluation.unattemptedWords > 0
+                      ? `${evaluation.unattemptedWords} unattempted words left`
+                      : `Full passage (${evaluation.accuracyPercent}% accuracy)`}
                   </span>
                 </div>
                 <div
@@ -1530,26 +1582,43 @@ export function ExamMode() {
                     {evaluation.statusDetail}
                   </span>
                 </div>
-                <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
+                <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
                   <span className={styles.scoreCardLabel}>
-                    Final answer characters
+                    Keystrokes & Progress
                   </span>
                   <strong className={styles.scoreCardVal}>
                     {typedLength.toLocaleString()}
                   </strong>
                   <span className={styles.scoreCardSub}>
-                    Passage length: {passageLength.toLocaleString()}
+                    {evaluation.completionPercent}% of{' '}
+                    {passageLength.toLocaleString()} chars
+                    {evaluation.targetKeystrokes !== null
+                      ? ` (Target: ${evaluation.targetKeystrokes.toLocaleString()})`
+                      : ''}
                   </span>
                 </div>
-                <div className={`${styles.scoreCard} ${styles.scoreCardHero}`}>
-                  <span className={styles.scoreCardLabel}>
-                    Total Words Typed
-                  </span>
+                <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
+                  <span className={styles.scoreCardLabel}>Words Typed</span>
                   <strong className={styles.scoreCardVal}>
-                    {wordCount.toLocaleString()}
+                    {wordCount.toLocaleString()} /{' '}
+                    {evaluation.evaluatedWordCount.toLocaleString()}
                   </strong>
                   <span className={styles.scoreCardSub}>
-                    Time taken: {elapsedSecs}s / {durationProfileSecs}s
+                    {evaluation.unattemptedWords === 0
+                      ? 'Passage completed'
+                      : `${evaluation.unattemptedWords} words remaining`}
+                  </span>
+                </div>
+                <div className={styles.scoreCard}>
+                  <span className={styles.scoreCardLabel}>Exam Benchmark</span>
+                  <strong className={styles.scoreCardVal}>
+                    {evaluation.targetWpm} WPM
+                  </strong>
+                  <span className={styles.scoreCardSub}>
+                    {evaluation.categoryResults
+                      .map((c) => `${c.category} ≤${c.maxErrorPercent}%`)
+                      .join(' · ')}{' '}
+                    · {Math.round(durationProfileSecs / 60)}m
                   </span>
                 </div>
               </div>
@@ -1566,8 +1635,9 @@ export function ExamMode() {
           ) : (
             <ExamMistakeReview
               items={evaluation.reviewItems}
-              fullCount={evaluation.fullMistakes}
+              typedFullCount={evaluation.typedFullMistakes}
               halfCount={evaluation.halfMistakes}
+              unattemptedCount={evaluation.unattemptedWords}
             />
           )}
         </div>
