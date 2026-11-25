@@ -608,12 +608,21 @@
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
-  max-width: 1440px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 8px 16px;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-rows:
+    minmax(
+      0,
+      calc(5 * var(--passage-line-height) * var(--passage-font-size) + 64px)
+    )
+    minmax(
+      0,
+      calc(6.1 * var(--passage-line-height) * var(--passage-font-size) + 64px)
+    );
+  align-content: center;
+  gap: 12px;
   box-sizing: border-box;
   overflow: hidden;
 }
