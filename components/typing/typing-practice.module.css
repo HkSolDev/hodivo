@@ -420,7 +420,7 @@ input.passageIdInput:focus {
   background: var(--line);
 }
 
-/* Main Workspace (Non-scrolling outer container — 64% Passage / 36% Input split) */
+/* Main Workspace (Non-scrolling outer container — 50% Passage / 50% Input split) */
 .workspace {
   flex: 1;
   min-height: 0;
@@ -434,9 +434,9 @@ input.passageIdInput:focus {
   overflow: hidden;
 }
 
-/* Upper Block: Passage Display Box (64% height) */
+/* Upper Block: Passage Display Box (50% height) */
 .passageCard {
-  flex: 6.4 1 0%;
+  flex: 1 1 0%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -725,10 +725,10 @@ input.passageIdInput:focus {
   color: var(--ink);
 }
 
-/* Lower Block: Pinned Compact Typing Input Console (36% height) */
+/* Lower Block: Pinned Compact Typing Input Console (50% height) */
 .inputCard {
   position: relative;
-  flex: 3.6 1 0%;
+  flex: 1 1 0%;
   min-height: 9.25rem;
   display: flex;
   flex-direction: column;
