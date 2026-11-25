@@ -15,7 +15,9 @@ export function createExamSession(snapshot: ExamStartSnapshot): ExamSession {
     !Number.isInteger(rules.targetWpm) ||
     rules.targetWpm < 1 ||
     rules.targetWpm > 1000 ||
-    rules.backspacePolicy !== 'UNRESTRICTED' ||
+    (rules.backspacePolicy !== 'UNRESTRICTED' &&
+      rules.backspacePolicy !== 'DISABLED' &&
+      rules.backspacePolicy !== 'CURRENT_WORD_ONLY') ||
     rules.editingPolicy !== 'native-correction-v1' ||
     rules.scoringMethod !== null
   )
@@ -24,6 +26,7 @@ export function createExamSession(snapshot: ExamStartSnapshot): ExamSession {
     snapshot,
     phase: 'ready',
     text: '',
+    backspaceCount: 0,
     deadline: null,
     remainingSeconds: rules.durationSeconds,
     finishReason: null,

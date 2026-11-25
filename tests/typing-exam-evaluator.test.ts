@@ -190,3 +190,107 @@ test('dynamic exam rules override hardcoded profile defaults for any exam', () =
   // 10% error passes the dynamic 12% cutoff even though ssc-chsl default is 7%
   assert.equal(result.overallStatus, 'QUALIFIED_ALL');
 });
+
+test('multi-word lookahead resyncs after skipped phrase without false jumps on common words', () => {
+  // Candidate skips a 5-word middle phrase ("brown fox jumps over the") and continues accurately
+  const masterText =
+    'The quick brown fox jumps over the lazy dog near the river bank.';
+  const typedText = 'The quick lazy dog near the river bank.';
+  const skipped = evaluateExamAttempt({
+    masterText,
+    typedText,
+    elapsedSeconds: 10,
+    examSlug: 'ssc-cgl',
+  });
+  assert.equal(skipped.typedFullMistakes, 5);
+  assert.equal(skipped.unattemptedWords, 0);
+  assert.equal(
+    skipped.reviewItems.filter((item) => item.kind === 'omission').length,
+    5,
+  );
+
+  // False-jump guard: typing "the" instead of "They" must NOT jump ahead to "the" 3 words later
+  const noFalseJump = evaluateExamAttempt({
+    masterText: 'They went to the market and bought fresh apples.',
+    typedText: 'the went to the market and bought fresh apples.',
+    elapsedSeconds: 10,
+    examSlug: 'ssc-chsl',
+  });
+  assert.equal(noFalseJump.typedFullMistakes, 1);
+  assert.equal(noFalseJump.halfMistakes, 0);
+});
+
+test('targetKeystrokes enforces minimum depressions on long passages and derives WPM when targetWpm is null', () => {
+  const unit = 'The quick brown fox jumps over lazy dogs. ';
+  const masterText = unit.repeat(50).trim(); // >2,000 chars
+  // Candidate types only 3 units (~126 chars) in 15s (fast pace ~50 WPM) and submits early
+  const early = evaluateExamAttempt({
+    masterText,
+    typedText: unit.repeat(3).trim(),
+    elapsedSeconds: 15,
+    examSlug: 'ssc-cgl',
+    rules: {
+      durationSeconds: 900,
+      targetWpm: null,
+      targetKeystrokes: 2000,
+      maxErrorPercent: 20,
+      backspacePolicy: 'UNRESTRICTED',
+      editingPolicy: 'native-correction-v1',
+      scoringMethod: null,
+      instructions: null,
+      ruleSourceUrl: null,
+      ruleSourceNote: null,
+    },
+  });
+  assert.equal(early.targetWpm, 27);
+  assert.equal(early.meetsKeystrokeTarget, false);
+  assert.equal(early.meetsSpeedTarget, false);
+  assert.equal(early.overallStatus, 'BELOW_CUTOFF');
+});
+
+test('scoringMethod supports strict-full-v1 and rrb-10x-v1 penalty rules dynamically', () => {
+  const masterText = 'One two three four five six seven eight nine ten.';
+  // 1 case error ("one") -> normally 0.5 Half Mistake, under strict-full-v1 becomes 1.0 Full Mistake
+  const strict = evaluateExamAttempt({
+    masterText,
+    typedText: 'one two three four five six seven eight nine ten.',
+    elapsedSeconds: 10,
+    rules: {
+      durationSeconds: 600,
+      targetWpm: 30,
+      targetKeystrokes: null,
+      maxErrorPercent: 5,
+      backspacePolicy: 'DISABLED',
+      editingPolicy: 'native-correction-v1',
+      scoringMethod: 'strict-full-v1',
+      instructions: null,
+      ruleSourceUrl: null,
+      ruleSourceNote: null,
+    },
+  });
+  assert.equal(strict.halfMistakes, 0);
+  assert.equal(strict.typedFullMistakes, 1);
+  assert.equal(strict.errorPercent, 10);
+
+  // RRB 10x penalty: 10 words (~50 chars) in 60s with 2 full mistakes -> 0.5 mistakes ignored (5%), 1.5 penalized * 10 = 15 words deducted
+  const rrb = evaluateExamAttempt({
+    masterText,
+    typedText: 'One wrong three wrong five six seven eight nine ten.',
+    elapsedSeconds: 15,
+    examSlug: 'rrb-ntpc',
+    rules: {
+      durationSeconds: 600,
+      targetWpm: 30,
+      targetKeystrokes: null,
+      maxErrorPercent: 5,
+      backspacePolicy: 'DISABLED',
+      editingPolicy: 'native-correction-v1',
+      scoringMethod: 'rrb-10x-v1',
+      instructions: null,
+      ruleSourceUrl: null,
+      ruleSourceNote: null,
+    },
+  });
+  assert.equal(rrb.typedFullMistakes, 2);
+  assert.equal(rrb.netWpm, 0);
+});

@@ -204,9 +204,16 @@ test('readiness keeps unavailable scoring distinct from incomplete and unsupport
   );
   for (const policy of ['DISABLED', 'CURRENT_WORD_ONLY'] as const)
     assert.deepEqual(
-      evaluateExamReadiness({ ...base, backspacePolicy: policy }, true).reasons,
-      ['RULES_UNSUPPORTED'],
+      evaluateExamReadiness({ ...base, backspacePolicy: policy }, true),
+      { canStart: true, reasons: [], scoringAvailable: false },
     );
+  assert.deepEqual(
+    evaluateExamReadiness(
+      { ...base, backspacePolicy: 'WORD_LOCK_V2' as never },
+      true,
+    ).reasons,
+    ['RULES_UNSUPPORTED'],
+  );
   assert.deepEqual(
     evaluateExamReadiness({ ...base, maxErrorPercent: 101 }, true).reasons,
     ['RULES_UNSUPPORTED'],

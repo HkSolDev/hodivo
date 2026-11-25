@@ -75,6 +75,7 @@ export interface ExamSession {
   snapshot: ExamStartSnapshot;
   phase: 'ready' | 'running' | 'finished';
   text: string;
+  backspaceCount: number;
   deadline: number | null;
   remainingSeconds: number;
   finishReason: 'submitted' | 'expired' | null;
