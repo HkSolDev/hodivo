@@ -91,7 +91,10 @@ export function evaluateExamReadiness(
   if (
     !inRange(v.durationSeconds, 1, 3600) ||
     !inRange(v.targetWpm, 1, 1000) ||
-    (v.backspacePolicy !== null && v.backspacePolicy !== 'UNRESTRICTED') ||
+    (v.backspacePolicy !== null &&
+      !['UNRESTRICTED', 'DISABLED', 'CURRENT_WORD_ONLY'].includes(
+        v.backspacePolicy,
+      )) ||
     (v.editingPolicy !== null && v.editingPolicy !== 'native-correction-v1') ||
     !inRange(v.targetKeystrokes, 1, 100000) ||
     !inRange(v.maxErrorPercent, 0, 100, false) ||

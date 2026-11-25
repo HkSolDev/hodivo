@@ -105,6 +105,7 @@ export interface ExamEvaluationResult {
   typedWordCount: number;
   completionPercent: number;
   meetsSpeedTarget: boolean;
+  meetsKeystrokeTarget: boolean;
   overallStatus: 'QUALIFIED_ALL' | 'QUALIFIED_RESERVED' | 'BELOW_CUTOFF';
   statusLabel: string;
   statusDetail: string;
@@ -120,13 +121,28 @@ export function resolveExamEvaluationProfile(
   const base =
     (examSlug && EXAM_EVALUATION_PROFILES[examSlug]) ||
     DEFAULT_EVALUATION_PROFILE;
+  const durationSeconds = rules?.durationSeconds ?? base.defaultDurationSeconds;
+  const derivedTargetWpm =
+    rules?.targetWpm ??
+    (rules?.targetKeystrokes != null
+      ? Math.max(
+          1,
+          Math.round(
+            rules.targetKeystrokes /
+              base.strokesPerWord /
+              Math.max(durationSeconds / 60, 1 / 60),
+          ),
+        )
+      : base.defaultTargetWpm);
   const maxError = rules?.maxErrorPercent;
+  const halfMistakeWeight =
+    rules?.scoringMethod === 'strict-full-v1' ? 1 : base.halfMistakeWeight;
   return {
     ...base,
     familyLabel: examName?.trim() || base.familyLabel,
-    defaultTargetWpm: rules?.targetWpm ?? base.defaultTargetWpm,
-    defaultDurationSeconds:
-      rules?.durationSeconds ?? base.defaultDurationSeconds,
+    defaultTargetWpm: derivedTargetWpm,
+    defaultDurationSeconds: durationSeconds,
+    halfMistakeWeight,
     categoryCutoffs:
       maxError !== null && maxError !== undefined
         ? [{ category: 'General (UR)', maxErrorPercent: maxError }]
@@ -165,10 +181,78 @@ function classifyWordMismatch(
   return { weight: 1, kind: 'substitution' };
 }
 
+const MAX_ALIGNMENT_LOOKAHEAD = 15;
+
+function findOmissionJump(
+  mWords: readonly string[],
+  tWords: readonly string[],
+  i: number,
+  j: number,
+): number {
+  const tw = tWords[j]!;
+  if (
+    i + 1 < mWords.length &&
+    classifyWordMismatch(mWords[i + 1]!, tw).weight === 0
+  ) {
+    return 1;
+  }
+  const maxOffset = Math.min(MAX_ALIGNMENT_LOOKAHEAD, mWords.length - 1 - i);
+  for (let offset = 2; offset <= maxOffset; offset++) {
+    if (classifyWordMismatch(mWords[i + offset]!, tw).weight !== 0) continue;
+    if (i + offset + 1 < mWords.length && j + 1 < tWords.length) {
+      if (
+        classifyWordMismatch(mWords[i + offset + 1]!, tWords[j + 1]!).weight < 1
+      ) {
+        return offset;
+      }
+    } else if (
+      tw.length >= 4 &&
+      i + offset === mWords.length - 1 &&
+      j === tWords.length - 1
+    ) {
+      return offset;
+    }
+  }
+  return 0;
+}
+
+function findAdditionJump(
+  mWords: readonly string[],
+  tWords: readonly string[],
+  i: number,
+  j: number,
+): number {
+  const mw = mWords[i]!;
+  if (
+    j + 1 < tWords.length &&
+    classifyWordMismatch(mw, tWords[j + 1]!).weight === 0
+  ) {
+    return 1;
+  }
+  const maxOffset = Math.min(MAX_ALIGNMENT_LOOKAHEAD, tWords.length - 1 - j);
+  for (let offset = 2; offset <= maxOffset; offset++) {
+    if (classifyWordMismatch(mw, tWords[j + offset]!).weight !== 0) continue;
+    if (i + 1 < mWords.length && j + offset + 1 < tWords.length) {
+      if (
+        classifyWordMismatch(mWords[i + 1]!, tWords[j + offset + 1]!).weight < 1
+      ) {
+        return offset;
+      }
+    } else if (
+      mw.length >= 4 &&
+      i === mWords.length - 1 &&
+      j + offset === tWords.length - 1
+    ) {
+      return offset;
+    }
+  }
+  return 0;
+}
+
 /**
  * Evaluates a candidate's typed script against the master passage using
- * word-level alignment (Full Mistakes = 1.0, Half Mistakes = 0.5) and
- * the exam's configured speed and category error cutoffs.
+ * word-level alignment (Full Mistakes = 1.0, Half Mistakes = 0.5 or profile weight)
+ * and the exam's configured speed, keystrokes, and category error cutoffs.
  */
 export function evaluateExamAttempt(params: {
   masterText: string;
@@ -181,9 +265,10 @@ export function evaluateExamAttempt(params: {
   const { masterText, typedText, elapsedSeconds, examSlug, examName, rules } =
     params;
   const profile = resolveExamEvaluationProfile(examSlug, rules, examName);
-  const targetWpm = rules?.targetWpm ?? profile.defaultTargetWpm;
+  const targetWpm = profile.defaultTargetWpm;
   const targetKeystrokes = rules?.targetKeystrokes ?? null;
   const strokesPerWord = profile.strokesPerWord;
+  const halfWeight: 0.5 | 1 = profile.halfMistakeWeight === 1 ? 1 : 0.5;
 
   const masterWords = tokenizeWords(masterText);
   const typedWords = tokenizeWords(typedText);
@@ -248,79 +333,82 @@ export function evaluateExamAttempt(params: {
       continue;
     }
 
-    // Check spacing merge error: two master words joined into one typed word (e.g. "themodern" vs "the" "modern") -> Half Mistake
+    // Check spacing merge error: two master words joined into one typed word (e.g. "themodern" vs "the" "modern")
     if (
       i + 1 < mWords.length &&
       (mw + mWords[i + 1]!).toLowerCase() === tw.toLowerCase()
     ) {
       reviewItems.push({
         kind: 'merge',
-        weight: 0.5,
+        weight: halfWeight,
         expected: `${mw} ${mWords[i + 1]!}`,
         typed: tw,
       });
-      halfMistakes++;
+      if (halfWeight === 1) fullMistakes++;
+      else halfMistakes++;
       i += 2;
       j += 1;
       continue;
     }
 
-    // Check spacing split error: one master word split into two typed words (e.g. "mod" "ern" vs "modern") -> Half Mistake
+    // Check spacing split error: one master word split into two typed words (e.g. "mod" "ern" vs "modern")
     if (
       j + 1 < tWords.length &&
       mw.toLowerCase() === (tw + tWords[j + 1]!).toLowerCase()
     ) {
       reviewItems.push({
         kind: 'split',
-        weight: 0.5,
+        weight: halfWeight,
         expected: mw,
         typed: `${tw} ${tWords[j + 1]!}`,
       });
-      halfMistakes++;
+      if (halfWeight === 1) fullMistakes++;
+      else halfMistakes++;
       i += 1;
       j += 2;
       continue;
     }
 
-    // Check 1-word omission (candidate skipped mw and typed the next master word) -> 1 Full Mistake for omission
-    if (
-      i + 1 < mWords.length &&
-      classifyWordMismatch(mWords[i + 1]!, tw).weight === 0
-    ) {
-      reviewItems.push({
-        kind: 'omission',
-        weight: 1,
-        expected: mw,
-        typed: '',
-      });
-      fullMistakes++;
-      i += 1;
+    // Check multi-word or 1-word omission vs addition (resyncs cleanly even if candidate skipped a phrase/line)
+    const omitOffset = findOmissionJump(mWords, tWords, i, j);
+    const addOffset = findAdditionJump(mWords, tWords, i, j);
+
+    if (omitOffset > 0 && (addOffset === 0 || omitOffset <= addOffset)) {
+      for (let k = 0; k < omitOffset; k++) {
+        reviewItems.push({
+          kind: 'omission',
+          weight: 1,
+          expected: mWords[i + k]!,
+          typed: '',
+        });
+      }
+      fullMistakes += omitOffset;
+      i += omitOffset;
       continue;
     }
 
-    // Check 1-word addition/repetition (candidate inserted an extra word tw before matching mw) -> 1 Full Mistake
-    if (
-      j + 1 < tWords.length &&
-      classifyWordMismatch(mw, tWords[j + 1]!).weight === 0
-    ) {
-      reviewItems.push({
-        kind: 'addition',
-        weight: 1,
-        expected: '',
-        typed: tw,
-      });
-      fullMistakes++;
-      j += 1;
+    if (addOffset > 0) {
+      for (let k = 0; k < addOffset; k++) {
+        reviewItems.push({
+          kind: 'addition',
+          weight: 1,
+          expected: '',
+          typed: tWords[j + k]!,
+        });
+      }
+      fullMistakes += addOffset;
+      j += addOffset;
       continue;
     }
 
+    const itemWeight: 0.5 | 1 = direct.weight === 0.5 ? halfWeight : 1;
     reviewItems.push({
       kind: direct.kind,
-      weight: direct.weight,
+      weight: itemWeight,
       expected: mw,
       typed: tw,
     });
-    if (direct.weight === 0.5) {
+    if (itemWeight === 0.5) {
       halfMistakes++;
     } else {
       fullMistakes++;
@@ -370,18 +458,44 @@ export function evaluateExamAttempt(params: {
   const elapsedMins = Math.max(elapsedSeconds / 60, 1 / 60);
   const grossWpm =
     typedLen > 0 ? Math.round(typedLen / strokesPerWord / elapsedMins) : 0;
-  // Net WPM reflects the speed of words actually typed, deducting only typed mistakes
-  const netWpm =
-    typedLen > 0
-      ? Math.max(
-          0,
-          Math.round(
-            (typedLen / strokesPerWord - typedEquivalentMistakes) / elapsedMins,
-          ),
-        )
-      : 0;
 
-  const meetsSpeedTarget = netWpm >= targetWpm && typedLen > 0;
+  let netWpm = 0;
+  if (typedLen > 0) {
+    if (rules?.scoringMethod === 'rrb-10x-v1') {
+      const typedWordsByStrokes = typedLen / strokesPerWord;
+      const ignoredMistakes = typedWordsByStrokes * 0.05;
+      const penalizedMistakes = Math.max(
+        0,
+        typedEquivalentMistakes - ignoredMistakes,
+      );
+      netWpm = Math.max(
+        0,
+        Math.round(
+          (typedWordsByStrokes - penalizedMistakes * 10) / elapsedMins,
+        ),
+      );
+    } else {
+      // Net WPM reflects the speed of words actually typed, deducting only typed mistakes
+      netWpm = Math.max(
+        0,
+        Math.round(
+          (typedLen / strokesPerWord - typedEquivalentMistakes) / elapsedMins,
+        ),
+      );
+    }
+  }
+
+  const effectiveTargetKeystrokes =
+    targetKeystrokes !== null
+      ? masterText.length > 0
+        ? Math.min(targetKeystrokes, masterText.length)
+        : targetKeystrokes
+      : null;
+  const meetsKeystrokeTarget =
+    effectiveTargetKeystrokes === null || typedLen >= effectiveTargetKeystrokes;
+  const meetsSpeedTarget =
+    netWpm >= targetWpm && typedLen > 0 && meetsKeystrokeTarget;
+
   const categoryResults: CategoryQualificationResult[] =
     profile.categoryCutoffs.map((c) => ({
       category: c.category,
@@ -416,6 +530,12 @@ export function evaluateExamAttempt(params: {
     statusDetail = `${netWpm} WPM net · ${errorPercent}% error (${cutoffSummary})`;
   } else if (unattemptedWords > 0 && errorPercent > maxAllowedError) {
     statusDetail = `Incomplete: ${unattemptedWords} words left (${errorPercent}% error · need ≤${maxAllowedError}%)`;
+  } else if (
+    !meetsKeystrokeTarget &&
+    effectiveTargetKeystrokes !== null &&
+    netWpm >= targetWpm
+  ) {
+    statusDetail = `Keystrokes low: ${typedLen.toLocaleString()} / ${effectiveTargetKeystrokes.toLocaleString()} required`;
   } else if (!meetsSpeedTarget && errorPercent > maxAllowedError) {
     statusDetail = `Need ${targetWpm} WPM net & ≤${maxAllowedError}% error`;
   } else if (!meetsSpeedTarget) {
@@ -442,6 +562,7 @@ export function evaluateExamAttempt(params: {
     typedWordCount: tWords.length,
     completionPercent,
     meetsSpeedTarget,
+    meetsKeystrokeTarget,
     overallStatus,
     statusLabel,
     statusDetail,

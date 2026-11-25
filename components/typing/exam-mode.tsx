@@ -26,7 +26,7 @@ import {
 } from '../../lib/typing/exam-session';
 import {
   applyExamInput,
-  isSupportedExamInputType,
+  isAllowedExamBeforeInput,
 } from '../../lib/typing/exam-input';
 import {
   loadExams,
@@ -430,7 +430,12 @@ export function ExamMode() {
       if (advanced !== current) commitSession(advanced);
       if (
         advanced.phase === 'finished' ||
-        !isSupportedExamInputType(event.inputType)
+        !isAllowedExamBeforeInput(
+          advanced,
+          event.inputType,
+          textarea.selectionStart,
+          textarea.selectionEnd,
+        )
       )
         event.preventDefault();
     };
@@ -647,6 +652,7 @@ export function ExamMode() {
     const passedRule =
       evaluation.overallStatus === 'QUALIFIED_ALL' ||
       evaluation.overallStatus === 'QUALIFIED_RESERVED';
+    const recordedBackspaces = session?.backspaceCount ?? 0;
     setSaveState({ status: 'saving' });
     void saveTypingAttempt({
       passageId: snapshot.passage.id,
@@ -657,7 +663,7 @@ export function ExamMode() {
       accuracy: evaluation.accuracyPercent,
       errorPercent: evaluation.errorPercent,
       keystrokes: typedLength,
-      backspaceCount: 0,
+      backspaceCount: recordedBackspaces,
       durationMs: Math.max(1000, elapsedSecs * 1000),
       passedRule,
     }).then((result) => {
@@ -673,6 +679,7 @@ export function ExamMode() {
     phase,
     snapshot,
     versionDetail,
+    session?.backspaceCount,
     evaluation.grossWpm,
     evaluation.netWpm,
     evaluation.accuracyPercent,
@@ -910,7 +917,15 @@ export function ExamMode() {
                       Rule:{' '}
                       <strong>
                         Backspace:{' '}
-                        {versionDetail?.rules.backspacePolicy ?? 'Unspecified'}
+                        {versionDetail?.rules.backspacePolicy === 'DISABLED'
+                          ? 'Disabled'
+                          : versionDetail?.rules.backspacePolicy ===
+                              'CURRENT_WORD_ONLY'
+                            ? 'Current word only'
+                            : versionDetail?.rules.backspacePolicy ===
+                                'UNRESTRICTED'
+                              ? 'Allowed'
+                              : 'Unspecified'}
                       </strong>
                     </span>
                   </div>
@@ -943,10 +958,15 @@ export function ExamMode() {
                       'Read the passage and type it in the answer field.'}
                   </p>
                   <p>
-                    Typing starts the clock. Corrections are allowed in the
-                    supported simulation. Paste and drop are blocked.
-                    Confirmation does not pause the clock. Official scoring is
-                    unavailable.
+                    Typing starts the clock.{' '}
+                    {versionDetail.rules.backspacePolicy === 'DISABLED'
+                      ? 'Backspace and mid-text edits are disabled.'
+                      : versionDetail.rules.backspacePolicy ===
+                          'CURRENT_WORD_ONLY'
+                        ? 'Backspace is allowed only within the current word before pressing Space.'
+                        : 'Corrections are allowed in the supported simulation.'}{' '}
+                    Paste and drop are blocked. Confirmation does not pause the
+                    clock. Official scoring is unavailable.
                   </p>
                   {snapshot && (
                     <p>
@@ -1216,7 +1236,11 @@ export function ExamMode() {
               )
             )}
             <div className={styles.focusGuidePill} aria-hidden="true">
-              Strict Exam Mode · Copy-Paste Prohibited
+              {versionDetail?.rules.backspacePolicy === 'DISABLED'
+                ? 'Backspace Disabled · Copy-Paste Prohibited'
+                : versionDetail?.rules.backspacePolicy === 'CURRENT_WORD_ONLY'
+                  ? 'Current-Word Backspace · Copy-Paste Prohibited'
+                  : 'Strict Exam Mode · Copy-Paste Prohibited'}
             </div>
           </div>
         </section>
@@ -1463,7 +1487,8 @@ export function ExamMode() {
                     : 'Submitted'}
                 </div>
                 <p className={styles.resultSummary}>
-                  {evaluation.profileLabel} · Official scoring is unavailable.
+                  <strong>{evaluation.profileLabel}</strong> ·{' '}
+                  <span>Official scoring is unavailable.</span>
                 </p>
               </div>
 
@@ -1610,8 +1635,9 @@ export function ExamMode() {
           ) : (
             <ExamMistakeReview
               items={evaluation.reviewItems}
-              fullCount={evaluation.fullMistakes}
+              typedFullCount={evaluation.typedFullMistakes}
               halfCount={evaluation.halfMistakes}
+              unattemptedCount={evaluation.unattemptedWords}
             />
           )}
         </div>

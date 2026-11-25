@@ -279,6 +279,14 @@ test(
         });
         assert.deepEqual(
           (await catalogue.getVersion(approved.id)).readiness.reasons,
+          [],
+        );
+        await database.typingExamVersion.update({
+          where: { id: approved.id },
+          data: { editingPolicy: 'unsupported-v2' },
+        });
+        assert.deepEqual(
+          (await catalogue.getVersion(approved.id)).readiness.reasons,
           ['RULES_UNSUPPORTED'],
         );
         await database.typingExamVersion.update({
