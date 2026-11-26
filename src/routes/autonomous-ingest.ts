@@ -10,6 +10,7 @@ import {
 import { validatePost } from '../../scripts/validate-post.js';
 import { prisma } from '../db.js';
 import { notifyJobsRevalidated } from '../lib/notify-jobs-revalidation.js';
+import { enqueueSyncEvents, sourceSyncEvent } from '../lib/sync-queue.js';
 
 export class AutonomousIngestError extends Error {}
 
@@ -856,11 +857,13 @@ export async function ingestAutonomousNotice(
       reused_existing: false,
       post_ids: savedPostIds,
       audit_lineage: computedLineage,
+      sourceId: source.id,
       detailIds,
       refreshListings,
     };
   });
-  const { detailIds, refreshListings, ...receipt } = committed;
+  const { sourceId, detailIds, refreshListings, ...receipt } = committed;
+  await enqueueSyncEvents([sourceSyncEvent(sourceId)], env);
   const details = await Promise.all(
     [...detailIds].map((id) => notifyJobsRevalidated(env, id)),
   );

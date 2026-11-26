@@ -12,6 +12,7 @@ import {
   saveAttemptAndRefreshBoard,
   type TypingAttemptWriteDatabase,
 } from '../lib/typing-leaderboard.js';
+import { attemptSyncEvent, enqueueSyncEvents } from '../lib/sync-queue.js';
 
 export function registerTypingAttemptsRoutes(
   app: FastifyInstance,
@@ -40,6 +41,7 @@ export function registerTypingAttemptsRoutes(
       try {
         const input = parseAttemptInput(request.body);
         const result = await saveAttemptAndRefreshBoard(authUserId, input, db);
+        await enqueueSyncEvents([attemptSyncEvent(result.attempt.id)]);
         return reply.code(201).send(result);
       } catch (error) {
         if (error instanceof TypingAttemptError) {

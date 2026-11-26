@@ -16,6 +16,7 @@ import {
 } from '../../generated/prisma/index.js';
 import { validatePost } from '../../scripts/validate-post.js';
 import { notifyJobsRevalidated } from '../lib/notify-jobs-revalidation.js';
+import { enqueueSyncEvents, sourceSyncEvent } from '../lib/sync-queue.js';
 import {
   isEligibilityRules,
   type EligibilityRules,
@@ -275,6 +276,7 @@ export async function handleIngest(
       return { source, affectedJobs };
     });
 
+    await enqueueSyncEvents([sourceSyncEvent(source.id)], env);
     await Promise.all(
       affectedJobs.map(({ id }) => notifyJobsRevalidated(env, id)),
     );

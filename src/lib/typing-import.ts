@@ -1,4 +1,5 @@
 import type { PrismaClient, Prisma } from '../../generated/prisma/index.js';
+import { enqueueSyncEvents, examVersionSyncEvent } from './sync-queue.js';
 import {
   parseTypingImport,
   type TypingImportInput,
@@ -89,8 +90,10 @@ export async function importTypingContent(
   options: { apply?: boolean } = {},
 ) {
   const parsed = parseTypingImport(input);
+  // Set only when this apply actually wrote rows that slave-db must copy.
+  let changedVersionId: string | undefined;
   try {
-    return await database.$transaction(
+    const result = await database.$transaction(
       async (tx) => {
         const plan = await inspectImport(parsed, tx);
         const conflicted =
@@ -118,6 +121,12 @@ export async function importTypingContent(
                 },
               });
           }
+          if (
+            plan.examOutcome === 'create' ||
+            plan.versionOutcome === 'create' ||
+            plan.passages.some((item) => item.outcome === 'create')
+          )
+            changedVersionId = version.id;
           // Query only this file's bounded identities; verify storage before commit.
           const readBack = await inspectImport(parsed, tx);
           if (
@@ -149,6 +158,9 @@ export async function importTypingContent(
       },
       { isolationLevel: 'Serializable', maxWait: 5000, timeout: 15000 },
     );
+    if (changedVersionId)
+      await enqueueSyncEvents([examVersionSyncEvent(changedVersionId)]);
+    return result;
   } catch (error) {
     if (
       error instanceof Error &&
