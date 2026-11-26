@@ -10,6 +10,9 @@ Verified against the server on 10 November 2026. This is the entry point for
 current deployment topology; dated release notes retain historical results.
 Recheck live state before changing a service. No credentials belong in this file.
 
+For the `slave-db` read-split, Redis Stream sync (`sync-worker`), log commands, and
+migration/backfill operations, see [Slave DB & Event-Driven Sync](SLAVE_DB_AND_SYNC.md).
+
 ## Ownership and traffic
 
 | Component            | Managed by                          | Identity and connection                                                                       |
