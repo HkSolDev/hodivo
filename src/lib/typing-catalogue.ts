@@ -37,7 +37,10 @@ export function listPracticePassages(
   );
 }
 
-export function getPracticePassage(id: string, database: Database = prismaRead) {
+export function getPracticePassage(
+  id: string,
+  database: Database = prismaRead,
+) {
   return readTypingCache(database, `text:${id}`, async () => {
     const rows = await database.$queryRaw<PracticePassage[]>`
       SELECT p."id", p."title", p."text" ${eligible} AND p."id" = ${id}

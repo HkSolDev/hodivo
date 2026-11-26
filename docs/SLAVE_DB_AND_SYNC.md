@@ -20,17 +20,18 @@ Public job and typing reads are offloaded from Neon (Master) to a self-hosted Po
 
 ## 2. Docker Compose Services (`docker-compose.yml`)
 
-| Service | Container | Role | Port (default) |
-| :--- | :--- | :--- | :--- |
-| `slave-db` | `hodivo-slave-db` | `postgres:18-alpine` read-copy (`aptus_slave`, persistent volume `slave_db_data`) | `5432` (`POSTGRES_PORT`) |
-| `redis-public` | `hodivo-redis-public` | `redis:7-alpine` with AOF persistence (`redis_public_data`) for caches + `hodivo:sync:v1` | `6379` (`REDIS_PORT`) |
-| `aptus-api` | `hodivo-api` | Fastify API (`deployment/api.Dockerfile`) reading from `slave-db` + `redis-public` | `8080` (`API_PORT`) |
-| `sync-worker` | `hodivo-sync-worker` | Same `deployment/api.Dockerfile` image running `src/worker/sync-worker.ts` (HTTP healthcheck disabled) | — |
+| Service        | Container             | Role                                                                                                   | Port (default)           |
+| :------------- | :-------------------- | :----------------------------------------------------------------------------------------------------- | :----------------------- |
+| `slave-db`     | `hodivo-slave-db`     | `postgres:18-alpine` read-copy (`aptus_slave`, persistent volume `slave_db_data`)                      | `5432` (`POSTGRES_PORT`) |
+| `redis-public` | `hodivo-redis-public` | `redis:7-alpine` with AOF persistence (`redis_public_data`) for caches + `hodivo:sync:v1`              | `6379` (`REDIS_PORT`)    |
+| `aptus-api`    | `hodivo-api`          | Fastify API (`deployment/api.Dockerfile`) reading from `slave-db` + `redis-public`                     | `8080` (`API_PORT`)      |
+| `sync-worker`  | `hodivo-sync-worker`  | Same `deployment/api.Dockerfile` image running `src/worker/sync-worker.ts` (HTTP healthcheck disabled) | —                        |
 
 ### Key Environment Variables
+
 - `DATABASE_URL`: Neon Master (writes, auth/users, review pipeline).
 - `SLAVE_DATABASE_URL`: `postgresql://aptus:aptus@slave-db:5432/aptus_slave` (in Docker) or `postgresql://aptus:aptus@localhost:5432/aptus_slave` (host).
-- `JOBS_REDIS_URL` / `TYPING_REDIS_URL` / `SYNC_REDIS_URL`: `redis://redis-public:6379`. *(Tip: set `SYNC_REDIS_URL=redis://redis-public:6379/1` if you want the sync stream isolated in Redis DB 1.)*
+- `JOBS_REDIS_URL` / `TYPING_REDIS_URL` / `SYNC_REDIS_URL`: `redis://redis-public:6379`. _(Tip: set `SYNC_REDIS_URL=redis://redis-public:6379/1` if you want the sync stream isolated in Redis DB 1.)_
 
 ---
 
@@ -59,19 +60,24 @@ docker exec hodivo-redis-public redis-cli KEYS "hodivo:*"
 ## 4. Operations & Maintenance
 
 ### Manual Full Catch-Up (`--backfill`)
+
 Run after manual DB/SQL edits on Neon or if Redis was unreachable during a write:
+
 ```sh
 SLAVE_DATABASE_URL=postgresql://aptus:aptus@localhost:5432/aptus_slave \
   node --import tsx --no-network-family-autoselection --env-file=.env src/worker/sync-worker.ts --backfill
 ```
 
 ### Importing Researched Jobs
+
 Requires `--import tsx` so the script loads `src/lib/sync-queue.ts` and queues `slave-db` sync automatically:
+
 ```sh
 node --import tsx --no-network-family-autoselection --env-file=.env scripts/import-researched-jobs.mjs <jobs.json>
 ```
 
 ### Adding a New Prisma Field / Migration
+
 1. Apply Prisma migrations to **both** databases:
    - Neon (`DATABASE_URL`): `npx prisma migrate deploy --config prisma7.config.ts`
    - `slave-db` (`SLAVE_DATABASE_URL`): `DATABASE_URL="$SLAVE_DATABASE_URL" npx prisma migrate deploy --config prisma7.config.ts`

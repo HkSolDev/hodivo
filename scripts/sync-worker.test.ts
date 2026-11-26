@@ -82,15 +82,26 @@ test('parseStreamEvent validates entity types and trims IDs', () => {
     parseStreamEvent({ entityType: 'SOURCE', entityId: ' s1 ' }),
     { entityType: 'SOURCE', entityId: 's1' },
   );
-  assert.equal(parseStreamEvent({ entityType: 'UNKNOWN', entityId: 's1' }), null);
-  assert.equal(parseStreamEvent({ entityType: 'SOURCE', entityId: '   ' }), null);
+  assert.equal(
+    parseStreamEvent({ entityType: 'UNKNOWN', entityId: 's1' }),
+    null,
+  );
+  assert.equal(
+    parseStreamEvent({ entityType: 'SOURCE', entityId: '   ' }),
+    null,
+  );
 });
 
 test('applySyncEvent refuses syncing when master and slave point to the same client', async () => {
   const client = createFakeClient([]) as unknown as PrismaClient;
   await assert.rejects(
     () =>
-      applySyncEvent({ entityType: 'SOURCE', entityId: 's1' }, client, client, {}),
+      applySyncEvent(
+        { entityType: 'SOURCE', entityId: 's1' },
+        client,
+        client,
+        {},
+      ),
     /SLAVE_DATABASE_URL must differ/,
   );
 });
@@ -159,7 +170,10 @@ test('syncSource deletes source and posts when missing from master', async () =>
 
   const result = await syncSource('missing-src', master, slave);
   assert.deepEqual(result, { postIds: [] });
-  assert.deepEqual(calls, ['post.deleteMany:missing-src', 'source.delete:missing-src']);
+  assert.deepEqual(calls, [
+    'post.deleteMany:missing-src',
+    'source.delete:missing-src',
+  ]);
 });
 
 test('syncTypingAttempt backfills missing passage and authUser before upserting attempt', async () => {

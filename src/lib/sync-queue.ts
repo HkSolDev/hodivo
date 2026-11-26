@@ -12,10 +12,7 @@ const ENQUEUE_DEADLINE_MS = 2_000;
 // - TYPING_EXAM_VERSION: the version, its exam and its passages
 // - TYPING_PASSAGE / TYPING_ATTEMPT: that single row
 export type SyncEntityType =
-  | 'SOURCE'
-  | 'TYPING_EXAM_VERSION'
-  | 'TYPING_PASSAGE'
-  | 'TYPING_ATTEMPT';
+  'SOURCE' | 'TYPING_EXAM_VERSION' | 'TYPING_PASSAGE' | 'TYPING_ATTEMPT';
 
 export interface SyncEvent {
   entityType: SyncEntityType;
@@ -69,13 +66,18 @@ export async function enqueueSyncEvents(
         await redis.connect();
         const batch = redis.multi();
         for (const event of queued) {
-          batch.xAdd(SYNC_STREAM_KEY, '*', { ...event }, {
-            TRIM: {
-              strategy: 'MAXLEN',
-              strategyModifier: '~',
-              threshold: STREAM_MAX_LENGTH,
+          batch.xAdd(
+            SYNC_STREAM_KEY,
+            '*',
+            { ...event },
+            {
+              TRIM: {
+                strategy: 'MAXLEN',
+                strategyModifier: '~',
+                threshold: STREAM_MAX_LENGTH,
+              },
             },
-          });
+          );
         }
         await batch.exec();
       })(),

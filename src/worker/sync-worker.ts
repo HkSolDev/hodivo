@@ -25,9 +25,36 @@ const MAX_BACKOFF_MS = 30_000;
 function toJsonInput(
   value: Prisma.JsonValue | null | undefined,
 ): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
-  return value === null || value === undefined
-    ? Prisma.DbNull
-    : (value as Prisma.InputJsonValue);
+  return value === null || value === undefined ? Prisma.DbNull : value;
+}
+
+interface StreamMessageEntry {
+  id: string;
+  message: Record<string, string>;
+}
+
+function extractStreamMessages(response: unknown): StreamMessageEntry[] {
+  if (!Array.isArray(response) || response.length === 0) return [];
+  const first = response[0] as { messages?: unknown } | null | undefined;
+  if (!first || !Array.isArray(first.messages)) return [];
+  const entries: StreamMessageEntry[] = [];
+  for (const item of first.messages) {
+    if (!item || typeof item !== 'object') continue;
+    const raw = item as { id?: unknown; message?: unknown };
+    if (
+      typeof raw.id === 'string' &&
+      raw.message &&
+      typeof raw.message === 'object' &&
+      !Array.isArray(raw.message)
+    ) {
+      const fields: Record<string, string> = {};
+      for (const [k, v] of Object.entries(raw.message)) {
+        if (typeof v === 'string') fields[k] = v;
+      }
+      entries.push({ id: raw.id, message: fields });
+    }
+  }
+  return entries;
 }
 
 export function parseStreamEvent(
@@ -336,9 +363,7 @@ async function ensureConsumerGroup(
   }
 }
 
-async function runWorker(
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<void> {
+async function runWorker(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const redisUrl = env.SYNC_REDIS_URL?.trim() || env.JOBS_REDIS_URL?.trim();
   if (!redisUrl) {
     throw new Error('SYNC_REDIS_URL or JOBS_REDIS_URL is required.');
@@ -368,14 +393,14 @@ async function runWorker(
   try {
     while (!stopping) {
       try {
-        const response = await redis.xReadGroup(
+        const response: unknown = await redis.xReadGroup(
           SYNC_GROUP_NAME,
           consumer,
           { key: SYNC_STREAM_KEY, id: readPending ? '0' : '>' },
           { COUNT: 20, BLOCK: 5_000 },
         );
 
-        const messages = response?.[0]?.messages ?? [];
+        const messages = extractStreamMessages(response);
         if (messages.length === 0) {
           if (readPending) readPending = false;
           backoffMs = 1_000;
@@ -399,7 +424,9 @@ async function runWorker(
           await ensureConsumerGroup(redis, SYNC_GROUP_NAME).catch(() => {});
           continue;
         }
-        console.error(`sync-worker error (retrying in ${backoffMs}ms): ${message}`);
+        console.error(
+          `sync-worker error (retrying in ${backoffMs}ms): ${message}`,
+        );
         await delay(backoffMs);
         backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
       }
