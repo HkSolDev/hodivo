@@ -1,5 +1,5 @@
 import { readTypingAttemptCache } from './typing-passage-cache.js';
-import { prisma } from '../db.js';
+import { prisma, prismaRead } from '../db.js';
 import type {
   PrismaClient,
   TypingAttemptMode,
@@ -348,7 +348,7 @@ export async function saveTypingAttempt(
 export async function getPassageComparisonSummary(
   authUserId: string,
   passageId: string,
-  db: TypingAttemptsDatabase = prisma,
+  db: TypingAttemptsDatabase = prismaRead,
 ): Promise<PassageSummaryResponse> {
   return readTypingAttemptCache(
     db,
@@ -377,7 +377,7 @@ export async function getPassageComparisonSummary(
 export async function listUserTypingHistory(
   authUserId: string,
   options: { limit?: number; cursor?: string } = {},
-  db: TypingAttemptsDatabase = prisma,
+  db: TypingAttemptsDatabase = prismaRead,
 ): Promise<{ items: HistoryItem[]; nextCursor: string | null }> {
   const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
   const rows = await db.typingAttempt.findMany({

@@ -194,6 +194,10 @@ model Post {
   // publication paths; never overwritten on update. Null means the row
   // predates this field and its first-publication time is unknown.
   publishedAt               DateTime?
+  // Recruiting authority's original notice/advertisement publication date
+  // (calendar date only). Null when unverified; never inferred from fetchedAt
+  // or publishedAt.
+  officialPostedDate        DateTime? @db.Date
   savedBy                   SavedJob[]
 
   @@unique([extractionCandidateId, candidatePostIndex])

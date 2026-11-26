@@ -10,6 +10,7 @@ import {
 import { validatePost } from '../../scripts/validate-post.js';
 import { prisma } from '../db.js';
 import { notifyJobsRevalidated } from '../lib/notify-jobs-revalidation.js';
+import { enqueueSyncEvents, sourceSyncEvent } from '../lib/sync-queue.js';
 
 export class AutonomousIngestError extends Error {}
 
@@ -262,6 +263,7 @@ function buildPostDataFromDetails(
     maxAge: numberOrNull(details.max_age),
     vacancies: numberOrNull(details.vacancies),
     applicationLastDate: dateOrNull(details.application_last_date),
+    officialPostedDate: dateOrNull(details.official_posted_date),
     ageAsOnDate: dateOrNull(details.age_as_on_date),
     educationRequired: stringOrNull(details.education_required),
     minEducationLevel:
@@ -714,6 +716,18 @@ export async function ingestAutonomousNotice(
         updateData.applicationLastDate = createData.applicationLastDate;
       }
       if (
+        createData.officialPostedDate !== null &&
+        priorPost.officialPostedDate?.toISOString().slice(0, 10) !==
+          createData.officialPostedDate.toISOString().slice(0, 10)
+      ) {
+        recordFieldChange(
+          'official_posted_date',
+          priorPost.officialPostedDate?.toISOString().slice(0, 10) ?? null,
+          createData.officialPostedDate.toISOString().slice(0, 10),
+        );
+        updateData.officialPostedDate = createData.officialPostedDate;
+      }
+      if (
         createData.minAge !== null &&
         createData.minAge !== priorPost.minAge
       ) {
@@ -856,11 +870,13 @@ export async function ingestAutonomousNotice(
       reused_existing: false,
       post_ids: savedPostIds,
       audit_lineage: computedLineage,
+      sourceId: source.id,
       detailIds,
       refreshListings,
     };
   });
-  const { detailIds, refreshListings, ...receipt } = committed;
+  const { sourceId, detailIds, refreshListings, ...receipt } = committed;
+  await enqueueSyncEvents([sourceSyncEvent(sourceId)], env);
   const details = await Promise.all(
     [...detailIds].map((id) => notifyJobsRevalidated(env, id)),
   );

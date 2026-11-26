@@ -1,4 +1,4 @@
-import { prisma } from '../db.js';
+import { prisma, prismaRead } from '../db.js';
 import type {
   PrismaClient,
   TypingAttemptMode,
@@ -188,10 +188,10 @@ export async function saveAttemptAndRefreshBoard(
 }
 
 export async function listLeaderboardPassages(
-  db: TypingLeaderboardDatabase = prisma,
+  db: TypingLeaderboardDatabase = prismaRead,
 ): Promise<LeaderboardPassageOption[]> {
   if (
-    db === prisma &&
+    db === prismaRead &&
     cachedPassages &&
     cachedPassages.expiresAt > Date.now()
   ) {
@@ -208,7 +208,7 @@ export async function listLeaderboardPassages(
     select: { id: true, title: true },
   });
 
-  if (db === prisma) {
+  if (db === prismaRead) {
     cachedPassages = {
       items: rows,
       expiresAt: Date.now() + PASSAGE_LIST_TTL_MS,
@@ -221,7 +221,7 @@ export async function getPassageLeaderboard(
   passageId: string,
   mode: TypingAttemptMode,
   currentAuthUserId: string | null,
-  db: TypingLeaderboardDatabase = prisma,
+  db: TypingLeaderboardDatabase = prismaRead,
 ): Promise<PassageLeaderboardResponse> {
   if (!TYPING_ID_REGEX.test(passageId)) {
     throw new TypingAttemptError('Invalid passage ID.', 400);

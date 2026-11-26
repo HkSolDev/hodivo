@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { indiaDateKey } from '../../frontend/india-date';
 import { isSafeJobId } from '../../frontend/job-id';
 import { splitQualificationPoints } from '../../lib/jobs/format-qualification';
 import type { JobDetailData } from './job-detail-content';
@@ -155,14 +156,47 @@ export function jobMetadata(job: JobDetailData, origin?: string): Metadata {
   };
 }
 
+function isoCalendarDate(
+  value: string | Date | null | undefined,
+): string | null {
+  if (!value) return null;
+  const raw =
+    value instanceof Date
+      ? value.toISOString().slice(0, 10)
+      : typeof value === 'string'
+        ? value.trim().slice(0, 10)
+        : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== raw
+    ? null
+    : raw;
+}
+
 /**
  * Builds schema.org/JobPosting JSON-LD from verified job fields for search engines and AI Overviews.
+ * Returns null when the official publication date is unknown or the vacancy deadline has passed.
  */
 export function jobPostingJsonLd(
   job: JobDetailData,
   origin?: string,
-): Record<string, unknown> {
+  now = new Date(),
+): Record<string, unknown> | null {
   const reviewed = job.reviewedDetails;
+  const datePosted = isoCalendarDate(
+    job.officialPostedDate ?? reviewed?.official_posted_date,
+  );
+  if (!datePosted) {
+    return null;
+  }
+
+  const deadline = reviewed?.application_last_date ?? job.applicationLastDate;
+  const validThrough = isoCalendarDate(deadline);
+  if (validThrough && validThrough < indiaDateKey(now)) {
+    return null;
+  }
+
   const rawOrganization = reviewed?.recruiting_body ?? job.organization;
   const postName =
     stripBrandSuffix(job.postName) || 'Government Job Notification';
@@ -170,7 +204,6 @@ export function jobPostingJsonLd(
     ? stripBrandSuffix(rawOrganization)
     : undefined;
   const vacancies = reviewed?.vacancies ?? job.vacancies;
-  const deadline = reviewed?.application_last_date ?? job.applicationLastDate;
   const rawEducation = job.educationRequired ?? reviewed?.education_required;
   const educationPoints = splitQualificationPoints(rawEducation);
   const educationText = educationPoints.length
@@ -186,7 +219,7 @@ export function jobPostingJsonLd(
     vacancies != null
       ? `Vacancies: ${vacancies.toLocaleString('en-IN')}`
       : null,
-    deadline ? `Apply by: ${deadline.slice(0, 10)}` : null,
+    validThrough ? `Apply by: ${validThrough}` : null,
     locations.length ? `Locations: ${locations.join(', ')}` : null,
   ].filter(Boolean);
 
@@ -197,6 +230,7 @@ export function jobPostingJsonLd(
     description:
       descriptionParts.join(' · ') ||
       `${postName} government recruitment notification on Hodivo.`,
+    datePosted,
     url,
     mainEntityOfPage: url,
   };
@@ -207,14 +241,11 @@ export function jobPostingJsonLd(
       name: organization,
     };
   }
-  if (deadline) {
-    jsonLd.validThrough = deadline.slice(0, 10);
+  if (validThrough) {
+    jsonLd.validThrough = validThrough;
   }
   if (vacancies != null && vacancies > 0) {
     jsonLd.totalJobOpenings = vacancies;
-  }
-  if (educationText) {
-    jsonLd.educationRequirements = educationText;
   }
   if (locations.length) {
     jsonLd.jobLocation = locations.map((loc) => ({

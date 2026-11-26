@@ -1,6 +1,6 @@
 import { clearTimeout, setTimeout } from 'node:timers';
 import { createClient } from 'redis';
-import { prisma } from '../db.js';
+import { prismaRead } from '../db.js';
 import { getPublicJob, listPublicJobs } from './public-jobs.js';
 import { JOB_VISITORS_KEY, readJobVisitors } from './job-visitors.js';
 import { indiaDateKey } from '../../frontend/india-date.js';
@@ -33,7 +33,7 @@ export function createPublicJobsCache(url: string) {
   }
 
   // v2 retires cached payloads built before the HTTPS-only link policy.
-  async function readDetail(id: string, database = prisma) {
+  async function readDetail(id: string, database = prismaRead) {
     const load = () => getPublicJob(id, database);
     if (!redis.isReady) return load();
 
@@ -78,7 +78,7 @@ export function createPublicJobsCache(url: string) {
     page: number,
     pageSize: number,
     filters: Parameters<typeof listPublicJobs>[2],
-    database = prisma,
+    database = prismaRead,
     now = new Date(),
   ) {
     const popular = filters?.sort === 'popular';

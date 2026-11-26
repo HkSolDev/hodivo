@@ -74,6 +74,7 @@ await test('anonymous public job detail contract', async (t) => {
           payLevel: true,
           vacancies: true,
           applicationLastDate: true,
+          officialPostedDate: true,
           ageAsOnDate: true,
           minAge: true,
           maxAge: true,

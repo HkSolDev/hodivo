@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { prisma } from '../src/db.js';
+import { enqueueSyncEvents, sourceSyncEvent } from '../src/lib/sync-queue.js';
 import {
   EducationLevel,
   PostGroup,
@@ -30,7 +31,7 @@ export async function publishExtractionCandidate(
     reviewNote.length > 2000
   )
     throw new Error('Publication requires an identified reviewed draft');
-  return database.$transaction(
+  const { sourceId, saved } = await database.$transaction(
     async (db) => {
       const candidate = await db.extractionCandidate.findUniqueOrThrow({
         where: { id: candidateId },
@@ -96,6 +97,7 @@ export async function publishExtractionCandidate(
           maxAge: numberOrNull(details.max_age),
           vacancies: numberOrNull(details.vacancies),
           applicationLastDate: dateOrNull(details.application_last_date),
+          officialPostedDate: dateOrNull(details.official_posted_date),
           ageAsOnDate: dateOrNull(details.age_as_on_date),
           educationRequired: stringOrNull(details.education_required),
           minEducationLevel:
@@ -133,11 +135,13 @@ export async function publishExtractionCandidate(
           }),
         );
       }
-      return saved;
+      return { sourceId: source.id, saved };
     },
     // Multi-post publication includes several remote database round trips.
     { isolationLevel: 'Serializable', timeout: 60000 },
   );
+  await enqueueSyncEvents([sourceSyncEvent(sourceId)]);
+  return saved;
 }
 
 if (

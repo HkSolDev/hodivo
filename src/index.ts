@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { prisma } from './db.js';
+import { enqueueSyncEvents, sourceSyncEvent } from './lib/sync-queue.js';
 import { extractNotification } from '../scripts/extract.js';
 import { pdfWordExtractor } from '../scripts/day1-fetch-ssc-pdf.js';
 
@@ -21,6 +22,7 @@ async function main() {
         sourceId,
       })),
     });
+    await enqueueSyncEvents([sourceSyncEvent(sourceId)]);
 
     console.log('-------DATA------');
     console.log(resultData);

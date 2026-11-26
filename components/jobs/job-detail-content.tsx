@@ -89,6 +89,7 @@ export interface ReviewedDetails {
   vacancy_breakdown?: ReviewedVacancyCount[] | null;
   application_start_date?: string | null;
   application_last_date?: string | null;
+  official_posted_date?: string | null;
   fee_payment_last_date?: string | null;
   exam_dates?: string[] | null;
   pay?: ReviewedPay | null;
@@ -127,6 +128,7 @@ export interface JobDetailData {
   payLevel?: string | null;
   vacancies?: number | null;
   applicationLastDate?: string | null;
+  officialPostedDate?: string | null;
   ageAsOnDate?: string | null;
   minAge?: number | null;
   maxAge?: number | null;
