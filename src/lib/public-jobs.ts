@@ -1,5 +1,5 @@
 import { publicJobPresentation } from './public-job-presentation.js';
-import { prisma } from '../db.js';
+import { prismaRead } from '../db.js';
 import type { Prisma } from '../../generated/prisma/index.js';
 import type { JobFilters } from '../../frontend/public-job-filters.js';
 import { activeApplicationWhere } from './application-deadline.js';
@@ -37,7 +37,7 @@ export function listPublicJobs(
   page: number,
   pageSize: number,
   filters?: JobFilters,
-  database: typeof prisma = prisma,
+  database: typeof prismaRead = prismaRead,
   now = new Date(),
   visitorCounts?: ReadonlyMap<string, number>,
 ) {
@@ -163,7 +163,7 @@ export function listPublicJobs(
 
 export async function getPublicJob(
   id: string,
-  database: typeof prisma = prisma,
+  database: typeof prismaRead = prismaRead,
 ) {
   const job = await database.post.findUnique({
     where: { id },
