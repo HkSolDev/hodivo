@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { prisma } from '../db.js';
+import { prismaRead } from '../db.js';
 import {
   getPracticePassage,
   getRandomPracticePassage,
@@ -20,7 +20,7 @@ export function registerTypingPracticeRoutes(
   loadPassage: () => ReturnType<
     typeof getRandomPracticePassage
   > = getRandomPracticePassage,
-  database: Pick<typeof prisma, '$queryRaw'> = prisma,
+  database: Pick<typeof prismaRead, '$queryRaw'> = prismaRead,
 ) {
   app.addHook('onReady', (done) => {
     startTypingCache();

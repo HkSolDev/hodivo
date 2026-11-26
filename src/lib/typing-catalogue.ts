@@ -1,4 +1,4 @@
-import { prisma } from '../db.js';
+import { prismaRead } from '../db.js';
 import { Prisma, type PrismaClient } from '../../generated/prisma/index.js';
 import { readTypingCache } from './typing-passage-cache.js';
 
@@ -18,7 +18,7 @@ const eligible = Prisma.sql`
 export function listPracticePassages(
   limit: number,
   cursor?: string,
-  database: Database = prisma,
+  database: Database = prismaRead,
 ) {
   return readTypingCache(
     database,
@@ -37,7 +37,7 @@ export function listPracticePassages(
   );
 }
 
-export function getPracticePassage(id: string, database: Database = prisma) {
+export function getPracticePassage(id: string, database: Database = prismaRead) {
   return readTypingCache(database, `text:${id}`, async () => {
     const rows = await database.$queryRaw<PracticePassage[]>`
       SELECT p."id", p."title", p."text" ${eligible} AND p."id" = ${id}
@@ -49,15 +49,15 @@ export function getPracticePassage(id: string, database: Database = prisma) {
 let lastPickedId: string | null = null;
 
 export async function getRandomPracticePassage(
-  database: Database = prisma,
+  database: Database = prismaRead,
 ): Promise<PracticePassage | null> {
   const rows = await database.$queryRaw<{ id: string }[]>`
     SELECT p."id" ${eligible}
-    ORDER BY (p."id" = ${database === prisma ? lastPickedId : null}), random()
+    ORDER BY (p."id" = ${database === prismaRead ? lastPickedId : null}), random()
     LIMIT 1
   `;
   const picked = rows[0];
   if (!picked) return null;
-  if (database === prisma) lastPickedId = picked.id;
+  if (database === prismaRead) lastPickedId = picked.id;
   return getPracticePassage(picked.id, database);
 }

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { prisma } from '../db.js';
+import { prismaRead } from '../db.js';
 import { getPracticePassage } from './typing-catalogue.js';
 import {
   Prisma,
@@ -210,7 +210,7 @@ async function eligiblePassage(
 }
 
 export function createExamCatalogue(
-  database: PrismaClient = prisma,
+  database: PrismaClient = prismaRead,
 ): ExamCatalogue {
   function read<T>(
     versionId: string,
