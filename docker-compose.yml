@@ -76,6 +76,8 @@ services:
       SLAVE_DATABASE_URL: postgresql://aptus:aptus@slave-db:5432/aptus_slave
       JOBS_REDIS_URL: redis://redis-public:6379
       SYNC_REDIS_URL: redis://redis-public:6379
+    healthcheck:
+      disable: true
     depends_on:
       slave-db:
         condition: service_healthy

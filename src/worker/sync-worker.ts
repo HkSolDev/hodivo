@@ -395,6 +395,10 @@ async function runWorker(
         if (stopping) break;
         const message =
           error instanceof Error ? error.message : 'sync-worker cycle failed';
+        if (message.includes('NOGROUP')) {
+          await ensureConsumerGroup(redis, SYNC_GROUP_NAME).catch(() => {});
+          continue;
+        }
         console.error(`sync-worker error (retrying in ${backoffMs}ms): ${message}`);
         await delay(backoffMs);
         backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
