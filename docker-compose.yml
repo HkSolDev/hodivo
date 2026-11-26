@@ -17,5 +17,71 @@ services:
       timeout: 5s
       retries: 10
 
+  redis-public:
+    image: redis:7-alpine
+    container_name: hodivo-redis-public
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis_public_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  aptus-api:
+    build:
+      context: .
+      dockerfile: deployment/api.Dockerfile
+    container_name: hodivo-api
+    restart: unless-stopped
+    ports:
+      - '${API_PORT:-8080}:8080'
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      SLAVE_DATABASE_URL: postgresql://aptus:aptus@slave-db:5432/aptus_slave
+      JOBS_REDIS_URL: redis://redis-public:6379
+      TYPING_REDIS_URL: redis://redis-public:6379
+      SYNC_REDIS_URL: redis://redis-public:6379
+    depends_on:
+      slave-db:
+        condition: service_healthy
+      redis-public:
+        condition: service_healthy
+
+  sync-worker:
+    build:
+      context: .
+      dockerfile: deployment/api.Dockerfile
+    container_name: hodivo-sync-worker
+    restart: unless-stopped
+    command:
+      [
+        'node',
+        '--dns-result-order=ipv4first',
+        '--no-network-family-autoselection',
+        '--import',
+        'tsx',
+        'src/worker/sync-worker.ts',
+      ]
+    env_file:
+      - .env
+    environment:
+      SLAVE_DATABASE_URL: postgresql://aptus:aptus@slave-db:5432/aptus_slave
+      JOBS_REDIS_URL: redis://redis-public:6379
+      SYNC_REDIS_URL: redis://redis-public:6379
+    depends_on:
+      slave-db:
+        condition: service_healthy
+      redis-public:
+        condition: service_healthy
+
 volumes:
   slave_db_data:
+  redis_public_data:
