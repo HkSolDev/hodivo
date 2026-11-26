@@ -13,6 +13,7 @@ export const publicFields = {
   payLevel: true,
   vacancies: true,
   applicationLastDate: true,
+  officialPostedDate: true,
   ageAsOnDate: true,
   minAge: true,
   maxAge: true,

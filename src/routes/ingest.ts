@@ -27,6 +27,7 @@ interface IngestPost {
   recruiting_body?: string | null;
   vacancies: number | null;
   application_last_date: string | null;
+  official_posted_date?: string | null;
   age_as_on_date: string | null;
   min_age: number | null;
   max_age: number | null;
@@ -226,6 +227,11 @@ export async function handleIngest(
         applicationLastDate: raw.application_last_date
           ? new Date(raw.application_last_date)
           : null,
+        officialPostedDate:
+          typeof raw.official_posted_date === 'string' &&
+          /^\d{4}-\d{2}-\d{2}$/.test(raw.official_posted_date)
+            ? new Date(`${raw.official_posted_date}T00:00:00.000Z`)
+            : null,
         ageAsOnDate: raw.age_as_on_date ? new Date(raw.age_as_on_date) : null,
         educationRequired: raw.education_required,
         minEducationLevel: raw.min_education_level,

@@ -86,6 +86,7 @@ class Post(BaseModel):
     )
     vacancies: int | None
     application_last_date: date | None = Field(description=DATE_HINT)
+    official_posted_date: date | None = Field(default=None, description=DATE_HINT)
     age_as_on_date: date | None = Field(description=DATE_HINT)
     min_age: int | None
     max_age: int | None
@@ -109,7 +110,7 @@ class Post(BaseModel):
             return value.strip() or None
         return value
 
-    @field_validator("application_last_date", "age_as_on_date", mode="before")
+    @field_validator("application_last_date", "age_as_on_date", "official_posted_date", mode="before")
     @classmethod
     def _bad_date_becomes_none(cls, value: object) -> date | None:
         return parse_date(value)

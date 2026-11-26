@@ -263,6 +263,7 @@ function buildPostDataFromDetails(
     maxAge: numberOrNull(details.max_age),
     vacancies: numberOrNull(details.vacancies),
     applicationLastDate: dateOrNull(details.application_last_date),
+    officialPostedDate: dateOrNull(details.official_posted_date),
     ageAsOnDate: dateOrNull(details.age_as_on_date),
     educationRequired: stringOrNull(details.education_required),
     minEducationLevel:
@@ -713,6 +714,18 @@ export async function ingestAutonomousNotice(
           createData.applicationLastDate.toISOString().slice(0, 10),
         );
         updateData.applicationLastDate = createData.applicationLastDate;
+      }
+      if (
+        createData.officialPostedDate !== null &&
+        priorPost.officialPostedDate?.toISOString().slice(0, 10) !==
+          createData.officialPostedDate.toISOString().slice(0, 10)
+      ) {
+        recordFieldChange(
+          'official_posted_date',
+          priorPost.officialPostedDate?.toISOString().slice(0, 10) ?? null,
+          createData.officialPostedDate.toISOString().slice(0, 10),
+        );
+        updateData.officialPostedDate = createData.officialPostedDate;
       }
       if (
         createData.minAge !== null &&

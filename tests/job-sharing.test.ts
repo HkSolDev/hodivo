@@ -8,6 +8,7 @@ import {
   HOW_IT_WORKS_SEO_TITLE,
   homeCatalogMetadata,
   jobMetadata,
+  jobPostingJsonLd,
   jobShareUrl,
   publicPageMetadata,
   stripBrandSuffix,
@@ -329,5 +330,52 @@ test('sitemap includes only verified live jobs with IST deadline cutoff and fail
           { status: 200, headers: { 'content-type': 'application/json' } },
         )) as typeof fetch,
     }),
+  );
+});
+
+test('jobPostingJsonLd emits datePosted without timezone shift, omits educationRequirements, and drops null-date or expired jobs', () => {
+  const activeNow = new Date('2026-11-26T10:00:00.000Z');
+  const datedJob = {
+    id: 'cmwuoizpt000c4naq7iijfspn',
+    postName: 'Multi-Tasking Staff (MTS)',
+    organization: 'Government of NCT of Delhi / Departments & Bodies',
+    vacancies: 1075,
+    officialPostedDate: '2026-11-06T00:00:00.000Z',
+    applicationLastDate: '2026-12-11T00:00:00.000Z',
+    educationRequired:
+      'Matriculation (10th) or equivalent from a recognized Board',
+  };
+
+  const jsonLd = jobPostingJsonLd(datedJob, 'https://hodivo.app', activeNow);
+  assert.ok(jsonLd);
+  assert.equal(jsonLd['@type'], 'JobPosting');
+  assert.equal(jsonLd.datePosted, '2026-11-06');
+  assert.equal(jsonLd.validThrough, '2026-12-11');
+  assert.equal(jsonLd.totalJobOpenings, 1075);
+  assert.match(
+    String(jsonLd.description),
+    /Matriculation \(10th\) or equivalent/,
+  );
+  assert.equal('educationRequirements' in jsonLd, false);
+  assert.equal('jobLocation' in jsonLd, false);
+
+  // Legacy job with unknown officialPostedDate omits incomplete JobPosting markup.
+  assert.equal(
+    jobPostingJsonLd(
+      { ...datedJob, officialPostedDate: null },
+      'https://hodivo.app',
+      activeNow,
+    ),
+    null,
+  );
+
+  // Expired job (deadline before today in IST) omits open JobPosting markup.
+  assert.equal(
+    jobPostingJsonLd(
+      { ...datedJob, applicationLastDate: '2026-11-25' },
+      'https://hodivo.app',
+      activeNow,
+    ),
+    null,
   );
 });

@@ -19,12 +19,17 @@ import { createRequire } from 'module';
 
 const require = createRequire(path.resolve(process.cwd(), 'package.json'));
 const { PrismaPg } = require('@prisma/adapter-pg');
-const { PrismaClient } = require(path.resolve(process.cwd(), 'generated/prisma'));
-const { enqueueSyncEvents, sourceSyncEvent } = await import('../src/lib/sync-queue.js');
+const { PrismaClient } = require(
+  path.resolve(process.cwd(), 'generated/prisma'),
+);
+const { enqueueSyncEvents, sourceSyncEvent } =
+  await import('../src/lib/sync-queue.js');
 
 const inputPath = process.argv[2];
 if (!inputPath) {
-  console.error('Usage: node --import tsx --no-network-family-autoselection --env-file=.env scripts/import-researched-jobs.mjs <jobs.json>');
+  console.error(
+    'Usage: node --import tsx --no-network-family-autoselection --env-file=.env scripts/import-researched-jobs.mjs <jobs.json>',
+  );
   process.exit(1);
 }
 
@@ -32,8 +37,12 @@ const raw = JSON.parse(fs.readFileSync(path.resolve(inputPath), 'utf8'));
 const bundles = Array.isArray(raw)
   ? raw
   : [
-      ...(Array.isArray(raw.currentlyOpenVerifiedRecruitments) ? raw.currentlyOpenVerifiedRecruitments : []),
-      ...(Array.isArray(raw.applicationsNotYetOpen) ? raw.applicationsNotYetOpen : []),
+      ...(Array.isArray(raw.currentlyOpenVerifiedRecruitments)
+        ? raw.currentlyOpenVerifiedRecruitments
+        : []),
+      ...(Array.isArray(raw.applicationsNotYetOpen)
+        ? raw.applicationsNotYetOpen
+        : []),
     ];
 
 const prisma = new PrismaClient({
@@ -51,10 +60,14 @@ function isEmbeddableYoutubeUrl(url) {
     const u = new URL(url.trim());
     if (u.protocol !== 'https:') return false;
     const host = u.hostname.toLowerCase();
-    if (host === 'youtu.be') return /^[A-Za-z0-9_-]{11}$/.test(u.pathname.slice(1));
-    if (!['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(host)) return false;
-    if (u.pathname === '/watch') return /^[A-Za-z0-9_-]{11}$/.test(u.searchParams.get('v') ?? '');
-    if (u.pathname === '/playlist') return /^[A-Za-z0-9_-]{10,100}$/.test(u.searchParams.get('list') ?? '');
+    if (host === 'youtu.be')
+      return /^[A-Za-z0-9_-]{11}$/.test(u.pathname.slice(1));
+    if (!['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(host))
+      return false;
+    if (u.pathname === '/watch')
+      return /^[A-Za-z0-9_-]{11}$/.test(u.searchParams.get('v') ?? '');
+    if (u.pathname === '/playlist')
+      return /^[A-Za-z0-9_-]{10,100}$/.test(u.searchParams.get('list') ?? '');
     return false;
   } catch {
     return false;
@@ -112,7 +125,10 @@ function normalizeHistoricalCutoffs(list = []) {
     if (!item || typeof item !== 'object') return item;
     if (item.cutoffs && typeof item.cutoffs === 'object') return item;
     if (item.cutoffsByCategory && typeof item.cutoffsByCategory === 'object') {
-      const yearMatch = typeof item.examYear === 'string' ? item.examYear.match(/\b(20\d{2})\b/) : null;
+      const yearMatch =
+        typeof item.examYear === 'string'
+          ? item.examYear.match(/\b(20\d{2})\b/)
+          : null;
       const examYear =
         typeof item.examYear === 'number'
           ? item.examYear
@@ -138,7 +154,10 @@ function normalizeHistoricalCutoffs(list = []) {
           : String(item.marks)
         : null;
     const examYear = typeof item.year === 'number' ? item.year : null;
-    const notesParts = [typeof item.year === 'string' ? item.year : null, item.source || null].filter(Boolean);
+    const notesParts = [
+      typeof item.year === 'string' ? item.year : null,
+      item.source || null,
+    ].filter(Boolean);
     return {
       examYear,
       post: item.post ?? null,
@@ -151,11 +170,17 @@ function normalizeHistoricalCutoffs(list = []) {
 }
 
 function mergeReviewedDetails(existing = {}, incoming = {}) {
-  const base = existing && typeof existing === 'object' && !Array.isArray(existing) ? { ...existing } : {};
+  const base =
+    existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? { ...existing }
+      : {};
   for (const [k, v] of Object.entries(incoming)) {
     if (v === null || v === undefined) continue;
     if (k === 'youtube_resources') {
-      base[k] = normalizeYoutubeList([...(Array.isArray(base[k]) ? base[k] : []), ...v]);
+      base[k] = normalizeYoutubeList([
+        ...(Array.isArray(base[k]) ? base[k] : []),
+        ...v,
+      ]);
     } else if (k === 'official_syllabus') {
       if (!Array.isArray(base[k]) || base[k].length === 0) {
         base[k] = v;
@@ -163,8 +188,12 @@ function mergeReviewedDetails(existing = {}, incoming = {}) {
     } else if (k === 'historical_cutoffs') {
       const ex = Array.isArray(base[k]) ? base[k] : [];
       const inc = Array.isArray(v) ? v : [];
-      const exHasStructured = ex.some((x) => x && typeof x.cutoffs === 'object');
-      const incHasStructured = inc.some((x) => x && typeof x.cutoffs === 'object');
+      const exHasStructured = ex.some(
+        (x) => x && typeof x.cutoffs === 'object',
+      );
+      const incHasStructured = inc.some(
+        (x) => x && typeof x.cutoffs === 'object',
+      );
       if (inc.length > ex.length || (!exHasStructured && incHasStructured)) {
         base[k] = inc;
       }
@@ -186,13 +215,18 @@ function buildReviewedDetails(bundle, post, postIndex) {
   const enr = bundle.enrichment || {};
   const rd = bundle.researchDetails || {};
   const existingRd =
-    post.reviewedDetails && typeof post.reviewedDetails === 'object' ? post.reviewedDetails : {};
+    post.reviewedDetails && typeof post.reviewedDetails === 'object'
+      ? post.reviewedDetails
+      : {};
   const postRes = Array.isArray(enr.postResources)
-    ? enr.postResources.find((r) => r.postIndex === postIndex) || enr.postResources[0] || {}
+    ? enr.postResources.find((r) => r.postIndex === postIndex) ||
+      enr.postResources[0] ||
+      {}
     : {};
 
   const rawSyllabus =
-    (Array.isArray(existingRd.official_syllabus) && existingRd.official_syllabus.length > 0
+    (Array.isArray(existingRd.official_syllabus) &&
+    existingRd.official_syllabus.length > 0
       ? existingRd.official_syllabus
       : null) ||
     postRes.officialSyllabus ||
@@ -200,13 +234,21 @@ function buildReviewedDetails(bundle, post, postIndex) {
     null;
   const officialSyllabus = normalizeOfficialSyllabus(rawSyllabus);
   const youtubeResources = normalizeYoutubeList([
-    ...(Array.isArray(existingRd.youtube_resources) ? existingRd.youtube_resources : []),
-    ...(Array.isArray(postRes.youtubeResources) ? postRes.youtubeResources : []),
+    ...(Array.isArray(existingRd.youtube_resources)
+      ? existingRd.youtube_resources
+      : []),
+    ...(Array.isArray(postRes.youtubeResources)
+      ? postRes.youtubeResources
+      : []),
     ...(Array.isArray(enr.youtubeResources) ? enr.youtubeResources : []),
   ]);
   const rawCutoffs = [
-    ...(Array.isArray(existingRd.historical_cutoffs) ? existingRd.historical_cutoffs : []),
-    ...(Array.isArray(postRes.historicalCutoffs) ? postRes.historicalCutoffs : []),
+    ...(Array.isArray(existingRd.historical_cutoffs)
+      ? existingRd.historical_cutoffs
+      : []),
+    ...(Array.isArray(postRes.historicalCutoffs)
+      ? postRes.historicalCutoffs
+      : []),
     ...(Array.isArray(enr.historicalCutoffs) ? enr.historicalCutoffs : []),
   ];
   const historicalCutoffs = normalizeHistoricalCutoffs(rawCutoffs);
@@ -214,49 +256,81 @@ function buildReviewedDetails(bundle, post, postIndex) {
     existingRd.selection_process ||
     rd.selectionProcess ||
     (Array.isArray(rawSyllabus?.examPattern)
-      ? rawSyllabus.examPattern.map((p) => (typeof p === 'string' ? p : p?.stage)).filter(Boolean)
+      ? rawSyllabus.examPattern
+          .map((p) => (typeof p === 'string' ? p : p?.stage))
+          .filter(Boolean)
       : null);
 
   return {
     ...existingRd,
     post_name: post.postName,
-    recruiting_body: existingRd.recruiting_body ?? post.organization ?? src.name,
+    recruiting_body:
+      existingRd.recruiting_body ?? post.organization ?? src.name,
     post_group: existingRd.post_group ?? post.postGroup ?? null,
     pay_level: existingRd.pay_level ?? post.payLevel ?? null,
     min_age: existingRd.min_age ?? post.minAge ?? null,
     max_age: existingRd.max_age ?? post.maxAge ?? null,
     vacancies: existingRd.vacancies ?? post.vacancies ?? null,
-    application_last_date: existingRd.application_last_date ?? post.applicationLastDate ?? rd.applicationLastDate ?? null,
-    application_start_date: existingRd.application_start_date ?? rd.applicationStartDate ?? null,
+    application_last_date:
+      existingRd.application_last_date ??
+      post.applicationLastDate ??
+      rd.applicationLastDate ??
+      null,
+    official_posted_date:
+      existingRd.official_posted_date ??
+      post.officialPostedDate ??
+      rd.officialPostedDate ??
+      null,
+    application_start_date:
+      existingRd.application_start_date ?? rd.applicationStartDate ?? null,
     age_as_on_date: existingRd.age_as_on_date ?? post.ageAsOnDate ?? null,
-    education_required: existingRd.education_required ?? post.educationRequired ?? null,
-    min_education_level: existingRd.min_education_level ?? post.minEducationLevel ?? null,
-    min_marks_percent: existingRd.min_marks_percent ?? post.minMarksPercent ?? null,
-    category_relaxation_applies: existingRd.category_relaxation_applies ?? post.categoryRelaxationApplies ?? null,
-    category_relaxation_rules: existingRd.category_relaxation_rules ?? post.categoryRelaxationRules ?? null,
-    advertisement_number: existingRd.advertisement_number ?? rd.advertisementNumber ?? null,
-    fresher_eligibility_status: existingRd.fresher_eligibility_status ?? rd.fresherEligibilityStatus ?? null,
+    education_required:
+      existingRd.education_required ?? post.educationRequired ?? null,
+    min_education_level:
+      existingRd.min_education_level ?? post.minEducationLevel ?? null,
+    min_marks_percent:
+      existingRd.min_marks_percent ?? post.minMarksPercent ?? null,
+    category_relaxation_applies:
+      existingRd.category_relaxation_applies ??
+      post.categoryRelaxationApplies ??
+      null,
+    category_relaxation_rules:
+      existingRd.category_relaxation_rules ??
+      post.categoryRelaxationRules ??
+      null,
+    advertisement_number:
+      existingRd.advertisement_number ?? rd.advertisementNumber ?? null,
+    fresher_eligibility_status:
+      existingRd.fresher_eligibility_status ??
+      rd.fresherEligibilityStatus ??
+      null,
     locations: existingRd.locations ?? rd.locations ?? null,
-    domicile_requirement: existingRd.domicile_requirement ?? rd.domicileRequirement ?? null,
+    domicile_requirement:
+      existingRd.domicile_requirement ?? rd.domicileRequirement ?? null,
     employment_type: existingRd.employment_type ?? rd.employmentType ?? null,
     fee_rules: existingRd.fee_rules ?? rd.feeRules ?? null,
     payment_methods: existingRd.payment_methods ?? rd.paymentMethods ?? null,
     selection_process: selectionProcess,
     merit_rule: existingRd.merit_rule ?? rd.meritRule ?? null,
     exam_pattern: existingRd.exam_pattern ?? rd.examPattern ?? null,
-    documents_required: existingRd.documents_required ?? rd.documentsRequired ?? null,
-    application_steps: existingRd.application_steps ?? rd.applicationSteps ?? null,
-    application_instructions: existingRd.application_instructions ?? rd.applicationInstructions ?? null,
+    documents_required:
+      existingRd.documents_required ?? rd.documentsRequired ?? null,
+    application_steps:
+      existingRd.application_steps ?? rd.applicationSteps ?? null,
+    application_instructions:
+      existingRd.application_instructions ?? rd.applicationInstructions ?? null,
     vacancy_breakdown:
       existingRd.vacancy_breakdown ??
       (Array.isArray(rd.vacancyBreakdown)
-        ? rd.vacancyBreakdown.find((v) => v.postIndex === postIndex) || rd.vacancyBreakdown
-        : rd.vacancyBreakdown ?? null),
+        ? rd.vacancyBreakdown.find((v) => v.postIndex === postIndex) ||
+          rd.vacancyBreakdown
+        : (rd.vacancyBreakdown ?? null)),
     reader_summary: existingRd.reader_summary ?? enr.readerSummary ?? null,
     official_syllabus: officialSyllabus,
     youtube_resources: youtubeResources,
     historical_cutoffs: historicalCutoffs,
-    official_site_url: existingRd.official_site_url ?? src.officialSiteUrl ?? null,
+    official_site_url:
+      existingRd.official_site_url ?? src.officialSiteUrl ?? null,
     apply_url: existingRd.apply_url ?? src.applyUrl ?? null,
   };
 }
@@ -267,7 +341,8 @@ async function main() {
 
   for (const bundle of bundles) {
     const src = bundle.source || {};
-    const sourceUrl = src.url || src.officialSiteUrl || src.applyUrl || src.notificationPdfUrl;
+    const sourceUrl =
+      src.url || src.officialSiteUrl || src.applyUrl || src.notificationPdfUrl;
     if (!src.name || !sourceUrl) {
       console.warn('SKIP bundle missing source.name or url:', src.name);
       continue;
@@ -294,7 +369,10 @@ async function main() {
         if (src[k] && !source[k]) srcPatch[k] = src[k];
       }
       if (Object.keys(srcPatch).length > 0) {
-        await prisma.source.update({ where: { id: source.id }, data: srcPatch });
+        await prisma.source.update({
+          where: { id: source.id },
+          data: srcPatch,
+        });
       }
       console.log(`REUSED SOURCE:  ${source.id} (${source.name})`);
     }
@@ -311,28 +389,55 @@ async function main() {
 
       if (existing) {
         const postPatch = {
-          reviewedDetails: mergeReviewedDetails(existing.reviewedDetails, details),
+          reviewedDetails: mergeReviewedDetails(
+            existing.reviewedDetails,
+            details,
+          ),
           reviewedAt: new Date(),
         };
-        if (!existing.organization && p.organization) postPatch.organization = p.organization;
-        if (!existing.postGroup && p.postGroup) postPatch.postGroup = p.postGroup;
-        if (!existing.vacancies && p.vacancies) postPatch.vacancies = p.vacancies;
+        if (!existing.organization && p.organization)
+          postPatch.organization = p.organization;
+        if (!existing.postGroup && p.postGroup)
+          postPatch.postGroup = p.postGroup;
+        if (!existing.vacancies && p.vacancies)
+          postPatch.vacancies = p.vacancies;
         if (!existing.payLevel && p.payLevel) postPatch.payLevel = p.payLevel;
-        if (existing.minAge == null && p.minAge != null) postPatch.minAge = p.minAge;
-        if (existing.maxAge == null && p.maxAge != null) postPatch.maxAge = p.maxAge;
-        if (!existing.applicationLastDate && p.applicationLastDate) postPatch.applicationLastDate = dateOrNull(p.applicationLastDate);
-        if (!existing.ageAsOnDate && p.ageAsOnDate) postPatch.ageAsOnDate = dateOrNull(p.ageAsOnDate);
-        if (!existing.educationRequired && p.educationRequired) postPatch.educationRequired = p.educationRequired;
-        if (!existing.minEducationLevel && p.minEducationLevel) postPatch.minEducationLevel = p.minEducationLevel;
-        if (existing.minMarksPercent == null && p.minMarksPercent != null) postPatch.minMarksPercent = p.minMarksPercent;
-        if (existing.categoryRelaxationApplies == null && typeof p.categoryRelaxationApplies === 'boolean') {
+        if (existing.minAge == null && p.minAge != null)
+          postPatch.minAge = p.minAge;
+        if (existing.maxAge == null && p.maxAge != null)
+          postPatch.maxAge = p.maxAge;
+        if (!existing.applicationLastDate && p.applicationLastDate)
+          postPatch.applicationLastDate = dateOrNull(p.applicationLastDate);
+        const officialPostedDate = dateOrNull(
+          p.officialPostedDate ?? bundle.researchDetails?.officialPostedDate,
+        );
+        if (!existing.officialPostedDate && officialPostedDate)
+          postPatch.officialPostedDate = officialPostedDate;
+        if (!existing.ageAsOnDate && p.ageAsOnDate)
+          postPatch.ageAsOnDate = dateOrNull(p.ageAsOnDate);
+        if (!existing.educationRequired && p.educationRequired)
+          postPatch.educationRequired = p.educationRequired;
+        if (!existing.minEducationLevel && p.minEducationLevel)
+          postPatch.minEducationLevel = p.minEducationLevel;
+        if (existing.minMarksPercent == null && p.minMarksPercent != null)
+          postPatch.minMarksPercent = p.minMarksPercent;
+        if (
+          existing.categoryRelaxationApplies == null &&
+          typeof p.categoryRelaxationApplies === 'boolean'
+        ) {
           postPatch.categoryRelaxationApplies = p.categoryRelaxationApplies;
         }
         if (!existing.categoryRelaxationRules && p.categoryRelaxationRules) {
           postPatch.categoryRelaxationRules = p.categoryRelaxationRules;
         }
-        await prisma.post.update({ where: { id: existing.id }, data: postPatch });
-        await prisma.post.update({ where: { id: existing.id }, data: postPatch });
+        await prisma.post.update({
+          where: { id: existing.id },
+          data: postPatch,
+        });
+        await prisma.post.update({
+          where: { id: existing.id },
+          data: postPatch,
+        });
         console.log(`  UPDATED POST: ${existing.id} (${existing.postName})`);
         touchedIds.push(existing.id);
       } else {
@@ -347,14 +452,22 @@ async function main() {
             maxAge: p.maxAge ?? null,
             vacancies: p.vacancies ?? null,
             applicationLastDate: dateOrNull(p.applicationLastDate),
+            officialPostedDate: dateOrNull(
+              p.officialPostedDate ??
+                bundle.researchDetails?.officialPostedDate,
+            ),
             ageAsOnDate: dateOrNull(p.ageAsOnDate),
             educationRequired: p.educationRequired ?? null,
             minEducationLevel: p.minEducationLevel ?? null,
             minMarksPercent: p.minMarksPercent ?? null,
-            categoryRelaxationApplies: typeof p.categoryRelaxationApplies === 'boolean' ? p.categoryRelaxationApplies : null,
+            categoryRelaxationApplies:
+              typeof p.categoryRelaxationApplies === 'boolean'
+                ? p.categoryRelaxationApplies
+                : null,
             reviewedDetails: details,
             reviewedAt: new Date(),
-            reviewNote: p.reviewNote || 'Imported via import-researched-jobs.mjs',
+            reviewNote:
+              p.reviewNote || 'Imported via import-researched-jobs.mjs',
           },
         });
         console.log(`  CREATED POST: ${created.id} (${created.postName})`);
@@ -363,8 +476,14 @@ async function main() {
     }
   }
 
-  const synced = await enqueueSyncEvents([...touchedSourceIds].map(sourceSyncEvent));
-  console.log(synced ? 'Queued slave-db sync.' : 'slave-db sync NOT queued (no Redis URL or Redis unreachable).');
+  const synced = await enqueueSyncEvents(
+    [...touchedSourceIds].map(sourceSyncEvent),
+  );
+  console.log(
+    synced
+      ? 'Queued slave-db sync.'
+      : 'slave-db sync NOT queued (no Redis URL or Redis unreachable).',
+  );
 
   console.log('\n--- AUDIT ---');
   const rows = await prisma.post.findMany({
@@ -384,7 +503,7 @@ async function main() {
         `yt=${Array.isArray(d.youtube_resources) ? d.youtube_resources.length : 0}`,
         `cut=${Array.isArray(d.historical_cutoffs) ? d.historical_cutoffs.length : 0}`,
         `sel=${Array.isArray(d.selection_process) ? d.selection_process.length : 0}`,
-      ].join(' | ')
+      ].join(' | '),
     );
   }
 

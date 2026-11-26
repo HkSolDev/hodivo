@@ -97,6 +97,7 @@ export async function publishExtractionCandidate(
           maxAge: numberOrNull(details.max_age),
           vacancies: numberOrNull(details.vacancies),
           applicationLastDate: dateOrNull(details.application_last_date),
+          officialPostedDate: dateOrNull(details.official_posted_date),
           ageAsOnDate: dateOrNull(details.age_as_on_date),
           educationRequired: stringOrNull(details.education_required),
           minEducationLevel:

@@ -110,16 +110,17 @@ export default async function JobDetailPage(props: {
       allowLocalhost: false,
       fallbackOrigin: DEFAULT_PRODUCTION_ORIGIN,
     }) ?? DEFAULT_PRODUCTION_ORIGIN;
+  const jsonLd = !result.job.designReview
+    ? jobPostingJsonLd(result.job, origin)
+    : null;
 
   return (
     <>
-      {!result.job.designReview ? (
+      {jsonLd ? (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(
-              jobPostingJsonLd(result.job, origin),
-            ).replace(/</g, '\\u003c'),
+            __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
           }}
         />
       ) : null}
