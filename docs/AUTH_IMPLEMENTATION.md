@@ -639,3 +639,21 @@ PUT /api/profile before canonical empty-body matching; failed saves do not match
 Profile date/marks/education validation has its own persistent contract coverage.
 The added regression failed with actual 200 / expected 409 before this fix;
 132 Node/database and 34 browser tests pass afterward, with no skipped checks.
+
+## Redis session storage (`secondaryStorage`) — 27 November 2026
+
+Requirement: move Better Auth session reads and writes off Neon PostgreSQL (`AuthSession`) onto an isolated Redis instance while keeping `disableCookieCache: true`, immediate `/sign-out` revocation, and fail-closed `503` behavior when session storage is unavailable.
+
+- **Files:**
+  - `src/auth/secondary-storage.ts`: `createAuthSecondaryStorage(url)` implementing Better Auth `1.7.7`'s `SecondaryStorage` (`get`, `getAndDelete` via `GETDEL`, atomic `increment` via Lua `INCR` + creation-only `EXPIRE`, `set` with `EX` TTL, `delete`, and `close()`), prefixed with `hodivo:auth:v1:`, `disableOfflineQueue: true`, 500 ms deadline, fail-closed errors.
+  - `src/auth/config.ts`: optional trimmed `AUTH_REDIS_URL` on `AuthConfig`.
+  - `src/auth/auth.ts`: optional `secondaryStorage` parameter on `authOptions` / `createAuth`, and `/sign-out` `hooks.before` revocation via `ctx.context.internalAdapter.deleteSession(token)` when `secondaryStorage` is active.
+  - `src/app.ts`: creates `authStorage` when `AUTH_REDIS_URL` is configured and closes it on Fastify `onClose`.
+  - `docker-compose.yml`: added `redis-auth` (`redis:7-alpine`, `--appendonly yes --maxmemory 64mb --maxmemory-policy noeviction`, `redis_auth_data:/data`), `AUTH_REDIS_URL: redis://redis-auth:6379`, and `depends_on: redis-auth` on `aptus-api`.
+  - `scripts/auth-secondary-storage.test.ts`: fail-closed, `503` guard/sign-out, zero-DB session/revocation, `TEST_DATABASE_URL` OAuth zero-`AuthSession`-query check, and live-Redis round-trip tests.
+- **Verification:**
+  - `pnpm prettier --write` and `pnpm eslint` on all changed files: passed (`0` errors).
+  - `pnpm typecheck`: `0` errors outside pre-existing untracked `scripts/typing-exam-catalogue.test.ts`.
+  - `docker compose config -q` and `docker compose up -d redis-auth`: `hodivo-redis-auth` healthy (`appendonly=yes`, `dir=/data`, `maxmemory=67108864`, `maxmemory-policy=noeviction`).
+  - `AUTH_TEST_REDIS_URL=redis://127.0.0.1:6390 node --import tsx --test scripts/auth-secondary-storage.test.ts`: **4 passed, 0 failed, 1 skipped** (`TEST_DATABASE_URL` runs in CI).
+- **Remaining risk / next step:** Existing Neon-only sessions require a one-time re-login after deploy. Merge/deploy `feat/auth-session-redis` on `akash9568` (`docker compose up -d --build`) once CI passes.
