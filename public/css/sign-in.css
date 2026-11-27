@@ -12,10 +12,71 @@
   gap: var(--space-3);
   margin: var(--space-6) 0 var(--space-3);
 }
-.signin-actions .button {
+.signin-actions > .button,
+.signin-actions .passkeys-section > .button {
   width: 100%;
   min-height: 50px;
   font-size: 1rem;
+}
+.signin-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+.signin-account-meta {
+  min-width: 0;
+}
+.signin-account-meta .small {
+  display: block;
+}
+.signin-account-name {
+  margin: 2px 0 0;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.signin-account-row .button {
+  flex: none;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  font-size: 0.875rem;
+}
+.passkey-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.passkey-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.passkey-row + .passkey-row {
+  border-top: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+}
+.passkey-row-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 500;
+}
+.passkey-row .button {
+  flex: none;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  font-size: 0.8125rem;
 }
 .signin-actions svg {
   flex: none;
@@ -57,7 +118,8 @@
   .signin-panel h1 {
     font-size: 1.75rem;
   }
-  .signin-actions .button {
+  .signin-actions > .button,
+  .signin-actions .passkeys-section > .button {
     padding-inline: var(--space-3);
     font-size: 0.9375rem;
   }

@@ -248,10 +248,13 @@ export function AuthBar({
           isOperator={isOperator}
         />
       ) : userName !== null ? (
-        <div id="auth-user">
-          <span id="auth-user-name" className="small">
-            {userName ? `Signed in as ${userName}` : 'Signed in'}
-          </span>{' '}
+        <div id="auth-user" className="signin-account-row">
+          <div className="signin-account-meta">
+            <span className="small muted">Signed in as</span>
+            <p id="auth-user-name" className="signin-account-name">
+              {userName || 'Your account'}
+            </p>
+          </div>
           <button
             id={presentation === 'header' ? 'sign-out' : 'account-sign-out'}
             type="button"

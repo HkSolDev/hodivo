@@ -261,6 +261,7 @@ export function Passkeys({
                 })
               }
             >
+              <PasskeyIcon />
               Add a passkey
             </button>
           ) : (
@@ -275,15 +276,19 @@ export function Passkeys({
           )}
 
           {keys.length > 0 && (
-            <ul>
+            <ul className="passkey-list">
               {keys.map((key) => (
-                <li key={key.id}>
-                  {key.name || 'Passkey'}{' '}
+                <li key={key.id} className="passkey-row">
+                  <span className="passkey-row-label">
+                    <PasskeyIcon />
+                    <span>{key.name || 'Passkey'}</span>
+                  </span>
                   {recent && (
                     <button
                       type="button"
                       className="button button-secondary"
                       disabled={busy}
+                      aria-label={`Remove ${key.name || 'Passkey'}`}
                       onClick={() =>
                         handleAction(async () => {
                           if (
@@ -297,7 +302,7 @@ export function Passkeys({
                         })
                       }
                     >
-                      Remove passkey
+                      Remove
                     </button>
                   )}
                 </li>
