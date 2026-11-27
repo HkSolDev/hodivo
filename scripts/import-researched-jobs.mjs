@@ -49,6 +49,63 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
+// Policy: Official links only — never store third-party/competitor job portals.
+const BLOCKED_AGGREGATOR_HOSTS = [
+  'sarkariresult',
+  'sarkariexam',
+  'freejobalert',
+  'rojgarresult',
+  'bookofexams',
+  'jagranjosh',
+  'adda247',
+  'testbook',
+  'indgovtjobs',
+  'fastjobsearchers',
+  'fresherslive',
+  'recruitment.guru',
+  'careerpower',
+  'shiksha',
+  'collegedunia',
+  'embibe',
+];
+
+function isBlockedAggregatorUrl(url) {
+  if (typeof url !== 'string' || !url.trim()) return false;
+  try {
+    const host = new URL(url.trim()).hostname.toLowerCase();
+    return BLOCKED_AGGREGATOR_HOSTS.some((blocked) => host.includes(blocked));
+  } catch {
+    const lower = url.toLowerCase();
+    return BLOCKED_AGGREGATOR_HOSTS.some((blocked) => lower.includes(blocked));
+  }
+}
+
+function sanitizeOfficialUrl(url, label = 'url') {
+  if (typeof url !== 'string' || !url.trim()) return null;
+  const trimmed = url.trim();
+  if (isBlockedAggregatorUrl(trimmed)) {
+    console.warn(`[policy] Blocked third-party ${label}: ${trimmed}`);
+    return null;
+  }
+  return trimmed;
+}
+
+function sanitizeSourceName(name) {
+  if (typeof name !== 'string') return name;
+  const cleaned = name
+    .replace(
+      /^(sarkariresult|freejobalert|rojgarresult|jagranjosh|adda247|testbook)\s*:\s*/i,
+      '',
+    )
+    .trim();
+  if (cleaned !== name.trim()) {
+    console.warn(
+      `[policy] Stripped third-party prefix from source.name: "${name}" -> "${cleaned}"`,
+    );
+  }
+  return cleaned;
+}
+
 function toHttpsYoutube(url) {
   if (typeof url !== 'string') return url;
   return url.trim().replace(/^http:\/\//i, 'https://');
@@ -280,6 +337,9 @@ function buildReviewedDetails(bundle, post, postIndex) {
       existingRd.official_posted_date ??
       post.officialPostedDate ??
       rd.officialPostedDate ??
+      rd.officialPublicationDate ??
+      src.officialJobPublicationDate ??
+      src.officialPublicationDate ??
       null,
     application_start_date:
       existingRd.application_start_date ?? rd.applicationStartDate ?? null,
@@ -329,44 +389,84 @@ function buildReviewedDetails(bundle, post, postIndex) {
     official_syllabus: officialSyllabus,
     youtube_resources: youtubeResources,
     historical_cutoffs: historicalCutoffs,
+    audience_classification:
+      existingRd.audience_classification ??
+      (Array.isArray(rd.audienceClassification)
+        ? rd.audienceClassification.find((a) => a.postIndex === postIndex) ||
+          rd.audienceClassification[0] ||
+          null
+        : null),
     official_site_url:
-      existingRd.official_site_url ?? src.officialSiteUrl ?? null,
-    apply_url: existingRd.apply_url ?? src.applyUrl ?? null,
+      sanitizeOfficialUrl(
+        existingRd.official_site_url ?? src.officialSiteUrl,
+        'official_site_url',
+      ) ?? null,
+    apply_url:
+      sanitizeOfficialUrl(existingRd.apply_url ?? src.applyUrl, 'apply_url') ??
+      null,
   };
 }
 
 async function main() {
+  console.log(
+    '[policy] Official-only mode active: third-party/competitor links and prefixes are stripped automatically.',
+  );
   const touchedIds = [];
   const touchedSourceIds = new Set();
 
   for (const bundle of bundles) {
     const src = bundle.source || {};
+    const sourceName = sanitizeSourceName(src.name);
+    const officialSiteUrl = sanitizeOfficialUrl(
+      src.officialSiteUrl,
+      'source.officialSiteUrl',
+    );
+    const applyUrl = sanitizeOfficialUrl(src.applyUrl, 'source.applyUrl');
+    const notificationPdfUrl = sanitizeOfficialUrl(
+      src.notificationPdfUrl,
+      'source.notificationPdfUrl',
+    );
     const sourceUrl =
-      src.url || src.officialSiteUrl || src.applyUrl || src.notificationPdfUrl;
-    if (!src.name || !sourceUrl) {
-      console.warn('SKIP bundle missing source.name or url:', src.name);
+      sanitizeOfficialUrl(src.url, 'source.url') ||
+      officialSiteUrl ||
+      applyUrl ||
+      notificationPdfUrl;
+    if (!sourceName || !sourceUrl) {
+      console.warn(
+        'SKIP bundle missing source.name or official url:',
+        sourceName,
+      );
       continue;
     }
 
     let source = await prisma.source.findFirst({
-      where: { OR: [{ name: src.name }, { url: sourceUrl }] },
+      where: { OR: [{ name: sourceName }, { url: sourceUrl }] },
     });
 
     if (!source) {
       source = await prisma.source.create({
         data: {
-          name: src.name,
+          name: sourceName,
           url: sourceUrl,
-          notificationPdfUrl: src.notificationPdfUrl ?? null,
-          officialSiteUrl: src.officialSiteUrl ?? null,
-          applyUrl: src.applyUrl ?? null,
+          notificationPdfUrl,
+          officialSiteUrl,
+          applyUrl,
         },
       });
       console.log(`CREATED SOURCE: ${source.id} (${source.name})`);
     } else {
       const srcPatch = {};
-      for (const k of ['notificationPdfUrl', 'officialSiteUrl', 'applyUrl']) {
-        if (src[k] && !source[k]) srcPatch[k] = src[k];
+      if (isBlockedAggregatorUrl(source.url) && sourceUrl) {
+        srcPatch.url = sourceUrl;
+      }
+      if (notificationPdfUrl && !source.notificationPdfUrl) {
+        srcPatch.notificationPdfUrl = notificationPdfUrl;
+      }
+      if (officialSiteUrl && !source.officialSiteUrl) {
+        srcPatch.officialSiteUrl = officialSiteUrl;
+      }
+      if (applyUrl && !source.applyUrl) {
+        srcPatch.applyUrl = applyUrl;
       }
       if (Object.keys(srcPatch).length > 0) {
         await prisma.source.update({
@@ -409,7 +509,11 @@ async function main() {
         if (!existing.applicationLastDate && p.applicationLastDate)
           postPatch.applicationLastDate = dateOrNull(p.applicationLastDate);
         const officialPostedDate = dateOrNull(
-          p.officialPostedDate ?? bundle.researchDetails?.officialPostedDate,
+          p.officialPostedDate ??
+            bundle.researchDetails?.officialPostedDate ??
+            bundle.researchDetails?.officialPublicationDate ??
+            src.officialJobPublicationDate ??
+            src.officialPublicationDate,
         );
         if (!existing.officialPostedDate && officialPostedDate)
           postPatch.officialPostedDate = officialPostedDate;
@@ -434,10 +538,6 @@ async function main() {
           where: { id: existing.id },
           data: postPatch,
         });
-        await prisma.post.update({
-          where: { id: existing.id },
-          data: postPatch,
-        });
         console.log(`  UPDATED POST: ${existing.id} (${existing.postName})`);
         touchedIds.push(existing.id);
       } else {
@@ -454,7 +554,10 @@ async function main() {
             applicationLastDate: dateOrNull(p.applicationLastDate),
             officialPostedDate: dateOrNull(
               p.officialPostedDate ??
-                bundle.researchDetails?.officialPostedDate,
+                bundle.researchDetails?.officialPostedDate ??
+                bundle.researchDetails?.officialPublicationDate ??
+                src.officialJobPublicationDate ??
+                src.officialPublicationDate,
             ),
             ageAsOnDate: dateOrNull(p.ageAsOnDate),
             educationRequired: p.educationRequired ?? null,
@@ -464,6 +567,8 @@ async function main() {
               typeof p.categoryRelaxationApplies === 'boolean'
                 ? p.categoryRelaxationApplies
                 : null,
+            categoryRelaxationRules: p.categoryRelaxationRules ?? null,
+            eligibilityRules: p.eligibilityRules ?? null,
             reviewedDetails: details,
             reviewedAt: new Date(),
             reviewNote:

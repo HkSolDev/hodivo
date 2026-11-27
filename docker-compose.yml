@@ -32,6 +32,28 @@ services:
       timeout: 5s
       retries: 10
 
+  redis-auth:
+    image: redis:7-alpine
+    container_name: hodivo-redis-auth
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '64mb',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    volumes:
+      - redis_auth_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   aptus-api:
     build:
       context: .
@@ -49,10 +71,13 @@ services:
       JOBS_REDIS_URL: redis://redis-public:6379
       TYPING_REDIS_URL: redis://redis-public:6379
       SYNC_REDIS_URL: redis://redis-public:6379
+      AUTH_REDIS_URL: redis://redis-auth:6379
     depends_on:
       slave-db:
         condition: service_healthy
       redis-public:
+        condition: service_healthy
+      redis-auth:
         condition: service_healthy
 
   sync-worker:
@@ -87,3 +112,4 @@ services:
 volumes:
   slave_db_data:
   redis_public_data:
+  redis_auth_data:

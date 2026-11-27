@@ -16,6 +16,7 @@ import { createAuth, type AppAuth } from './auth/auth.js';
 import { readAuthConfig } from './auth/config.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { requireSession } from './auth/require-session.js';
+import { createAuthSecondaryStorage } from './auth/secondary-storage.js';
 import { requireIngestToken } from './auth/require-ingest-token.js';
 import {
   logSecurityEvent,
@@ -83,7 +84,17 @@ export function buildApp(
   registerTypingPracticeRoutes(app, typingDatabase);
   registerTypingExamRoutes(app, examCatalogue);
   const config = auth ? null : readAuthConfig(env);
-  const appAuth = auth ?? (config ? createAuth(config) : null);
+  const authStorage = config?.authRedisUrl
+    ? createAuthSecondaryStorage(config.authRedisUrl)
+    : undefined;
+  if (authStorage) {
+    app.addHook('onClose', (_app, done) => {
+      authStorage.close();
+      done();
+    });
+  }
+  const appAuth =
+    auth ?? (config ? createAuth(config, undefined, authStorage) : null);
   if (appAuth) registerAuthRoutes(app, appAuth);
   registerReviewDraftRoutes(app, appAuth, env);
   registerProfileRoutes(app, appAuth);
