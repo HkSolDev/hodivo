@@ -355,19 +355,23 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
         const gate = createGate();
         activeGate = gate;
 
-        const sortSelect = page.getByRole('combobox', {
+        const sortGroup = page.getByRole('group', {
           name: 'Sort all jobs',
+        });
+        const closingLast = sortGroup.getByRole('button', {
+          name: 'Closing last',
+          exact: true,
         });
         const startTime = Date.now();
 
         // Trigger selection
-        await sortSelect.selectOption('furthest');
+        await closingLast.click();
 
         // Assert 1: Synchronous / Prompt visual feedback while server response is held
-        await expect(sortSelect).toHaveValue('furthest');
-        await expect(sortSelect).toHaveAttribute('aria-busy', 'true');
+        await expect(closingLast).toHaveAttribute('aria-pressed', 'true');
+        await expect(sortGroup).toHaveAttribute('aria-busy', 'true');
         // The sort control is disabled while pending; cards stay usable.
-        await expect(sortSelect).toBeDisabled();
+        await expect(closingLast).toBeDisabled();
         const updatingBadge = page.getByText('Updating…');
         await expect(updatingBadge).toBeVisible();
 
@@ -390,7 +394,7 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
 
         // Assert 3: Destination URL and updated cards reconcile
         await expect(page).toHaveURL(/sort=furthest/);
-        await expect(sortSelect).not.toHaveAttribute('aria-busy', 'true');
+        await expect(sortGroup).not.toHaveAttribute('aria-busy', 'true');
         await expect(updatingBadge).not.toBeVisible();
 
         const finalCards = await getVisibleCardIds(page);
@@ -426,28 +430,37 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
         await page.evaluate(() => {
           (window as unknown as { __cardStates: unknown[] }).__cardStates = [];
         });
-        const sortSelect = page.getByRole('combobox', {
+        const sortGroup = page.getByRole('group', {
           name: 'Sort all jobs',
+        });
+        const closingSoon = sortGroup.getByRole('button', {
+          name: 'Closing soon',
+          exact: true,
+        });
+        const latestBtn = sortGroup.getByRole('button', {
+          name: 'Latest',
+          exact: true,
         });
         // First gated use of soonest in this server run: it reaches the API.
         const gateSoonest = createGate();
         gateMap.set('soonest', gateSoonest);
         const baseS = gateArrivals.get('soonest') ?? 0;
-        await sortSelect.selectOption('soonest');
+        await closingSoon.click();
         await waitForGateArrival('soonest', baseS + 1);
         // While pending, the control is disabled, so a rapid second change
         // cannot be issued at all; the race the old test forced is now
         // prevented by design. Cards remain mounted throughout.
-        await expect(sortSelect).toBeDisabled();
-        await expect(sortSelect).toHaveValue('soonest');
+        await expect(closingSoon).toBeDisabled();
+        await expect(latestBtn).toBeDisabled();
+        await expect(closingSoon).toHaveAttribute('aria-pressed', 'true');
         assert.deepEqual(await getVisibleCardIds(page), NEWEST);
         gateSoonest.release();
         await expect(page).toHaveURL(/sort=soonest/);
-        await expect(sortSelect).not.toBeDisabled();
-        await expect(sortSelect).not.toHaveAttribute('aria-busy', 'true');
+        await expect(closingSoon).not.toBeDisabled();
+        await expect(sortGroup).not.toHaveAttribute('aria-busy', 'true');
         assert.deepEqual(await getVisibleCardIds(page), SOONEST);
         // A follow-up change after completion works and settles exactly.
-        await sortSelect.selectOption('newest');
+        await latestBtn.click();
         await expect(page).toHaveURL(/sort=newest/);
         assert.deepEqual(await getVisibleCardIds(page), NEWEST);
         const states = await getCardStates(page);
@@ -474,8 +487,12 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
       try {
         await page.goto(origin);
         await expect(page.locator('article[data-job-card]')).toHaveCount(6);
-        const sortSelect = page.getByRole('combobox', {
+        const sortGroup = page.getByRole('group', {
           name: 'Sort all jobs',
+        });
+        const closingLast = sortGroup.getByRole('button', {
+          name: 'Closing last',
+          exact: true,
         });
         // A q filter creates a fresh cache identity, so this gated furthest
         // request really reaches the fixture API.
@@ -484,9 +501,9 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
         const gateFurthest = createGate();
         gateMap.set('furthest', gateFurthest);
         const baseF = gateArrivals.get('furthest') ?? 0;
-        await sortSelect.selectOption('furthest');
+        await closingLast.click();
         await waitForGateArrival('furthest', baseF + 1);
-        await expect(sortSelect).toBeDisabled();
+        await expect(closingLast).toBeDisabled();
         // Existing cards and their job links stay usable while pending:
         // open the first visible job without waiting for the sort.
         const firstCardLink = page
@@ -503,7 +520,20 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
         await page.goBack();
         const restoredSort =
           new URL(page.url()).searchParams.get('sort') ?? 'newest';
-        await expect(sortSelect).toHaveValue(restoredSort);
+        const sortLabelByValue = {
+          newest: 'Latest',
+          popular: 'Trending',
+          soonest: 'Closing soon',
+          furthest: 'Closing last',
+        } as const;
+        await expect(
+          sortGroup.getByRole('button', {
+            name: sortLabelByValue[
+              restoredSort as keyof typeof sortLabelByValue
+            ],
+            exact: true,
+          }),
+        ).toHaveAttribute('aria-pressed', 'true');
         const expectedOrder =
           restoredSort === 'furthest'
             ? FURTHEST
@@ -524,8 +554,16 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
 
     // Deep link directly to ?sort=furthest
     await page.goto(`${origin}/?sort=furthest#jobs`);
-    const sortSelect = page.getByRole('combobox', { name: 'Sort all jobs' });
-    await expect(sortSelect).toHaveValue('furthest');
+    const sortGroup = page.getByRole('group', { name: 'Sort all jobs' });
+    const closingSoon = sortGroup.getByRole('button', {
+      name: 'Closing soon',
+      exact: true,
+    });
+    const closingLast = sortGroup.getByRole('button', {
+      name: 'Closing last',
+      exact: true,
+    });
+    await expect(closingLast).toHaveAttribute('aria-pressed', 'true');
     assert.deepEqual(await getVisibleCardIds(page), [
       'job-d',
       'job-b1',
@@ -537,7 +575,7 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
 
     // Reload
     await page.reload();
-    await expect(sortSelect).toHaveValue('furthest');
+    await expect(closingLast).toHaveAttribute('aria-pressed', 'true');
     assert.deepEqual(await getVisibleCardIds(page), [
       'job-d',
       'job-b1',
@@ -548,7 +586,7 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
     ]);
 
     // Change to soonest
-    await sortSelect.selectOption('soonest');
+    await closingSoon.click();
     await expect(page).toHaveURL(/sort=soonest/);
     assert.deepEqual(await getVisibleCardIds(page), [
       'job-a',
@@ -562,7 +600,7 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
     // Back button
     await page.goBack();
     await expect(page).toHaveURL(/sort=furthest/);
-    await expect(sortSelect).toHaveValue('furthest');
+    await expect(closingLast).toHaveAttribute('aria-pressed', 'true');
     assert.deepEqual(await getVisibleCardIds(page), [
       'job-d',
       'job-b1',
@@ -575,7 +613,7 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
     // Forward button
     await page.goForward();
     await expect(page).toHaveURL(/sort=soonest/);
-    await expect(sortSelect).toHaveValue('soonest');
+    await expect(closingSoon).toHaveAttribute('aria-pressed', 'true');
     assert.deepEqual(await getVisibleCardIds(page), [
       'job-a',
       'job-b1',
@@ -597,23 +635,24 @@ test('JobSortControl: Latency Gating, Stale Retention, Adversarial Race Safety, 
       const noJsPage: Page = await noJsContext.newPage();
 
       await noJsPage.goto(origin);
-      const sortSelect = noJsPage.getByRole('combobox', {
+      const sortGroup = noJsPage.getByRole('group', {
         name: 'Sort all jobs',
       });
-      await expect(sortSelect).toHaveValue('newest');
+      await expect(
+        sortGroup.getByRole('button', { name: 'Latest', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
       assert.deepEqual(await getVisibleCardIds(noJsPage), NEWEST);
 
-      // Select furthest and submit via noscript button
-      await sortSelect.selectOption('furthest');
-      const applyButton = noJsPage.getByRole('button', { name: 'Apply sort' });
-      await expect(applyButton).toBeVisible();
-      await applyButton.click();
+      // Click Closing last pill directly in no-JS native form
+      await sortGroup
+        .getByRole('button', { name: 'Closing last', exact: true })
+        .click();
 
       // Native form submission navigates to /?sort=furthest
       await expect(noJsPage).toHaveURL(/sort=furthest/);
       await expect(
-        noJsPage.getByRole('combobox', { name: 'Sort all jobs' }),
-      ).toHaveValue('furthest');
+        sortGroup.getByRole('button', { name: 'Closing last', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
       assert.deepEqual(await getVisibleCardIds(noJsPage), [
         'job-d',
         'job-b1',

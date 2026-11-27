@@ -328,22 +328,27 @@ async function runBenchmark(
     // Setup gate to hold the response until explicitly released below (no fixed hold duration).
     createGate();
 
-    const sortSelect = page.getByRole('combobox', { name: 'Sort all jobs' });
+    const sortGroup = page.getByRole('group', { name: 'Sort all jobs' });
+    const closingLast = sortGroup.getByRole('button', {
+      name: 'Closing last',
+      exact: true,
+    });
     const startTime = Date.now();
 
     // Trigger sort
-    await sortSelect.selectOption('furthest');
+    await closingLast.click();
 
     // Measure prompt visual feedback (within 200ms while gate is held)
     let feedbackDelayMs: number | null = null;
     let cardsPreservedWhileHeld = false;
 
-    // Check if aria-busy or value changed immediately
+    // Check if aria-busy or active state changed immediately
     const checkStart = Date.now();
     while (Date.now() - checkStart < 250) {
-      const currentVal = await sortSelect.inputValue();
-      const isBusy = (await sortSelect.getAttribute('aria-busy')) === 'true';
-      if (currentVal === 'furthest' && isBusy) {
+      const isPressed =
+        (await closingLast.getAttribute('aria-pressed')) === 'true';
+      const isBusy = (await sortGroup.getAttribute('aria-busy')) === 'true';
+      if (isPressed && isBusy) {
         feedbackDelayMs = Date.now() - startTime;
         break;
       }

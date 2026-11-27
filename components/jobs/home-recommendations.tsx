@@ -3,7 +3,11 @@
 import Link from 'next/link';
 import Form from 'next/form';
 import { JobCard, type PublicJobItem } from './job-card';
-import { HomeLayoutControls, HomeViewFields } from './home-layout-controls';
+import {
+  HomeLayoutControls,
+  HomeLayoutList,
+  HomeViewFields,
+} from './home-layout-controls';
 import { HomeSaveAction, useHomeReview } from './home-review-state';
 import type { HomeView } from '@/frontend/home-view';
 import type { JobFilters } from '@/frontend/public-job-filters';
@@ -79,8 +83,10 @@ export function HomeRecommendations({
         </div>
       </div>
       {visible.length ? (
-        <div
-          className={`home-job-list home-recommended-list home-layout-${view.recLayout}`}
+        <HomeLayoutList
+          view={view}
+          scope="rec"
+          className="home-job-list home-recommended-list"
         >
           {visible.map((job) => (
             <JobCard
@@ -109,7 +115,7 @@ export function HomeRecommendations({
               }
             />
           ))}
-        </div>
+        </HomeLayoutList>
       ) : (
         <div className="panel">
           <h3>You’ve reviewed these recommendations</h3>

@@ -89,7 +89,24 @@
     background: var(--surface);
   }
   :global(.home-page) .header > :global(.home-result-controls) {
+    display: contents;
+  }
+
+  :global(.home-page)
+    .header
+    > :global(.home-result-controls)
+    > form:first-child {
+    order: 3;
     flex: 1 1 100%;
-    justify-content: space-between;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  :global(.home-page)
+    .header
+    > :global(.home-result-controls)
+    > form:last-child {
+    order: 2;
+    margin-left: auto;
   }
 }

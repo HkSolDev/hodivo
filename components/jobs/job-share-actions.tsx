@@ -41,13 +41,6 @@ export function JobShareActions({ id, title }: { id: string; title: string }) {
       <button type="button" className="button button-secondary" onClick={share}>
         Share
       </button>
-      <button
-        type="button"
-        className="button button-secondary"
-        onClick={copyLink}
-      >
-        Copy link
-      </button>
       <span role="status">{message}</span>
       {fallbackUrl ? (
         <label>

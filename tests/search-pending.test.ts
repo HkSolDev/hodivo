@@ -199,8 +199,9 @@ test('search shows immediate pending feedback without hiding current results', a
       page.getByRole('button', { name: 'Searching…' }),
     ).toBeVisible();
     await page
-      .getByRole('combobox', { name: 'Qualification', exact: true })
-      .selectOption('DIPLOMA');
+      .getByRole('group', { name: 'Qualification' })
+      .getByRole('button', { name: 'Diploma', exact: true })
+      .click();
     await expect(
       page.getByRole('button', { name: 'Searching…' }),
     ).toBeVisible();
@@ -255,19 +256,23 @@ test('search shows immediate pending feedback without hiding current results', a
     async () => {
       await page.goto(`${origin}/?qualification=BACHELORS`);
       await expect(
-        page.getByRole('combobox', { name: 'Qualification', exact: true }),
-      ).toHaveValue('BACHELORS');
+        page
+          .getByRole('group', { name: 'Qualification' })
+          .getByRole('button', { name: 'Graduation', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
       await page.getByRole('searchbox').fill('clerk');
       await page.getByRole('button', { name: 'Clear search text' }).click();
       await expect(page.getByRole('searchbox')).toHaveValue('');
       await expect(
-        page.getByRole('combobox', { name: 'Qualification', exact: true }),
-      ).toHaveValue('BACHELORS');
+        page
+          .getByRole('group', { name: 'Qualification' })
+          .getByRole('button', { name: 'Graduation', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
       assert.match(page.url(), /qualification=BACHELORS/);
       assert.equal(new URL(page.url()).searchParams.get('q'), null);
       await page
-        .getByRole('link', { name: 'Clear search and filter' })
-        .first()
+        .getByRole('group', { name: 'Qualification' })
+        .getByRole('button', { name: 'All', exact: true })
         .click();
       await expect(page.locator('[data-job-card]')).toHaveCount(2);
       assert.equal(new URL(page.url()).searchParams.get('qualification'), null);
@@ -393,8 +398,9 @@ test('search shows immediate pending feedback without hiding current results', a
           page.getByRole('button', { name: 'Searching…' }),
         ).toBeVisible();
         await page
-          .getByRole('combobox', { name: 'Sort all jobs' })
-          .selectOption('soonest');
+          .getByRole('group', { name: 'Sort all jobs' })
+          .getByRole('button', { name: 'Closing soon', exact: true })
+          .click();
         await expect(page).toHaveURL(/sort=soonest/);
         assert.equal(new URL(page.url()).searchParams.get('q'), null);
         await expect(page.locator('[data-search-pending="false"]')).toHaveCount(
@@ -446,10 +452,8 @@ test('search shows immediate pending feedback without hiding current results', a
         await expect(
           page.getByRole('button', { name: 'Searching…' }),
         ).toBeVisible();
-        await page
-          .getByRole('link', { name: 'Clear search and filter' })
-          .first()
-          .click();
+        await page.getByRole('button', { name: 'Clear search text' }).click();
+        await page.getByRole('button', { name: 'Search', exact: true }).click();
         await expect(page.locator('[data-job-card]')).toHaveCount(2);
         assert.equal(new URL(page.url()).searchParams.get('q'), null);
         await expect(page.locator('[data-search-pending="false"]')).toHaveCount(
@@ -471,12 +475,12 @@ test('search shows immediate pending feedback without hiding current results', a
       await page.emulateMedia({ reducedMotion: 'no-preference' });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(origin);
-      const toggle = page.getByRole('button', { name: /^Filters/ });
-      await toggle.focus();
-      await page.keyboard.press('Enter');
-      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      const qualRail = page.getByRole('group', { name: 'Qualification' });
       await expect(
-        page.getByRole('combobox', { name: 'Qualification', exact: true }),
+        qualRail.getByRole('button', { name: 'All', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      await expect(
+        qualRail.getByRole('button', { name: 'Diploma', exact: true }),
       ).toBeVisible();
 
       await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -528,8 +532,9 @@ test('search shows immediate pending feedback without hiding current results', a
       await page.goto(`${origin}/?q=technical`);
       await expect(page.getByRole('searchbox')).toHaveValue('technical');
       await page
-        .getByRole('combobox', { name: 'Sort all jobs' })
-        .selectOption('soonest');
+        .getByRole('group', { name: 'Sort all jobs' })
+        .getByRole('button', { name: 'Closing soon', exact: true })
+        .click();
       await expect(page).toHaveURL(/sort=soonest/);
       assert.equal(new URL(page.url()).searchParams.get('q'), 'technical');
       await page.getByRole('searchbox').fill('unsent sort draft');
@@ -619,9 +624,9 @@ test('search shows immediate pending feedback without hiding current results', a
       await noJs.goto(origin);
       await noJs.getByRole('searchbox').fill('technical');
       await noJs
-        .getByRole('combobox', { name: 'Qualification', exact: true })
-        .selectOption('DIPLOMA');
-      await noJs.getByRole('button', { name: 'Search', exact: true }).click();
+        .getByRole('group', { name: 'Qualification' })
+        .getByRole('button', { name: 'Diploma', exact: true })
+        .click();
       await expect(noJs).toHaveURL(/q=technical/);
       await expect(noJs).toHaveURL(/qualification=DIPLOMA/);
       await expect(noJs.locator('[data-job-card]')).toHaveCount(1);

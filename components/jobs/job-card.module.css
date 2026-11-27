@@ -100,9 +100,19 @@
   font-size: 14px;
 }
 
-.qualification,
+.qualification {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .extra {
   min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
@@ -220,7 +230,7 @@
 }
 
 :global(.home-page) .extra {
-  font-size: inherit;
+  font-size: 14px;
 }
 
 :global(.home-page) .open {

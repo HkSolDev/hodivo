@@ -272,38 +272,43 @@ test('Mobile discovery: compact layouts, accessible filters, truth in fields, an
   );
 
   await t.test(
-    'collapsible secondary filter toggles accessibly with active count and keyboard',
+    'qualification pill rail stays visible, scannable, and active on mobile without overflow',
     async () => {
       const page = await browser.newPage();
       try {
         await page.setViewportSize({ width: 390, height: 844 });
         await page.goto(origin, { waitUntil: 'networkidle' });
 
-        const toggle = page.getByRole('button', { name: /Filters/i });
-        await expect(toggle).toBeVisible();
-        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        const qualGroup = page.getByRole('group', { name: 'Qualification' });
+        await expect(qualGroup).toBeVisible();
 
-        // Expand via keyboard Enter
-        await toggle.focus();
-        await page.keyboard.press('Enter');
-        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-
-        const qualSelect = page.getByRole('combobox', {
-          name: 'Qualification',
+        const allPill = qualGroup.getByRole('button', {
+          name: 'All',
+          exact: true,
         });
-        await expect(qualSelect).toBeVisible();
+        const gradPill = qualGroup.getByRole('button', {
+          name: 'Graduation',
+          exact: true,
+        });
+        await expect(allPill).toHaveAttribute('aria-pressed', 'true');
+        await expect(gradPill).toHaveAttribute('aria-pressed', 'false');
 
-        // Select qualification
-        await qualSelect.selectOption('BACHELORS');
+        const pillBox = await gradPill.boundingBox();
+        assert.ok(
+          pillBox && pillBox.height >= 44,
+          'Mobile pill meets 44px target',
+        );
+        assert.equal(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth > innerWidth,
+          ),
+          false,
+        );
+
+        await gradPill.click();
         await expect(page).toHaveURL(/qualification=BACHELORS/);
-
-        // After navigation with active qualification, filter count is 1 and expanded
-        const toggleAfter = page.getByRole('button', { name: /Filters/i });
-        await expect(toggleAfter).toContainText('Filters (1)');
+        await expect(gradPill).toHaveAttribute('aria-pressed', 'true');
         await expect(page.locator('[data-job-card]')).toHaveCount(1);
-        await toggleAfter.click();
-        await expect(toggleAfter).toHaveAttribute('aria-expanded', 'false');
-        await expect(qualSelect).toBeHidden();
       } finally {
         await page.close();
       }
@@ -426,10 +431,10 @@ test('Mobile discovery: compact layouts, accessible filters, truth in fields, an
     try {
       const page = await context.newPage();
       await page.goto(origin);
-      const select = page.locator('select[name="qualification"]');
-      await expect(select).toBeVisible();
-      await select.selectOption('BACHELORS');
-      await page.getByRole('button', { name: 'Search', exact: true }).click();
+      await page
+        .getByRole('group', { name: 'Qualification' })
+        .getByRole('button', { name: 'Graduation', exact: true })
+        .click();
       await expect(page).toHaveURL(/qualification=BACHELORS/);
     } finally {
       await context.close();
