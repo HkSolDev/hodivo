@@ -99,7 +99,9 @@ function sanitizeSourceName(name) {
     )
     .trim();
   if (cleaned !== name.trim()) {
-    console.warn(`[policy] Stripped third-party prefix from source.name: "${name}" -> "${cleaned}"`);
+    console.warn(
+      `[policy] Stripped third-party prefix from source.name: "${name}" -> "${cleaned}"`,
+    );
   }
   return cleaned;
 }

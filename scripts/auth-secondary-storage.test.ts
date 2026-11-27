@@ -236,25 +236,18 @@ await test(
     t.after(() => storage.close());
 
     let authSessionQueries = 0;
-    for (const method of [
-      'findFirst',
-      'findFirstOrThrow',
-      'findMany',
-      'findUnique',
-      'findUniqueOrThrow',
-      'create',
-      'update',
-      'updateMany',
-      'delete',
-      'deleteMany',
-    ] as const) {
-      t.mock.method(database.authSession, method, () => {
-        authSessionQueries += 1;
-        throw new Error(`Unexpected AuthSession.${method} query`);
-      });
-    }
+    const guardedDatabase = database.$extends({
+      query: {
+        authSession: {
+          $allOperations({ operation }) {
+            authSessionQueries += 1;
+            throw new Error(`Unexpected AuthSession.${operation} query`);
+          },
+        },
+      },
+    }) as unknown as typeof database;
 
-    const auth = createAuth(config, database, storage);
+    const auth = createAuth(config, guardedDatabase, storage);
     const app = buildTestServer(t, auth);
 
     const start = await app.inject({
