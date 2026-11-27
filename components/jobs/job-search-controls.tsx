@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from 'react';
 import Form from 'next/form';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type HomeView, homeSearchParams } from '@/frontend/home-view';
 import {
@@ -21,7 +20,11 @@ import {
   type SearchFeedback,
   type SearchOutcome,
 } from '@/frontend/search-pending';
-import { HomeViewFields } from './home-layout-controls';
+import {
+  HomeViewFields,
+  LAYOUT_CHANGE_EVENT,
+  useSyncedHomeView,
+} from './home-layout-controls';
 import styles from './job-search-controls.module.css';
 import {
   JOB_QUALIFICATIONS,
@@ -32,13 +35,20 @@ const subscribeToHydration = () => () => {};
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
 const SEARCH_INPUT_ID = 'job-search-q';
+const SORT_OPTIONS: ReadonlyArray<{
+  value: JobFilters['sort'];
+  label: string;
+}> = [
+  { value: 'newest', label: 'Latest' },
+  { value: 'popular', label: 'Trending' },
+  { value: 'soonest', label: 'Closing soon' },
+  { value: 'furthest', label: 'Closing last' },
+];
 
-function formSearchHref(form: HTMLFormElement): string {
-  const url = new URL('/', window.location.origin);
-  for (const [name, value] of new FormData(form)) {
-    if (typeof value === 'string') url.searchParams.append(name, value);
-  }
-  return `${url.pathname}${url.search}`;
+function scrollActivePill(rail: HTMLElement | null) {
+  if (!rail || rail.scrollWidth <= rail.clientWidth) return;
+  const active = rail.querySelector<HTMLElement>('[aria-pressed="true"]');
+  active?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 }
 
 export function JobSearchRegion({
@@ -58,10 +68,13 @@ export function JobSearchRegion({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [mobileExpanded, setMobileExpanded] = useState<boolean | null>(null);
   const [draft, setDraft] = useState(filters.q);
+  const [pendingQualification, setPendingQualification] = useState<
+    string | null
+  >(null);
   const [feedback, setFeedback] = useState<SearchFeedback>(idleSearch);
   const feedbackRef = useRef(feedback);
+  const qualRailRef = useRef<HTMLDivElement>(null);
   const dirtyDraft = useRef(false);
   const restoreDraft = useRef(false);
   const hydrated = useSyncExternalStore(
@@ -69,11 +82,21 @@ export function JobSearchRegion({
     clientSnapshot,
     serverSnapshot,
   );
+  const syncedView = useSyncedHomeView(view);
   const pending = feedback.pendingHref !== null;
-  const hasQualification = Boolean(filters.qualification);
-  const activeCount = hasQualification ? 1 : 0;
-  const isExpanded = mobileExpanded ?? hasQualification;
+  const activeQualification =
+    pending && pendingQualification !== null
+      ? pendingQualification
+      : filters.qualification;
+  const qualificationOptions = [
+    { value: '', label: 'All' },
+    ...JOB_QUALIFICATIONS,
+  ] as const;
   feedbackRef.current = feedback;
+
+  useEffect(() => {
+    scrollActivePill(qualRailRef.current);
+  }, [activeQualification]);
 
   useEffect(() => {
     // Sort, layout, and page can change while the committed query stays the
@@ -101,13 +124,17 @@ export function JobSearchRegion({
   }, [filters, view, page, outcome]);
 
   useEffect(() => {
-    const onPop = () => {
+    const onInterrupt = () => {
       restoreDraft.current = true;
       feedbackRef.current = idleSearch;
       setFeedback(interruptSearch());
     };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    window.addEventListener('popstate', onInterrupt);
+    window.addEventListener(LAYOUT_CHANGE_EVENT, onInterrupt);
+    return () => {
+      window.removeEventListener('popstate', onInterrupt);
+      window.removeEventListener(LAYOUT_CHANGE_EVENT, onInterrupt);
+    };
   }, []);
 
   function submitHref(href: string) {
@@ -136,11 +163,37 @@ export function JobSearchRegion({
     });
   }
 
+  function submitQualification(nextQualification: JobFilters['qualification']) {
+    const params = homeSearchParams(
+      {
+        q: draft,
+        qualification: nextQualification,
+        sort: filters.sort,
+      },
+      1,
+      syncedView,
+    );
+    const query = params.toString();
+    setPendingQualification(nextQualification);
+    submitHref(query ? `/?${query}` : '/');
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     // String-action <Form> navigates outside a transition, so useFormStatus
     // stays idle. preventDefault and push inside our own bookkeeping.
     event.preventDefault();
-    submitHref(formSearchHref(event.currentTarget));
+    setPendingQualification(null);
+    const params = homeSearchParams(
+      {
+        q: draft,
+        qualification: filters.qualification,
+        sort: filters.sort,
+      },
+      1,
+      syncedView,
+    );
+    const query = params.toString();
+    submitHref(query ? `/?${query}` : '/');
   }
 
   function clearDraft() {
@@ -161,7 +214,7 @@ export function JobSearchRegion({
           {feedback.notice}
         </p>
         <input type="hidden" name="sort" value={filters.sort} />
-        <HomeViewFields view={view} />
+        <HomeViewFields view={syncedView} />
         <div className={styles.query}>
           <label className={styles.searchLabel} htmlFor={SEARCH_INPUT_ID}>
             Search all jobs
@@ -195,7 +248,7 @@ export function JobSearchRegion({
               type="search"
               value={draft}
               maxLength={100}
-              placeholder="Exam, role or organization"
+              placeholder="Search SSC, Railway, Clerk, BTech…"
               onChange={(event) => {
                 if (feedbackRef.current.pendingHref) dirtyDraft.current = true;
                 setDraft(event.target.value);
@@ -214,49 +267,6 @@ export function JobSearchRegion({
           </div>
         </div>
 
-        <div
-          className={`${styles.mobileFilterToggle}${hydrated ? ` ${styles.enhanced}` : ''}`}
-        >
-          <button
-            type="button"
-            className={styles.filterButton}
-            aria-expanded={isExpanded}
-            aria-controls="secondary-filters"
-            onClick={() => setMobileExpanded(!isExpanded)}
-          >
-            <span>Filters{activeCount > 0 ? ` (${activeCount})` : ''}</span>
-            <span className={styles.filterChevron} aria-hidden="true">
-              {isExpanded ? '▴' : '▾'}
-            </span>
-          </button>
-        </div>
-
-        <div
-          id="secondary-filters"
-          className={`${styles.secondaryFilters}${hydrated ? ` ${styles.enhanced}` : ''}${isExpanded ? ` ${styles.isExpanded}` : ''}`}
-        >
-          <label className={styles.qualificationLabel}>
-            Qualification
-            <select
-              key={filters.qualification}
-              className={styles.select}
-              name="qualification"
-              defaultValue={filters.qualification}
-              onChange={(event) => event.currentTarget.form?.requestSubmit()}
-            >
-              <option value="">All qualifications</option>
-              {JOB_QUALIFICATIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-              <option value="ITI" disabled>
-                ITI — not available yet
-              </option>
-            </select>
-          </label>
-        </div>
-
         <button
           className={`button ${styles.submit}`}
           type="submit"
@@ -270,18 +280,42 @@ export function JobSearchRegion({
             </span>
           </span>
         </button>
-      </Form>
-      {(filters.q || filters.qualification) && (
-        <div className={styles.feedback}>
-          <p>Searching all jobs. Clear your search to return to browsing.</p>
-          <Link
-            className={styles.clear}
-            href={`/?${homeSearchParams({ ...filters, q: '', qualification: '' }, 1, view)}`}
+
+        <div className={styles.pillGroup}>
+          <span id="qualification-filter-label" className={styles.pillLabel}>
+            Qualification
+          </span>
+          <div
+            ref={qualRailRef}
+            className={styles.pillRail}
+            role="group"
+            aria-labelledby="qualification-filter-label"
           >
-            Clear search and filter
-          </Link>
+            {qualificationOptions.map((option) => {
+              const isActive = activeQualification === option.value;
+              const isPendingPill =
+                pending && pendingQualification === option.value;
+              return (
+                <button
+                  key={option.value || 'all'}
+                  type="submit"
+                  name="qualification"
+                  value={option.value}
+                  className={styles.pill}
+                  aria-pressed={isActive}
+                  data-pending={isPendingPill ? 'true' : undefined}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    submitQualification(option.value);
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
+      </Form>
       {children}
       <div
         className={pending ? styles.resultsPending : styles.resultsShell}
@@ -309,55 +343,69 @@ export function JobSortControl({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [sortValue, setSortValue] = useState(filters.sort);
+  const sortRailRef = useRef<HTMLDivElement>(null);
+  const syncedView = useSyncedHomeView(view);
 
   useEffect(() => {
     setSortValue(filters.sort);
   }, [filters.sort]);
 
+  useEffect(() => {
+    scrollActivePill(sortRailRef.current);
+  }, [sortValue]);
+
   return (
     <Form action="/" scroll={false} className={styles.sort}>
       <input type="hidden" name="q" value={filters.q} />
       <input type="hidden" name="qualification" value={filters.qualification} />
-      <HomeViewFields view={view} />
-      <label>
-        Sort
-        <select
-          className={styles.sortSelect}
-          name="sort"
+      <HomeViewFields view={syncedView} />
+      <div className={styles.sortBar}>
+        <span className={styles.pillLabel}>Sort</span>
+        <div
+          ref={sortRailRef}
+          className={styles.pillRail}
+          role="group"
           aria-label="Sort all jobs"
           aria-busy={isPending}
-          disabled={isPending}
-          value={sortValue}
-          onChange={(event) => {
-            const nextSort = event.target.value as JobFilters['sort'];
-            setSortValue(nextSort);
-            startTransition(() => {
-              const params = homeSearchParams(
-                { ...filters, sort: nextSort },
-                1,
-                view,
-              );
-              router.push(`/?${params}#jobs`, { scroll: false });
-            });
-          }}
         >
-          <option value="newest">Newest</option>
-          <option value="popular">Popular</option>
-          <option value="soonest">Deadline: soonest first</option>
-          <option value="furthest">Deadline: furthest first</option>
-        </select>
+          {SORT_OPTIONS.map((option) => {
+            const active = sortValue === option.value;
+            return (
+              <button
+                key={option.value}
+                type="submit"
+                name="sort"
+                value={option.value}
+                className={styles.pill}
+                aria-pressed={active}
+                disabled={isPending}
+                data-pending={isPending && active ? 'true' : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (sortValue === option.value || isPending) return;
+                  setSortValue(option.value);
+                  startTransition(() => {
+                    const params = homeSearchParams(
+                      { ...filters, sort: option.value },
+                      1,
+                      syncedView,
+                    );
+                    router.push(`/?${params}#jobs`, { scroll: false });
+                  });
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
         {isPending && (
           <span className={styles.updating} role="status">
             <span className={styles.spinner} aria-hidden="true" />
             Updating…
           </span>
         )}
-      </label>
-      <noscript>
-        <button className="button button-secondary" type="submit">
-          Apply sort
-        </button>
-      </noscript>
+      </div>
     </Form>
   );
 }

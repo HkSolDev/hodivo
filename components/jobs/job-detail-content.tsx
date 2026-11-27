@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import React, { type ReactNode } from 'react';
 import {
   splitLeadAndBody,
@@ -571,9 +570,6 @@ export function JobDetailContent({ job }: { job: JobDetailData }) {
         {!job.designReview ? (
           <JobShareActions id={job.id} title={job.postName} />
         ) : null}
-        <Link href="/#jobs" className="button button-secondary">
-          ← Back to all jobs
-        </Link>
         {job.designReview ? (
           <JobPreviewSaveButton id={job.id} />
         ) : (

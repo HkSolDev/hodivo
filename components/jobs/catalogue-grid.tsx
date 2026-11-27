@@ -3,7 +3,11 @@ import { JobCard, type PublicJobItem } from './job-card';
 import { type JobFilters } from '@/frontend/public-job-filters';
 import { fetchPublicJobsCached, getJobsBackendUrl } from './jobs-server-cache';
 import { JobSortControl } from './job-search-controls';
-import { HomeLayoutControls } from './home-layout-controls';
+import {
+  HomeLayoutControls,
+  HomeLayoutList,
+  HomePaginationLink,
+} from './home-layout-controls';
 import { homeSearchParams, type HomeView } from '@/frontend/home-view';
 import type { ReviewRecommendation } from './home-recommendations';
 import { HomeSaveAction } from './home-review-state';
@@ -135,8 +139,9 @@ export function CatalogueGrid({
         </div>
       ) : (
         <>
-          <div
-            className={`${styles.grid} home-job-list home-layout-${view.layout}`}
+          <HomeLayoutList
+            view={view}
+            className={`${styles.grid} home-job-list`}
           >
             {result.data.map((job) => (
               <JobCard
@@ -149,29 +154,31 @@ export function CatalogueGrid({
                 }
               />
             ))}
-          </div>
+          </HomeLayoutList>
           {result.pagination.totalPages > 1 && (
             <nav className={styles.pagination} aria-label="Job pages">
               {result.pagination.page > 1 && (
-                <Link
-                  className="button button-secondary"
+                <HomePaginationLink
+                  filters={filters}
+                  page={result.pagination.page - 1}
+                  view={view}
                   rel="prev"
-                  href={`/?${homeSearchParams(filters, result.pagination.page - 1, view)}#jobs`}
                 >
                   ← Previous page
-                </Link>
+                </HomePaginationLink>
               )}
               <span className="small">
                 Page {result.pagination.page} of {result.pagination.totalPages}
               </span>
               {result.pagination.page < result.pagination.totalPages && (
-                <Link
-                  className="button button-secondary"
+                <HomePaginationLink
+                  filters={filters}
+                  page={result.pagination.page + 1}
+                  view={view}
                   rel="next"
-                  href={`/?${homeSearchParams(filters, result.pagination.page + 1, view)}#jobs`}
                 >
                   Next page →
-                </Link>
+                </HomePaginationLink>
               )}
             </nav>
           )}

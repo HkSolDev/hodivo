@@ -109,6 +109,10 @@ test('crawler previews and public sharing controls', async (t) => {
   await page.getByRole('button', { name: 'Share', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('');
   await page.evaluate(() => {
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: undefined,
+    });
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -118,7 +122,7 @@ test('crawler previews and public sharing controls', async (t) => {
       },
     });
   });
-  await page.getByRole('button', { name: 'Copy link', exact: true }).click();
+  await page.getByRole('button', { name: 'Share', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Link copied.');
   assert.equal(
     await page.locator('body').getAttribute('data-copied'),

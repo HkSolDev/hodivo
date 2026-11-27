@@ -594,12 +594,14 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
       await layouts.getByRole('button', { name: 'Cards', exact: true }).click();
       await expect(page).toHaveURL(/layout=cards/);
       await page
-        .getByRole('combobox', { name: 'Qualification', exact: true })
-        .selectOption('DIPLOMA');
+        .getByRole('group', { name: 'Qualification' })
+        .getByRole('button', { name: 'Diploma', exact: true })
+        .click();
       await expect(page).toHaveURL(/qualification=DIPLOMA/);
       await page
-        .getByRole('combobox', { name: 'Sort all jobs' })
-        .selectOption('furthest');
+        .getByRole('group', { name: 'Sort all jobs' })
+        .getByRole('button', { name: 'Closing last', exact: true })
+        .click();
       await expect(page).toHaveURL(/sort=furthest/);
       await page.getByRole('link', { name: 'Next page' }).click();
       await expect(page).toHaveURL(/page=2/);
@@ -614,11 +616,15 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
       await page.goBack();
       await expect(page.getByRole('searchbox')).toHaveValue('Technical');
       await expect(
-        page.getByRole('combobox', { name: 'Qualification', exact: true }),
-      ).toHaveValue('DIPLOMA');
+        page
+          .getByRole('group', { name: 'Qualification' })
+          .getByRole('button', { name: 'Diploma', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
       await expect(
-        page.getByRole('combobox', { name: 'Sort all jobs' }),
-      ).toHaveValue('furthest');
+        page
+          .getByRole('group', { name: 'Sort all jobs' })
+          .getByRole('button', { name: 'Closing last', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
       await page.getByRole('searchbox').fill('no-such-job');
       await page.getByRole('button', { name: 'Search', exact: true }).click();
       await expect(
@@ -644,14 +650,14 @@ test('Next.js keyboard skip, detail navigation and Back preserve the public list
         await noJs.goto(origin);
         await noJs.getByRole('searchbox').fill('Technical');
         await noJs
-          .getByRole('combobox', { name: 'Qualification', exact: true })
-          .selectOption('DIPLOMA');
-        await noJs.getByRole('button', { name: 'Search', exact: true }).click();
+          .getByRole('group', { name: 'Qualification' })
+          .getByRole('button', { name: 'Diploma', exact: true })
+          .click();
         await expect(noJs.locator('[data-job-card]')).toHaveCount(6);
         await noJs
-          .getByRole('combobox', { name: 'Sort all jobs' })
-          .selectOption('furthest');
-        await noJs.getByRole('button', { name: 'Apply sort' }).click();
+          .getByRole('group', { name: 'Sort all jobs' })
+          .getByRole('button', { name: 'Closing last', exact: true })
+          .click();
         await expect(noJs).toHaveURL(/sort=furthest/);
         await expect(noJs.getByRole('searchbox')).toHaveValue('Technical');
         await noJs
