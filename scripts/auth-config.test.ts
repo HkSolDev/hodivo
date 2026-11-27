@@ -32,6 +32,19 @@ await test('enabled auth requires complete backend configuration', () => {
   );
 });
 
+await test('AUTH_REDIS_URL is optional and trimmed', () => {
+  assert.equal(readAuthConfig(example)?.authRedisUrl, undefined);
+  assert.equal(
+    readAuthConfig({ ...example, AUTH_REDIS_URL: '  redis://redis-auth:6379 ' })
+      ?.authRedisUrl,
+    'redis://redis-auth:6379',
+  );
+  assert.equal(
+    readAuthConfig({ ...example, AUTH_REDIS_URL: '   ' })?.authRedisUrl,
+    undefined,
+  );
+});
+
 await test('origin must be exact and HTTPS outside local development', () => {
   for (const origin of [
     'http://example.com',

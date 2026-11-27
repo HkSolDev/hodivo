@@ -3,6 +3,7 @@ export type AuthConfig = {
   secret: string;
   googleClientId: string;
   googleClientSecret: string;
+  authRedisUrl?: string;
 };
 
 export function readAuthConfig(
@@ -39,10 +40,12 @@ export function readAuthConfig(
     throw new Error(
       'BETTER_AUTH_SECRET must contain at least 32 random characters.',
     );
+  const authRedisUrl = env.AUTH_REDIS_URL?.trim();
   return {
     origin: url.origin,
     secret,
     googleClientId: required('GOOGLE_CLIENT_ID'),
     googleClientSecret: required('GOOGLE_CLIENT_SECRET'),
+    ...(authRedisUrl ? { authRedisUrl } : {}),
   };
 }

@@ -25,6 +25,7 @@ const discardedTokens = {
 export function authOptions(
   config: AuthConfig,
   database = prisma,
+  secondaryStorage?: BetterAuthOptions['secondaryStorage'],
 ): BetterAuthOptions {
   const googleProfile = google({
     clientId: config.googleClientId,
@@ -40,6 +41,7 @@ export function authOptions(
       provider: 'postgresql',
       transaction: true,
     }),
+    ...(secondaryStorage ? { secondaryStorage } : {}),
     logger: { disabled: true },
     telemetry: { enabled: false },
     rateLimit: createAuthRateLimit(),
@@ -156,9 +158,11 @@ export function authOptions(
           ctx.context.secret,
         );
         if (!token) return;
-        // The pinned library swallows read/deletion errors. Revoke in PostgreSQL or fail honestly.
+        // The pinned library swallows read/deletion errors. Revoke in the session store or fail honestly.
         try {
-          await database.authSession.deleteMany({ where: { token } });
+          if (secondaryStorage)
+            await ctx.context.internalAdapter.deleteSession(token);
+          else await database.authSession.deleteMany({ where: { token } });
         } catch {
           throw new APIError('SERVICE_UNAVAILABLE', {
             message: 'Could not sign out. Please try again.',
@@ -171,8 +175,12 @@ export function authOptions(
   };
 }
 
-export function createAuth(config: AuthConfig, database = prisma) {
-  return betterAuth(authOptions(config, database));
+export function createAuth(
+  config: AuthConfig,
+  database = prisma,
+  secondaryStorage?: BetterAuthOptions['secondaryStorage'],
+) {
+  return betterAuth(authOptions(config, database, secondaryStorage));
 }
 
 export type AppAuth = ReturnType<typeof createAuth>;
