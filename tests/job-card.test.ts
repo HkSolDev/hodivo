@@ -97,3 +97,20 @@ test('visitor text follows vacancy and pay details and omits unavailable counts'
   assert.doesNotMatch(render(0), /data-job-visitors/);
   assert.doesNotMatch(render(null), /data-job-visitors/);
 });
+
+test('the closing-day label follows the India calendar date', (t) => {
+  t.mock.timers.enable({
+    apis: ['Date'],
+    now: new Date('2026-11-29T18:30:00Z'),
+  });
+  const render = (applicationLastDate: string) =>
+    renderToStaticMarkup(
+      createElement(JobCard, { job: { ...job, applicationLastDate } }),
+    );
+  assert.match(
+    render('2026-11-30'),
+    /Last day to apply.*<time dateTime="2026-11-30">30 Nov 2026<\/time>/,
+  );
+  assert.doesNotMatch(render('2026-11-29'), /Last day to apply/);
+  assert.match(render('2026-12-01'), /Apply by 1 Dec 2026/);
+});

@@ -72,6 +72,16 @@
   min-width: 0;
 }
 
+.deadlineToday {
+  display: inline-block;
+  margin-inline-end: 0.25rem;
+  padding: 2px 9px;
+  border-radius: 9999px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 0.875em;
+}
+
 .vacancyPill {
   display: inline-flex;
   align-items: center;

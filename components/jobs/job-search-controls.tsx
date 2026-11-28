@@ -248,7 +248,7 @@ export function JobSearchRegion({
               type="search"
               value={draft}
               maxLength={100}
-              placeholder="Search SSC, Railway, Clerk, BTech…"
+              placeholder="Search SSC, Railway, UPSSSC, BPSC, Banking…"
               onChange={(event) => {
                 if (feedbackRef.current.pendingHref) dirtyDraft.current = true;
                 setDraft(event.target.value);

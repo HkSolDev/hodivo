@@ -76,9 +76,12 @@ function isSupportedPassageText(value: string, hindi: boolean): boolean {
 export async function loadPracticeCatalogue(
   signal: AbortSignal,
   cursor?: string,
+  language?: 'en' | 'hi',
 ) {
-  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-  const response = await fetch(`${endpoint}s${query}`, {
+  const query = new URLSearchParams();
+  if (cursor) query.set('cursor', cursor);
+  if (language) query.set('language', language);
+  const response = await fetch(`${endpoint}s${query.size ? `?${query}` : ''}`, {
     cache: 'no-store',
     signal,
   });

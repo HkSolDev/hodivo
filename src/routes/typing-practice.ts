@@ -35,15 +35,22 @@ export function registerTypingPracticeRoutes(
     reply.header('cache-control', 'no-store');
     const query = new URL(request.url, 'http://localhost').searchParams;
     const cursor = query.get('cursor') ?? undefined;
+    const language = query.get('language') ?? undefined;
     if (
-      [...query.keys()].some((key) => key !== 'cursor') ||
+      query.getAll('language').length > 1 ||
+      (language !== undefined && language !== 'en' && language !== 'hi')
+    ) {
+      return reply.code(400).send({ error: 'Invalid passage language.' });
+    }
+    if (
+      [...query.keys()].some((key) => key !== 'cursor' && key !== 'language') ||
       query.getAll('cursor').length > 1 ||
       (cursor !== undefined && !passageId.test(cursor))
     ) {
       return reply.code(400).send({ error: 'Invalid passage cursor.' });
     }
     try {
-      return await listPracticePassages(10, cursor, database);
+      return await listPracticePassages(10, cursor, database, language);
     } catch {
       return reply.code(503).send(unavailable);
     }

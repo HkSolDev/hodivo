@@ -11,6 +11,7 @@ import { chromium, expect } from 'playwright/test';
 
 test('public typing practice works in an isolated browser session', async (t) => {
   let nextText = 'cat';
+  let importedHindi = false;
   let fixtureId = 0;
   let apiState: 'ready' | 'empty' | 'error' | 'malformed' | 'slow' = 'ready';
   let heldResponse: ServerResponse | null = null;
@@ -51,10 +52,22 @@ test('public typing practice works in an isolated browser session', async (t) =>
       title: 'हिन्दी अनुच्छेद',
       text: 'सुबह मैं अपनी किताबें',
     };
-    if (request.url === '/api/typing/practice-passages') {
+    if (request.url === '/api/typing/practice-passages?language=hi') {
       const { id, title } = hindiPassage;
       response.end(
-        JSON.stringify({ passages: [{ id, title }], nextCursor: null }),
+        JSON.stringify({
+          passages: importedHindi ? [{ id, title }] : [],
+          nextCursor: null,
+        }),
+      );
+      return;
+    }
+    if (request.url === '/api/typing/practice-passages?language=en') {
+      response.end(
+        JSON.stringify({
+          passages: [{ id: 'english-sample', title: 'English sample' }],
+          nextCursor: null,
+        }),
       );
       return;
     }
@@ -520,6 +533,7 @@ test('public typing practice works in an isolated browser session', async (t) =>
     'Hindi uses the same practice page and completes with a typo',
     async () => {
       await page.getByRole('button', { name: 'Browse passages' }).click();
+      await page.getByRole('button', { name: 'हिन्दी', exact: true }).click();
       await page.getByRole('button', { name: 'हिन्दी अभ्यास' }).click();
       const passage = page.getByLabel('Passage to type');
       await expect(passage).toHaveAttribute('lang', 'hi');
@@ -545,7 +559,19 @@ test('public typing practice works in an isolated browser session', async (t) =>
     'an imported Hindi passage opens in Practice and reports skipped words',
     async () => {
       await page.getByRole('button', { name: 'Browse passages' }).click();
-      await page.getByRole('link', { name: 'हिन्दी अनुच्छेद' }).click();
+      importedHindi = true;
+      const picker = page.getByRole('dialog', { name: 'Browse passages' });
+      await picker
+        .getByRole('button', { name: 'English', exact: true })
+        .click();
+      await expect(
+        picker.getByRole('link', { name: 'English sample' }),
+      ).toBeVisible();
+      await picker.getByRole('button', { name: 'हिन्दी', exact: true }).click();
+      await expect(
+        picker.getByRole('link', { name: 'English sample' }),
+      ).toHaveCount(0);
+      await picker.getByRole('link', { name: 'हिन्दी अनुच्छेद' }).click();
       await expect(input).toHaveAttribute('lang', 'hi');
       await expect(page.getByLabel('Passage to type')).toHaveText(
         'सुबह मैं अपनी किताबें',

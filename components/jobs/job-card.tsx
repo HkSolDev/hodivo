@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { indiaDateKey } from '@/frontend/india-date';
 import {
   shortenQualificationPoint,
   summarizeQualification,
@@ -47,6 +48,9 @@ export function JobCard({
 }) {
   const visitors = job.recentVisitorCount ?? 0;
   const applyBy = formatDate(job.applicationLastDate);
+  const closesToday =
+    applyBy !== null &&
+    job.applicationLastDate?.slice(0, 10) === indiaDateKey();
   const { points: qualPoints, chips: qualChips } = summarizeQualification(
     job.educationRequired,
   );
@@ -89,7 +93,18 @@ export function JobCard({
         </div>
         <div className={styles.primaryStatusRow}>
           <p className={styles.deadline} data-job-deadline>
-            {applyBy ? `Apply by ${applyBy}` : 'Deadline not specified'}
+            {closesToday ? (
+              <>
+                <span className={styles.deadlineToday}>Last day to apply</span>{' '}
+                <time dateTime={job.applicationLastDate?.slice(0, 10)}>
+                  {applyBy}
+                </time>
+              </>
+            ) : applyBy ? (
+              `Apply by ${applyBy}`
+            ) : (
+              'Deadline not specified'
+            )}
           </p>
           {job.vacancies != null && (
             <span className={styles.vacancyPill} data-job-vacancies>
