@@ -456,23 +456,26 @@ export function TypingPractice() {
     restartSession({ target: '' });
     setPassageState({ status: 'loading' });
     const cleanId = requestedPassageId?.trim() || undefined;
-    const passageRequest =
-      process.env.NODE_ENV === 'development' && cleanId === LOCAL_HINDI_PASSAGE
-        ? import('@/lib/typing/hindi-practice').then(
-            ({ hindiPassage, evaluateHindi, hindiGroups }) => ({
-              passage: hindiPassage,
-              compareText: evaluateHindi,
-              charCount: hindiGroups(hindiPassage.text).length,
-            }),
-          )
-        : loadPracticePassage(request.controller.signal, cleanId).then(
-            (passage) => ({
-              passage,
-              compareText: undefined,
-              charCount: undefined,
-            }),
-          );
-    void passageRequest
+    const passageRequest = async () => {
+      const useBuiltIn =
+        process.env.NODE_ENV === 'development' &&
+        cleanId === LOCAL_HINDI_PASSAGE;
+      const passage = useBuiltIn
+        ? null
+        : await loadPracticePassage(request.controller.signal, cleanId);
+      if (useBuiltIn || passage?.language === 'hi') {
+        const { hindiPassage, evaluateHindi, hindiGroups } =
+          await import('@/lib/typing/hindi-practice');
+        const selected = passage ?? hindiPassage;
+        return {
+          passage: selected,
+          compareText: evaluateHindi,
+          charCount: hindiGroups(selected.text).length,
+        };
+      }
+      return { passage, compareText: undefined, charCount: undefined };
+    };
+    void passageRequest()
       .then(({ passage, compareText, charCount }) => {
         if (
           request.controller.signal.aborted ||
@@ -532,7 +535,7 @@ export function TypingPractice() {
     if (
       !accountId ||
       passageState.status !== 'ready' ||
-      passageState.passage.id === LOCAL_HINDI_PASSAGE
+      passageState.charCount !== undefined
     )
       return;
     const controller = new AbortController();
@@ -1015,7 +1018,7 @@ export function TypingPractice() {
                     </div>
                     <span className={`muted ${styles.disclaimer}`}>
                       {isHindi
-                        ? 'Practice estimate based on the final Hindi text.'
+                        ? 'Word-based speed estimate. Accuracy reflects the typed text after corrections.'
                         : 'Practice estimate only — not an official qualification result.'}
                     </span>
                   </div>
@@ -1032,9 +1035,7 @@ export function TypingPractice() {
                       <dt>
                         <span>Net speed</span>
                         <span className={styles.summaryHintTag}>
-                          {isHindi
-                            ? 'After errors'
-                            : speedHint}
+                          {isHindi ? 'After errors' : speedHint}
                         </span>
                       </dt>
                       <dd
@@ -1122,6 +1123,10 @@ export function TypingPractice() {
                       </dd>
                     </div>
                   </dl>
+                  {snapshot.comparison?.words &&
+                    snapshot.comparison.words.skipped > 0 && (
+                      <p>Skipped words: {snapshot.comparison.words.skipped}</p>
+                    )}
                   {passageState.status === 'ready' && !isHindi && (
                     <AttemptComparison
                       passageId={passageState.passage.id}

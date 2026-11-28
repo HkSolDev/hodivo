@@ -6,6 +6,8 @@ import { test } from 'node:test';
 import pg from 'pg';
 import Fastify from 'fastify';
 import { createExamCatalogue } from '../src/lib/typing-exam-catalogue.js';
+import { getRandomPracticePassage } from '../src/lib/typing-catalogue.js';
+import { registerTypingPracticeRoutes } from '../src/routes/typing-practice.js';
 import { registerTypingExamRoutes } from '../src/routes/typing-exams.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/index.js';
@@ -69,7 +71,7 @@ function fixtureInput() {
 const canonicalFirst = 'The quick brown fox.\nJumps  over\tthe lazy dog.  ';
 
 test(
-  'Hindi draft preset round-trips through the local exam API',
+  'Hindi draft preset round-trips through the local practice and exam APIs',
   { skip: !connection },
   async (t) => {
     const { database } = await typingDatabase(t, connection!);
@@ -107,6 +109,31 @@ test(
     const app = Fastify();
     t.after(() => app.close());
     registerTypingExamRoutes(app, catalogue);
+    registerTypingPracticeRoutes(
+      app,
+      () => getRandomPracticePassage(database),
+      database,
+    );
+    const practiceBase = '/api/typing/practice-passages';
+    assert.deepEqual((await app.inject(practiceBase)).json().passages, []);
+    process.env = {
+      ...oldEnv,
+      NODE_ENV: 'development',
+      APTUS_LOCAL_HINDI_EXAM: '1',
+    };
+    t.after(() => {
+      process.env = oldEnv;
+    });
+    const practice = await app.inject(practiceBase);
+    assert.equal(practice.statusCode, 200, practice.body);
+    assert.deepEqual(
+      practice.json().passages.map((item: { title: string }) => item.title),
+      input.passages.map((item: { title: string }) => item.title),
+    );
+    assert.equal(
+      (await app.inject('/api/typing/practice-passage')).json().passage,
+      null,
+    );
     const exams = await app.inject('/api/typing/exams');
     assert.equal(exams.statusCode, 200);
     assert.equal(exams.json().exams[0].slug, input.exam.slug);
@@ -119,6 +146,14 @@ test(
       const start = await app.inject(`${base}/passage?passageId=${passage.id}`);
       assert.equal(start.statusCode, 200, start.body);
       const { snapshot } = start.json();
+      const practicePassage = await app.inject(`${practiceBase}/${passage.id}`);
+      assert.equal(practicePassage.statusCode, 200, practicePassage.body);
+      assert.deepEqual(practicePassage.json().passage, {
+        id: passage.id,
+        title: passage.title,
+        language: 'hi',
+        text: snapshot.passage.text,
+      });
       assert.equal(snapshot.version.language, 'hi');
       assert.equal(snapshot.version.rules.durationSeconds, 600);
       assert.equal(snapshot.version.readiness.scoringAvailable, false);
@@ -129,6 +164,11 @@ test(
         ).text,
       );
     }
+    process.env = oldEnv;
+    assert.equal(
+      (await app.inject(`${practiceBase}/${passages[0].id}`)).statusCode,
+      404,
+    );
   },
 );
 

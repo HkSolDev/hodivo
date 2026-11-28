@@ -1,4 +1,4 @@
-import { HINDI_EXAM_LETTER, HINDI_EXAM_TEXT } from './exam-contract';
+import { HINDI_EXAM_LETTER, HINDI_EXAM_TEXT } from './exam-contract.js';
 import type {
   ExamPage,
   ExamPassageSummary,

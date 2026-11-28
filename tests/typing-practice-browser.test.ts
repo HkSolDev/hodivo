@@ -46,6 +46,24 @@ test('public typing practice works in an isolated browser session', async (t) =>
       );
       return;
     }
+    const hindiPassage = {
+      id: 'imported-hindi',
+      title: 'हिन्दी अनुच्छेद',
+      text: 'सुबह मैं अपनी किताबें',
+    };
+    if (request.url === '/api/typing/practice-passages') {
+      const { id, title } = hindiPassage;
+      response.end(
+        JSON.stringify({ passages: [{ id, title }], nextCursor: null }),
+      );
+      return;
+    }
+    if (request.url === '/api/typing/practice-passages/imported-hindi') {
+      response.end(
+        JSON.stringify({ passage: { ...hindiPassage, language: 'hi' } }),
+      );
+      return;
+    }
     response.end(JSON.stringify({ user: null, enabled: false }));
   });
   api.listen(0, '127.0.0.1');
@@ -498,27 +516,47 @@ test('public typing practice works in an isolated browser session', async (t) =>
     },
   );
 
-  await t.test('Hindi uses the same practice page and completes with a typo', async () => {
-    await page.getByRole('button', { name: 'Browse passages' }).click();
-    await page.getByRole('button', { name: 'हिन्दी अभ्यास' }).click();
-    const passage = page.getByLabel('Passage to type');
-    await expect(passage).toHaveAttribute('lang', 'hi');
-    await expect(input).toHaveAttribute('lang', 'hi');
-    const passageText = await passage.innerText();
-    const charCount = page.getByText(/Chars:/);
-    const originalCount = await charCount.innerText();
+  await t.test(
+    'Hindi uses the same practice page and completes with a typo',
+    async () => {
+      await page.getByRole('button', { name: 'Browse passages' }).click();
+      await page.getByRole('button', { name: 'हिन्दी अभ्यास' }).click();
+      const passage = page.getByLabel('Passage to type');
+      await expect(passage).toHaveAttribute('lang', 'hi');
+      await expect(input).toHaveAttribute('lang', 'hi');
+      const passageText = await passage.innerText();
+      const charCount = page.getByText(/Chars:/);
+      const originalCount = await charCount.innerText();
 
-    await input.focus();
-    await page.keyboard.insertText(passageText.replace('मैं ', 'मई  '));
-    await expect(summary).toContainText('Passage complete');
-    await expect(summary).toContainText('55 correct / 2 incorrect');
-    await expect(charCount).toHaveText(originalCount);
+      await input.focus();
+      await page.keyboard.insertText(passageText.replace('मैं ', 'मई  '));
+      await expect(summary).toContainText('Passage complete');
+      await expect(summary).toContainText('55 correct / 2 incorrect');
+      await expect(charCount).toHaveText(originalCount);
 
-    await setPassage('cat');
-    await expect(input).not.toHaveAttribute('lang', 'hi');
-    await input.pressSequentially('cat');
-    await expect(summary).toContainText('3 correct / 0 incorrect');
-  });
+      await setPassage('cat');
+      await expect(input).not.toHaveAttribute('lang', 'hi');
+      await input.pressSequentially('cat');
+      await expect(summary).toContainText('3 correct / 0 incorrect');
+    },
+  );
+
+  await t.test(
+    'an imported Hindi passage opens in Practice and reports skipped words',
+    async () => {
+      await page.getByRole('button', { name: 'Browse passages' }).click();
+      await page.getByRole('link', { name: 'हिन्दी अनुच्छेद' }).click();
+      await expect(input).toHaveAttribute('lang', 'hi');
+      await expect(page.getByLabel('Passage to type')).toHaveText(
+        'सुबह मैं अपनी किताबें',
+      );
+      await input.focus();
+      await page.keyboard.insertText('सुबह अपनी किताबें');
+      await expect(summary).toContainText('Passage complete');
+      await expect(summary).toContainText('Skipped words: 1');
+      await expect(summary).toContainText('100%');
+    },
+  );
 
   const plain = await browser.newContext({ javaScriptEnabled: false });
   try {

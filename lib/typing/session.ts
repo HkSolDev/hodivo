@@ -111,7 +111,7 @@ export function createTypingSession(
       ...counts,
       finishedReason,
       ...(comparison ? { comparison } : {}),
-      score: computeSessionScore(counts, elapsedMs),
+      score: computeSessionScore(counts, elapsedMs, comparison?.words),
     };
   }
 

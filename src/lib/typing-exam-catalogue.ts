@@ -1,9 +1,10 @@
-import {
-  HINDI_EXAM_LETTER,
-  HINDI_EXAM_TEXT,
-} from '../../lib/typing/exam-contract.js';
 import { createHash } from 'node:crypto';
 import { prismaRead } from '../db.js';
+import {
+  isLocalHindiEnabled,
+  localHindiPassage,
+  localHindiVersion,
+} from './typing-local-hindi.js';
 import { getPracticePassage } from './typing-catalogue.js';
 import {
   Prisma,
@@ -191,9 +192,7 @@ function eligiblePassageWhere(
     ? Prisma.sql`AND p."id" = ${passageId}`
     : Prisma.empty;
   const eligibility = localHindi
-    ? Prisma.sql`p."status" = 'DRAFT' AND p."sourceKind" = 'PRACTICE'
-      AND p."text" COLLATE "C" ~ ${HINDI_EXAM_TEXT.source.replaceAll('\\t', '\t').replaceAll('\\n', '\n')}
-      AND p."text" COLLATE "C" ~ ${HINDI_EXAM_LETTER.source}`
+    ? localHindiPassage
     : Prisma.sql`p."status" = 'PUBLISHED'
       AND p."reviewedAt" IS NOT NULL AND p."publishedAt" IS NOT NULL
       AND p."text" ~ ${compatible} AND p."text" ~ '[!-~]'`;
@@ -228,19 +227,8 @@ export function createExamCatalogue(
   database: PrismaClient = prismaRead,
 ): ExamCatalogue {
   const versionVisibility: Prisma.TypingExamVersionWhereInput =
-    process.env.NODE_ENV === 'development' &&
-    process.env.APTUS_LOCAL_HINDI_EXAM === '1'
-      ? {
-          OR: [
-            visibleVersion,
-            {
-              status: 'DRAFT',
-              language: 'hi',
-              versionKey: 'ssc-hindi-30wpm-2026-v1',
-              exam: { slug: 'ssc-hindi-typing-master' },
-            },
-          ],
-        }
+    isLocalHindiEnabled()
+      ? { OR: [visibleVersion, localHindiVersion] }
       : visibleVersion;
   function read<T>(
     versionId: string,

@@ -42,16 +42,18 @@ export function evaluateHindi(
   text: string,
   finished: boolean,
 ): Evaluation {
-  const words = targetText.normalize('NFC').split(' ');
-  const typedWords = text.normalize('NFC').trimStart().split(/ +/);
+  const words = targetText.normalize('NFC').trim().split(/\s+/);
+  const typedWords = text.normalize('NFC').trimStart().split(/\s+/);
   const chars: Evaluation['chars'] = [];
   let correct = 0;
   let incorrect = 0;
   let targetIndex = 0;
+  const wordCounts = { typed: 0, correct: 0, skipped: 0 };
   let done = false;
 
   for (let index = 0; index < typedWords.length; index++) {
     const typed = typedWords[index]!;
+    if (typed) wordCounts.typed++;
     const hasSpace = index < typedWords.length - 1;
     const expected = words[targetIndex];
     if (expected === undefined) {
@@ -71,9 +73,11 @@ export function evaluateHindi(
       for (const ch of hindiGroups(expected + ' ')) {
         chars.push({ ch, state: 'incorrect' });
       }
+      wordCounts.skipped++;
       targetIndex++;
     }
 
+    if (typed === words[targetIndex]) wordCounts.correct++;
     const word = hindiGroups(words[targetIndex]!);
     const {
       groups,
@@ -127,5 +131,6 @@ export function evaluateHindi(
     correct,
     incorrect,
     done,
+    words: wordCounts,
   };
 }

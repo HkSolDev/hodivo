@@ -31,8 +31,8 @@ test('Hindi uses the shared session deadline and scores completed groups', () =>
   assert.equal(session.snapshot().insertedAttempts, 0);
   now = 1_000;
   session.applyEdit('कि');
-  assert.equal(session.snapshot().score.netWpm, 12);
-  assert.equal(session.snapshot().score.grossWpm, 12);
+  assert.equal(session.snapshot().score.netWpm, 60);
+  assert.equal(session.snapshot().score.grossWpm, 60);
   session.applyEdit('कि क');
   now = 2_000;
   const result = session.tick();
@@ -83,9 +83,37 @@ test('Hindi practice finishes after the final word even with earlier mistakes', 
 test('Hindi practice ignores repeated spaces and scores only entered groups', () => {
   const target = 'सुबह मैं अपनी कि';
   const singleSpace = evaluateHindi(target, 'सुबह मैं अपनी कि', false);
-  assert.deepEqual(evaluateHindi(target, 'सुबह  मैं अपनी कि', false), singleSpace);
+  assert.deepEqual(
+    evaluateHindi(target, 'सुबह  मैं अपनी कि', false),
+    singleSpace,
+  );
   const skipped = evaluateHindi(target, 'सुबह अपनी कि', false);
   assert.equal(skipped.incorrect, 0);
   assert.equal(skipped.correct, hindiGroups('सुबह अपनी कि').length);
-  assert.equal(skipped.chars.find(({ ch }) => ch === 'मैं')?.state, 'incorrect');
+  assert.equal(
+    skipped.chars.find(({ ch }) => ch === 'मैं')?.state,
+    'incorrect',
+  );
+});
+
+test('Hindi speed uses words and skips are reported separately from accuracy', () => {
+  let now = 0;
+  const target = 'सुबह मैं अपनी किताबें';
+  const session = createTypingSession(
+    { target, durationMs: 120_000, compareText: evaluateHindi },
+    () => now,
+  );
+  session.applyEdit('सुबह');
+  now = 60_000;
+  session.applyEdit('सुबह अपनी  किताबें');
+  const result = session.snapshot();
+  assert.equal(result.finishedReason, 'target');
+  assert.equal(result.score.grossWpm, 3);
+  assert.equal(result.score.netWpm, 3);
+  assert.equal(result.score.accuracy, 100);
+  assert.deepEqual(result.comparison?.words, {
+    typed: 3,
+    correct: 3,
+    skipped: 1,
+  });
 });
