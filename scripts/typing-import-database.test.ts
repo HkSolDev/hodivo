@@ -169,6 +169,39 @@ test(
       (await app.inject(`${practiceBase}/${passages[0].id}`)).statusCode,
       404,
     );
+    process.env = {
+      ...oldEnv,
+      NODE_ENV: 'production',
+      APTUS_LOCAL_HINDI_EXAM: '1',
+    };
+    const publishedAt = new Date();
+    const publication = {
+      status: 'PUBLISHED',
+      reviewedAt: publishedAt,
+      publishedAt,
+    } as const;
+    await database.typingExamVersion.update({
+      where: { id: stored.id },
+      data: publication,
+    });
+    await database.typingPassage.updateMany({
+      where: { examVersionId: stored.id },
+      data: publication,
+    });
+    const published = await app.inject(practiceBase);
+    assert.equal(published.statusCode, 200, published.body);
+    assert.equal(published.json().passages.length, 3);
+    const publicPassage = await app.inject(`${practiceBase}/${passages[0].id}`);
+    assert.equal(publicPassage.statusCode, 200, publicPassage.body);
+    assert.equal(publicPassage.json().passage.language, 'hi');
+    assert.equal(
+      (await app.inject('/api/typing/practice-passage')).json().passage,
+      null,
+    );
+    assert.deepEqual(
+      (await createExamCatalogue(database).listExams(20)).items,
+      [],
+    );
   },
 );
 

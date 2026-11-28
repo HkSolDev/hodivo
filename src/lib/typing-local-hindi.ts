@@ -18,8 +18,10 @@ export function isLocalHindiEnabled(): boolean {
   );
 }
 
-export const localHindiPassage = Prisma.sql`
-  p."status" = 'DRAFT' AND p."sourceKind" = 'PRACTICE'
+export const hindiPracticeText = Prisma.sql`
+  p."sourceKind" = 'PRACTICE'
   AND p."text" COLLATE "C" ~ ${HINDI_EXAM_TEXT.source.replaceAll('\\t', '\t').replaceAll('\\n', '\n')}
   AND p."text" COLLATE "C" ~ ${HINDI_EXAM_LETTER.source}
 `;
+
+export const localHindiPassage = Prisma.sql`p."status" = 'DRAFT' AND ${hindiPracticeText}`;

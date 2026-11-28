@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { loadPracticeCatalogue } from '../../lib/typing/practice-api';
+
+import styles from './practice-catalogue.module.css';
 
 type Catalogue = Awaited<ReturnType<typeof loadPracticeCatalogue>>;
 
@@ -12,6 +14,7 @@ export function PracticeCatalogue({
   buttonClass: string;
   onSelectHindi: () => void;
 }) {
+  const titleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<{ cursor?: string }>({});
@@ -53,59 +56,92 @@ export function PracticeCatalogue({
       </button>
       <dialog
         ref={dialog}
-        aria-label="Browse passages"
+        className={styles.dialog}
+        aria-labelledby={titleId}
         onClose={() => setOpen(false)}
       >
-        <form method="dialog">
-          <button type="submit">Close</button>
-        </form>
-        {process.env.NODE_ENV === 'development' && (
-          <p>
-            <button
-              type="button"
-              lang="hi"
-              onClick={() => {
-                dialog.current?.close();
-                onSelectHindi();
-              }}
-            >
-              हिन्दी अभ्यास
-            </button>
-          </p>
-        )}
-        {failed ? (
-          <button type="button" onClick={() => goTo(page.cursor)}>
-            Retry catalogue
-          </button>
-        ) : catalogue ? (
-          <>
-            {catalogue.passages.length === 0 && <p>No passages available.</p>}
-            <ul>
-              {catalogue.passages.map(({ id, title }) => (
-                <li key={id}>
-                  <a href={`/typing?passage=${encodeURIComponent(id)}`}>
-                    {title}
-                  </a>
-                </li>
-              ))}
-            </ul>
-            {page.cursor && (
-              <button type="button" onClick={() => goTo()}>
-                First page
+        <div className={styles.panel}>
+          <header className={styles.header}>
+            <h2 id={titleId}>Browse passages</h2>
+            <form method="dialog">
+              <button className={styles.control} type="submit">
+                Close
               </button>
-            )}
-            {catalogue.nextCursor && (
+            </form>
+          </header>
+          <div className={styles.body}>
+            {process.env.NODE_ENV === 'development' && (
               <button
+                className={styles.row}
                 type="button"
-                onClick={() => goTo(catalogue.nextCursor ?? undefined)}
+                lang="hi"
+                onClick={() => {
+                  dialog.current?.close();
+                  onSelectHindi();
+                }}
               >
-                More passages
+                हिन्दी अभ्यास
+                <span className={styles.chevron} aria-hidden="true">
+                  ›
+                </span>
               </button>
             )}
-          </>
-        ) : (
-          <p role="status">Loading catalogue…</p>
-        )}
+            {failed ? (
+              <div className={styles.status}>
+                <p role="status">Passages unavailable.</p>
+                <button
+                  className={styles.control}
+                  type="button"
+                  onClick={() => goTo(page.cursor)}
+                >
+                  Retry catalogue
+                </button>
+              </div>
+            ) : catalogue?.passages.length ? (
+              <ul className={styles.list}>
+                {catalogue.passages.map(({ id, title }) => (
+                  <li key={id}>
+                    <a
+                      className={styles.row}
+                      href={`/typing?passage=${encodeURIComponent(id)}`}
+                    >
+                      {title}
+                      <span className={styles.chevron} aria-hidden="true">
+                        ›
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.status} role="status">
+                {catalogue ? 'No passages available.' : 'Loading catalogue…'}
+              </p>
+            )}
+          </div>
+          {catalogue && (page.cursor || catalogue.nextCursor) && (
+            <footer className={styles.footer}>
+              {page.cursor && (
+                <button
+                  className={styles.control}
+                  type="button"
+                  onClick={() => goTo()}
+                >
+                  First page
+                </button>
+              )}
+              {catalogue.nextCursor && (
+                <button
+                  className={styles.control}
+                  type="button"
+                  onClick={() => goTo(catalogue.nextCursor ?? undefined)}
+                >
+                  More passages
+                </button>
+              )}
+            </footer>
+          )}
+        </div>
       </dialog>
     </>
   );

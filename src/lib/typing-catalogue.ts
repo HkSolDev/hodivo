@@ -2,7 +2,7 @@ import { prismaRead } from '../db.js';
 import { Prisma, type PrismaClient } from '../../generated/prisma/index.js';
 import {
   isLocalHindiEnabled,
-  localHindiPassage,
+  hindiPracticeText,
   localHindiVersion,
 } from './typing-local-hindi.js';
 import { readTypingCache } from './typing-passage-cache.js';
@@ -23,16 +23,32 @@ const english = Prisma.sql`
   AND p."text" ~ ${'^[\t\n -~]+$'} AND p."text" ~ '[!-~]'
 `;
 
-function eligible(includeHindi: boolean) {
-  const hindi = includeHindi
-    ? Prisma.sql`OR (${localHindiPassage}
-        AND v."status" = 'DRAFT' AND v."language" = 'hi'
-        AND v."versionKey" = ${localHindiVersion.versionKey}
-        AND EXISTS (SELECT 1 FROM "TypingExam" e
-          WHERE e."id" = v."examId" AND e."slug" = ${localHindiVersion.exam.slug})
-        AND char_length(p."text") BETWEEN 1 AND 50000
-        AND p."contentHash" = encode(sha256(convert_to(p."text", 'UTF8')), 'hex'))`
-    : Prisma.empty;
+type PracticeScope = 'english' | 'published' | 'local';
+
+function catalogueScope(): PracticeScope {
+  return isLocalHindiEnabled() ? 'local' : 'published';
+}
+
+function eligible(scope: PracticeScope) {
+  const published = Prisma.sql`p."status" = 'PUBLISHED' AND v."status" = 'PUBLISHED'
+    AND p."reviewedAt" IS NOT NULL AND p."publishedAt" IS NOT NULL
+    AND v."reviewedAt" IS NOT NULL AND v."publishedAt" IS NOT NULL`;
+  const visibility =
+    scope === 'local'
+      ? Prisma.sql`(${published}) OR (p."status" = 'DRAFT' AND v."status" = 'DRAFT')`
+      : published;
+  const hindi =
+    scope === 'english'
+      ? Prisma.empty
+      : Prisma.sql`OR (
+    (${visibility}) AND ${hindiPracticeText}
+    AND v."language" = 'hi'
+    AND v."versionKey" = ${localHindiVersion.versionKey}
+    AND EXISTS (SELECT 1 FROM "TypingExam" e
+      WHERE e."id" = v."examId" AND e."slug" = ${localHindiVersion.exam.slug})
+    AND char_length(p."text") BETWEEN 1 AND 50000
+    AND p."contentHash" = encode(sha256(convert_to(p."text", 'UTF8')), 'hex')
+  )`;
   return Prisma.sql`
     FROM "TypingPassage" p
     JOIN "TypingExamVersion" v ON v."id" = p."examVersionId"
@@ -45,13 +61,13 @@ export function listPracticePassages(
   cursor?: string,
   database: Database = prismaRead,
 ) {
-  const includeHindi = isLocalHindiEnabled();
+  const scope = catalogueScope();
   return readTypingCache(
     database,
-    `catalogue:${includeHindi ? 'local:' : ''}${limit}:${cursor ?? ''}`,
+    `catalogue:${scope === 'local' ? 'local:' : ''}${limit}:${cursor ?? ''}`,
     async () => {
       const rows = await database.$queryRaw<PassageSummary[]>`
-      SELECT p."id", p."title" ${eligible(includeHindi)}
+      SELECT p."id", p."title" ${eligible(scope)}
       AND p."id" > ${cursor ?? ''}
       ORDER BY p."id" LIMIT ${limit + 1}
     `;
@@ -67,18 +83,18 @@ export function getPracticePassage(
   id: string,
   database: Database = prismaRead,
 ) {
-  return getPassageById(id, database, isLocalHindiEnabled());
+  return getPassageById(id, database, catalogueScope());
 }
 
-function getPassageById(id: string, database: Database, includeHindi: boolean) {
+function getPassageById(id: string, database: Database, scope: PracticeScope) {
   return readTypingCache(
     database,
-    `text:${includeHindi ? 'local:' : ''}${id}`,
+    `text:${scope === 'local' ? 'local:' : scope === 'english' ? 'english:' : ''}${id}`,
     async () => {
       const rows = await database.$queryRaw<PracticePassage[]>`
       SELECT p."id", p."title", p."text"
-        ${includeHindi ? Prisma.sql`, NULLIF(v."language", 'en') AS "language"` : Prisma.empty}
-      ${eligible(includeHindi)} AND p."id" = ${id}
+        ${scope !== 'english' ? Prisma.sql`, NULLIF(v."language", 'en') AS "language"` : Prisma.empty}
+      ${eligible(scope)} AND p."id" = ${id}
     `;
       const row = rows[0];
       if (!row) return null;
@@ -94,12 +110,12 @@ export async function getRandomPracticePassage(
   database: Database = prismaRead,
 ): Promise<PracticePassage | null> {
   const rows = await database.$queryRaw<{ id: string }[]>`
-    SELECT p."id" ${eligible(false)}
+    SELECT p."id" ${eligible('english')}
     ORDER BY (p."id" = ${database === prismaRead ? lastPickedId : null}), random()
     LIMIT 1
   `;
   const picked = rows[0];
   if (!picked) return null;
   if (database === prismaRead) lastPickedId = picked.id;
-  return getPassageById(picked.id, database, false);
+  return getPassageById(picked.id, database, 'english');
 }
