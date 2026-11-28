@@ -103,9 +103,13 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
         }
         if (req.url === '/api/typing/exam-versions/version3/passages') {
           const { id, title, sourceKind } = hindi.passage;
-          res.end(JSON.stringify({
-            passages: [{ id, title, sourceKind, examYear: null, shift: null }],
-          }));
+          res.end(
+            JSON.stringify({
+              passages: [
+                { id, title, sourceKind, examYear: null, shift: null },
+              ],
+            }),
+          );
           return;
         }
         const result =
