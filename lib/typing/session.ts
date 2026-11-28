@@ -4,7 +4,7 @@
 // browser component and tests share one implementation.
 import { createClock, type TimeSource, type TypingClock } from './clock';
 import { isSupportedTypingText } from './custom-input';
-import { evaluate } from './evaluate';
+import { evaluate, type Evaluation } from './evaluate';
 import { computeSessionScore, type SessionScore } from './scoring';
 
 export type SessionStatus = 'idle' | 'running' | 'paused' | 'finished';
@@ -31,6 +31,7 @@ export interface SessionSnapshot {
   incorrectAttempts: number;
   finishedReason: FinishedReason | null;
   score: SessionScore;
+  comparison?: Evaluation;
 }
 
 export interface EditResult {
@@ -52,6 +53,11 @@ export interface TypingSession {
 export interface TypingSessionSettings {
   target: string;
   durationMs: number;
+  compareText?: (
+    target: string,
+    typed: string,
+    finished: boolean,
+  ) => Evaluation;
 }
 
 const defaultNow: TimeSource = () => performance.now();
@@ -60,6 +66,7 @@ export function createTypingSession(
   settings: TypingSessionSettings,
   now: TimeSource = defaultNow,
 ): TypingSession {
+  const compareText = settings.compareText;
   let target = settings.target;
   let durationMs = settings.durationMs;
   let clock: TypingClock = createClock(now);
@@ -85,7 +92,14 @@ export function createTypingSession(
 
   function snapshot(): SessionSnapshot {
     const elapsedMs = activeElapsedMs();
-    const counts = { insertedAttempts, correctAttempts, incorrectAttempts };
+    const comparison = compareText?.(target, typedText, status === 'finished');
+    const counts = comparison
+      ? {
+          insertedAttempts: comparison.correct + comparison.incorrect,
+          correctAttempts: comparison.correct,
+          incorrectAttempts: comparison.incorrect,
+        }
+      : { insertedAttempts, correctAttempts, incorrectAttempts };
     return {
       status,
       target,
@@ -96,6 +110,7 @@ export function createTypingSession(
         elapsedMs === null ? durationMs : Math.max(0, durationMs - elapsedMs),
       ...counts,
       finishedReason,
+      ...(comparison ? { comparison } : {}),
       score: computeSessionScore(counts, elapsedMs),
     };
   }
@@ -150,7 +165,7 @@ export function createTypingSession(
     }
 
     // Unsupported characters are blocked visibly and never scored.
-    if (!isSupportedTypingText(insertedText)) {
+    if (!compareText && !isSupportedTypingText(insertedText)) {
       return {
         accepted: false,
         rejection: 'unsupported',
@@ -168,7 +183,7 @@ export function createTypingSession(
     // Correctness is judged against the word-aligned target position at
     // insertion time, so corrected mistakes stay in the attempt history
     // without shifting subsequent words after a missing or extra letter.
-    for (let index = 0; index < insertedText.length; index++) {
+    for (let index = 0; !compareText && index < insertedText.length; index++) {
       const position = insertStart + index;
       if (insertedText[index] === expectedCharAt(target, nextText, position)) {
         correctAttempts++;
@@ -180,7 +195,13 @@ export function createTypingSession(
     typedText = nextText;
 
     let finished = false;
-    if (target.length > 0 && evaluate(target, nextText).done) {
+    if (
+      target.length > 0 &&
+      (compareText
+        ? compareText(target, nextText, false)
+        : evaluate(target, nextText)
+      ).done
+    ) {
       finish('target');
       finished = true;
     }

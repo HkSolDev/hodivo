@@ -24,7 +24,7 @@ export interface TypingExamInput {
 export interface TypingVersionInput {
   versionKey: string;
   label: string;
-  language: 'en';
+  language: 'en' | 'hi';
   examYear: number | null;
   durationSeconds: number | null;
   backspacePolicy: BackspacePolicy | null;
@@ -202,9 +202,9 @@ function parseEditingPolicy(value: unknown): 'native-correction-v1' | null {
   return fail('Unsupported version editingPolicy');
 }
 
-function requireEnglish(value: unknown): 'en' {
-  if (value !== 'en') fail('Only the language "en" is accepted');
-  return 'en';
+function requireLanguage(value: unknown): TypingVersionInput['language'] {
+  if (value !== 'en' && value !== 'hi') fail('Language must be "en" or "hi"');
+  return value;
 }
 
 function requireSourceKind(value: unknown): SourceKind {
@@ -278,7 +278,7 @@ function parseVersion(value: unknown): TypingVersionInput {
       64,
     ),
     label: requiredText(version.label, 'version label', 200),
-    language: requireEnglish(version.language),
+    language: requireLanguage(version.language),
     examYear: optionalInteger(version.examYear, 'version examYear', 1900, 2100),
     durationSeconds: optionalInteger(
       version.durationSeconds,

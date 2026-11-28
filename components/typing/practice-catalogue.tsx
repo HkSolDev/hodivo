@@ -5,7 +5,13 @@ import { loadPracticeCatalogue } from '../../lib/typing/practice-api';
 
 type Catalogue = Awaited<ReturnType<typeof loadPracticeCatalogue>>;
 
-export function PracticeCatalogue({ buttonClass }: { buttonClass: string }) {
+export function PracticeCatalogue({
+  buttonClass,
+  onSelectHindi,
+}: {
+  buttonClass: string;
+  onSelectHindi: () => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<{ cursor?: string }>({});
@@ -53,6 +59,20 @@ export function PracticeCatalogue({ buttonClass }: { buttonClass: string }) {
         <form method="dialog">
           <button type="submit">Close</button>
         </form>
+        {process.env.NODE_ENV === 'development' && (
+          <p>
+            <button
+              type="button"
+              lang="hi"
+              onClick={() => {
+                dialog.current?.close();
+                onSelectHindi();
+              }}
+            >
+              हिन्दी अभ्यास
+            </button>
+          </p>
+        )}
         {failed ? (
           <button type="button" onClick={() => goTo(page.cursor)}>
             Retry catalogue

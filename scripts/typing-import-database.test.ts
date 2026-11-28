@@ -4,6 +4,9 @@ import { readFile, readdir } from 'node:fs/promises';
 import type { TestContext } from 'node:test';
 import { test } from 'node:test';
 import pg from 'pg';
+import Fastify from 'fastify';
+import { createExamCatalogue } from '../src/lib/typing-exam-catalogue.js';
+import { registerTypingExamRoutes } from '../src/routes/typing-exams.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/index.js';
 import {
@@ -65,6 +68,70 @@ function fixtureInput() {
 
 const canonicalFirst = 'The quick brown fox.\nJumps  over\tthe lazy dog.  ';
 
+test(
+  'Hindi draft preset round-trips through the local exam API',
+  { skip: !connection },
+  async (t) => {
+    const { database } = await typingDatabase(t, connection!);
+    const input = JSON.parse(
+      await readFile(
+        new URL(
+          '../content/typing/ssc-hindi-local.draft.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    const preview = await importTypingContent(input, database);
+    assert.deepEqual(
+      preview.passages.map(({ outcome }) => outcome),
+      ['create', 'create', 'create'],
+    );
+    assert.equal(await database.typingExamVersion.count(), 0);
+    await importTypingContent(input, database, { apply: true });
+    const stored = await database.typingExamVersion.findFirstOrThrow();
+    assert.equal(stored.status, 'DRAFT');
+    for (const [key, value] of Object.entries(input.version)) {
+      assert.equal(stored[key as keyof typeof stored], value);
+    }
+    const hidden = createExamCatalogue(database);
+    assert.deepEqual((await hidden.listExams(20)).items, []);
+    const oldEnv = process.env;
+    process.env = {
+      ...oldEnv,
+      NODE_ENV: 'development',
+      APTUS_LOCAL_HINDI_EXAM: '1',
+    };
+    const catalogue = createExamCatalogue(database);
+    process.env = oldEnv;
+    const app = Fastify();
+    t.after(() => app.close());
+    registerTypingExamRoutes(app, catalogue);
+    const exams = await app.inject('/api/typing/exams');
+    assert.equal(exams.statusCode, 200);
+    assert.equal(exams.json().exams[0].slug, input.exam.slug);
+    const base = `/api/typing/exam-versions/${stored.id}`;
+    const response = await app.inject(`${base}/passages`);
+    assert.equal(response.statusCode, 200);
+    const { passages } = response.json();
+    assert.equal(passages.length, 3);
+    for (const passage of passages) {
+      const start = await app.inject(`${base}/passage?passageId=${passage.id}`);
+      assert.equal(start.statusCode, 200, start.body);
+      const { snapshot } = start.json();
+      assert.equal(snapshot.version.language, 'hi');
+      assert.equal(snapshot.version.rules.durationSeconds, 600);
+      assert.equal(snapshot.version.readiness.scoringAvailable, false);
+      assert.equal(
+        snapshot.passage.text,
+        input.passages.find(
+          (item: { title: string }) => item.title === passage.title,
+        ).text,
+      );
+    }
+  },
+);
+
 // Local random-schema fixture shaped like scripts/helpers/auth-database.ts,
 // but returning the schema name and a second client for concurrency tests.
 async function typingDatabase(t: TestContext, connectionString: string) {
@@ -76,9 +143,14 @@ async function typingDatabase(t: TestContext, connectionString: string) {
   const schema = `typing_import_test_${randomUUID().replaceAll('-', '')}`;
   await client.query(`CREATE SCHEMA "${schema}"`);
   await client.query(`SET search_path TO "${schema}"`);
+  const scopedConnection = new URL(connectionString);
+  scopedConnection.searchParams.set('options', `-c search_path=${schema}`);
   const makeClient = () =>
     new PrismaClient({
-      adapter: new PrismaPg({ connectionString }, { schema }),
+      adapter: new PrismaPg(
+        { connectionString: scopedConnection.toString() },
+        { schema },
+      ),
     });
   const database = makeClient();
   const concurrent = makeClient();

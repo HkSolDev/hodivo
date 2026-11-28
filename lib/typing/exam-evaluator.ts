@@ -150,7 +150,9 @@ export function resolveExamEvaluationProfile(
   };
 }
 
-function stripPunctuation(word: string): string {
+function stripPunctuation(word: string, isHindi: boolean): string {
+  if (isHindi)
+    return word.replace(/^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu, '');
   return word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 }
 
@@ -162,6 +164,7 @@ function tokenizeWords(text: string): string[] {
 function classifyWordMismatch(
   masterWord: string,
   typedWord: string,
+  isHindi: boolean,
 ): { weight: 0 | 0.5 | 1; kind: ExamMistakeKind } {
   if (masterWord === typedWord) return { weight: 0, kind: 'match' };
 
@@ -169,8 +172,8 @@ function classifyWordMismatch(
     return { weight: 0.5, kind: 'case' };
   }
 
-  const masterCore = stripPunctuation(masterWord);
-  const typedCore = stripPunctuation(typedWord);
+  const masterCore = stripPunctuation(masterWord, isHindi);
+  const typedCore = stripPunctuation(typedWord, isHindi);
   if (
     masterCore.length > 0 &&
     masterCore.toLowerCase() === typedCore.toLowerCase()
@@ -188,20 +191,23 @@ function findOmissionJump(
   tWords: readonly string[],
   i: number,
   j: number,
+  isHindi: boolean,
 ): number {
   const tw = tWords[j]!;
   if (
     i + 1 < mWords.length &&
-    classifyWordMismatch(mWords[i + 1]!, tw).weight === 0
+    classifyWordMismatch(mWords[i + 1]!, tw, isHindi).weight === 0
   ) {
     return 1;
   }
   const maxOffset = Math.min(MAX_ALIGNMENT_LOOKAHEAD, mWords.length - 1 - i);
   for (let offset = 2; offset <= maxOffset; offset++) {
-    if (classifyWordMismatch(mWords[i + offset]!, tw).weight !== 0) continue;
+    if (classifyWordMismatch(mWords[i + offset]!, tw, isHindi).weight !== 0)
+      continue;
     if (i + offset + 1 < mWords.length && j + 1 < tWords.length) {
       if (
-        classifyWordMismatch(mWords[i + offset + 1]!, tWords[j + 1]!).weight < 1
+        classifyWordMismatch(mWords[i + offset + 1]!, tWords[j + 1]!, isHindi)
+          .weight < 1
       ) {
         return offset;
       }
@@ -221,20 +227,23 @@ function findAdditionJump(
   tWords: readonly string[],
   i: number,
   j: number,
+  isHindi: boolean,
 ): number {
   const mw = mWords[i]!;
   if (
     j + 1 < tWords.length &&
-    classifyWordMismatch(mw, tWords[j + 1]!).weight === 0
+    classifyWordMismatch(mw, tWords[j + 1]!, isHindi).weight === 0
   ) {
     return 1;
   }
   const maxOffset = Math.min(MAX_ALIGNMENT_LOOKAHEAD, tWords.length - 1 - j);
   for (let offset = 2; offset <= maxOffset; offset++) {
-    if (classifyWordMismatch(mw, tWords[j + offset]!).weight !== 0) continue;
+    if (classifyWordMismatch(mw, tWords[j + offset]!, isHindi).weight !== 0)
+      continue;
     if (i + 1 < mWords.length && j + offset + 1 < tWords.length) {
       if (
-        classifyWordMismatch(mWords[i + 1]!, tWords[j + offset + 1]!).weight < 1
+        classifyWordMismatch(mWords[i + 1]!, tWords[j + offset + 1]!, isHindi)
+          .weight < 1
       ) {
         return offset;
       }
@@ -261,6 +270,7 @@ export function evaluateExamAttempt(params: {
   examSlug?: string | null;
   examName?: string | null;
   rules?: ExamRules | null;
+  language?: 'en' | 'hi';
 }): ExamEvaluationResult {
   const { masterText, typedText, elapsedSeconds, examSlug, examName, rules } =
     params;
@@ -270,8 +280,13 @@ export function evaluateExamAttempt(params: {
   const strokesPerWord = profile.strokesPerWord;
   const halfWeight: 0.5 | 1 = profile.halfMistakeWeight === 1 ? 1 : 0.5;
 
-  const masterWords = tokenizeWords(masterText);
-  const typedWords = tokenizeWords(typedText);
+  const isHindi = params.language === 'hi';
+  const masterWords = tokenizeWords(
+    isHindi ? masterText.normalize('NFC') : masterText,
+  );
+  const typedWords = tokenizeWords(
+    isHindi ? typedText.normalize('NFC') : typedText,
+  );
   const typedLen = typedText.length;
 
   // Official SSC / TCS iON full-passage evaluation: compare against the entire
@@ -319,7 +334,7 @@ export function evaluateExamAttempt(params: {
 
     const mw = mWords[i]!;
     const tw = tWords[j]!;
-    const direct = classifyWordMismatch(mw, tw);
+    const direct = classifyWordMismatch(mw, tw, isHindi);
 
     if (direct.weight === 0) {
       reviewItems.push({
@@ -370,8 +385,8 @@ export function evaluateExamAttempt(params: {
     }
 
     // Check multi-word or 1-word omission vs addition (resyncs cleanly even if candidate skipped a phrase/line)
-    const omitOffset = findOmissionJump(mWords, tWords, i, j);
-    const addOffset = findAdditionJump(mWords, tWords, i, j);
+    const omitOffset = findOmissionJump(mWords, tWords, i, j, isHindi);
+    const addOffset = findAdditionJump(mWords, tWords, i, j, isHindi);
 
     if (omitOffset > 0 && (addOffset === 0 || omitOffset <= addOffset)) {
       for (let k = 0; k < omitOffset; k++) {
@@ -456,12 +471,12 @@ export function evaluateExamAttempt(params: {
       : Math.min(100, Math.round((typedLen / masterText.length) * 100));
 
   const elapsedMins = Math.max(elapsedSeconds / 60, 1 / 60);
-  const grossWpm =
-    typedLen > 0 ? Math.round(typedLen / strokesPerWord / elapsedMins) : 0;
+  const speedWords = isHindi ? tWords.length : typedLen / strokesPerWord;
+  const grossWpm = Math.round(speedWords / elapsedMins);
 
   let netWpm = 0;
   if (typedLen > 0) {
-    if (rules?.scoringMethod === 'rrb-10x-v1') {
+    if (!isHindi && rules?.scoringMethod === 'rrb-10x-v1') {
       const typedWordsByStrokes = typedLen / strokesPerWord;
       const ignoredMistakes = typedWordsByStrokes * 0.05;
       const penalizedMistakes = Math.max(
@@ -478,9 +493,7 @@ export function evaluateExamAttempt(params: {
       // Net WPM reflects the speed of words actually typed, deducting only typed mistakes
       netWpm = Math.max(
         0,
-        Math.round(
-          (typedLen / strokesPerWord - typedEquivalentMistakes) / elapsedMins,
-        ),
+        Math.round((speedWords - typedEquivalentMistakes) / elapsedMins),
       );
     }
   }
@@ -496,12 +509,13 @@ export function evaluateExamAttempt(params: {
   const meetsSpeedTarget =
     netWpm >= targetWpm && typedLen > 0 && meetsKeystrokeTarget;
 
-  const categoryResults: CategoryQualificationResult[] =
-    profile.categoryCutoffs.map((c) => ({
-      category: c.category,
-      maxErrorPercent: c.maxErrorPercent,
-      qualified: meetsSpeedTarget && errorPercent <= c.maxErrorPercent,
-    }));
+  const categoryResults: CategoryQualificationResult[] = (
+    isHindi ? [] : profile.categoryCutoffs
+  ).map((c) => ({
+    category: c.category,
+    maxErrorPercent: c.maxErrorPercent,
+    qualified: meetsSpeedTarget && errorPercent <= c.maxErrorPercent,
+  }));
 
   const urQualified = categoryResults[0]?.qualified ?? false;
   const anyQualified = categoryResults.some((c) => c.qualified);
@@ -561,11 +575,15 @@ export function evaluateExamAttempt(params: {
     evaluatedWordCount: mWords.length,
     typedWordCount: tWords.length,
     completionPercent,
-    meetsSpeedTarget,
-    meetsKeystrokeTarget,
+    meetsSpeedTarget: isHindi
+      ? netWpm >= targetWpm && tWords.length > 0
+      : meetsSpeedTarget,
+    meetsKeystrokeTarget: isHindi ? false : meetsKeystrokeTarget,
     overallStatus,
-    statusLabel,
-    statusDetail,
+    statusLabel: isHindi ? 'Local Hindi test result' : statusLabel,
+    statusDetail: isHindi
+      ? `Word-based estimate · ${netWpm >= targetWpm && tWords.length > 0 ? 'speed target met' : 'below speed target'}${rules?.maxErrorPercent == null ? '' : errorPercent <= rules.maxErrorPercent ? ' · within test error limit' : ' · above test error limit'}. Keystrokes are a reference value.`
+      : statusDetail,
     categoryResults,
     reviewItems,
   };

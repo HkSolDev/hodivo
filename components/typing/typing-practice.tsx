@@ -43,10 +43,11 @@ const DEFAULT_CUSTOM_DURATION_MINUTES = 15;
 const MIN_CUSTOM_DURATION_MINUTES = 1;
 const MAX_CUSTOM_DURATION_MINUTES = 60;
 const TICK_MS = 100;
+const LOCAL_HINDI_PASSAGE = 'local-hindi-pilot';
 const LIVE_STATS_MIN_ELAPSED_MS = 1000;
 type PassageState =
   | { status: 'loading' }
-  | { status: 'ready'; passage: PracticePassage }
+  | { status: 'ready'; passage: PracticePassage; charCount?: number }
   | { status: 'empty' }
   | { status: 'error' };
 
@@ -455,8 +456,24 @@ export function TypingPractice() {
     restartSession({ target: '' });
     setPassageState({ status: 'loading' });
     const cleanId = requestedPassageId?.trim() || undefined;
-    void loadPracticePassage(request.controller.signal, cleanId)
-      .then((passage) => {
+    const passageRequest =
+      process.env.NODE_ENV === 'development' && cleanId === LOCAL_HINDI_PASSAGE
+        ? import('@/lib/typing/hindi-practice').then(
+            ({ hindiPassage, evaluateHindi, hindiGroups }) => ({
+              passage: hindiPassage,
+              compareText: evaluateHindi,
+              charCount: hindiGroups(hindiPassage.text).length,
+            }),
+          )
+        : loadPracticePassage(request.controller.signal, cleanId).then(
+            (passage) => ({
+              passage,
+              compareText: undefined,
+              charCount: undefined,
+            }),
+          );
+    void passageRequest
+      .then(({ passage, compareText, charCount }) => {
         if (
           request.controller.signal.aborted ||
           requestRef.current?.id !== request.id
@@ -466,9 +483,16 @@ export function TypingPractice() {
           setPassageState({ status: 'empty' });
           return;
         }
+        if (compareText || engineRef.current?.snapshot().comparison) {
+          engineRef.current = createTypingSession({
+            target: '',
+            durationMs: durationSeconds * 1000,
+            compareText,
+          });
+        }
         restartSession({ target: passage.text });
-        setPassageState({ status: 'ready', passage });
-        if (accountId) {
+        setPassageState({ status: 'ready', passage, charCount });
+        if (accountId && !compareText) {
           void fetchPassageSummary(passage.id, request.controller.signal).then(
             (summary) => {
               if (!request.controller.signal.aborted && summary) {
@@ -505,7 +529,12 @@ export function TypingPractice() {
   }, [passageState]);
 
   useEffect(() => {
-    if (!accountId || passageState.status !== 'ready') return;
+    if (
+      !accountId ||
+      passageState.status !== 'ready' ||
+      passageState.passage.id === LOCAL_HINDI_PASSAGE
+    )
+      return;
     const controller = new AbortController();
     void fetchPassageSummary(passageState.passage.id, controller.signal).then(
       (summary) => {
@@ -521,6 +550,7 @@ export function TypingPractice() {
     if (
       snapshot.status !== 'finished' ||
       passageState.status !== 'ready' ||
+      snapshot.comparison ||
       !sessionChecked ||
       savedRunRef.current
     ) {
@@ -593,7 +623,10 @@ export function TypingPractice() {
   const wordCount = snapshot.target
     ? snapshot.target.trim().split(/\s+/).filter(Boolean).length
     : 0;
-  const charCount = snapshot.target.length;
+  const isHindi = snapshot.comparison !== undefined;
+  const charCount =
+    (passageState.status === 'ready' ? passageState.charCount : undefined) ??
+    snapshot.target.length;
 
   return (
     <div
@@ -683,7 +716,10 @@ export function TypingPractice() {
                 </svg>
                 <span>Restart</span>
               </button>
-              <PracticeCatalogue buttonClass={styles.hudBtn} />
+              <PracticeCatalogue
+                buttonClass={styles.hudBtn}
+                onSelectHindi={() => loadPassage(LOCAL_HINDI_PASSAGE)}
+              />
               {!showIdPicker ? (
                 <button
                   type="button"
@@ -911,6 +947,8 @@ export function TypingPractice() {
           </div>
 
           <PassageView
+            comparison={snapshot.comparison?.chars}
+            language={isHindi ? 'hi' : undefined}
             target={snapshot.target}
             typedText={snapshot.typedText}
             keyboardHeight={keyboardViewport?.height}
@@ -967,15 +1005,18 @@ export function TypingPractice() {
                           ? 'Passage completed'
                           : 'Time is up'}
                       </h2>
-                      <span
-                        className={`${styles.summaryCoachingBadge} ${coachingBadgeClass}`}
-                      >
-                        {coachingText}
-                      </span>
+                      {!isHindi && (
+                        <span
+                          className={`${styles.summaryCoachingBadge} ${coachingBadgeClass}`}
+                        >
+                          {coachingText}
+                        </span>
+                      )}
                     </div>
                     <span className={`muted ${styles.disclaimer}`}>
-                      Practice estimate only — not an official qualification
-                      result.
+                      {isHindi
+                        ? 'Practice estimate based on the final Hindi text.'
+                        : 'Practice estimate only — not an official qualification result.'}
                     </span>
                   </div>
                   <dl className={styles.summaryGrid}>
@@ -991,7 +1032,9 @@ export function TypingPractice() {
                       <dt>
                         <span>Net speed</span>
                         <span className={styles.summaryHintTag}>
-                          {speedHint}
+                          {isHindi
+                            ? 'After errors'
+                            : speedHint}
                         </span>
                       </dt>
                       <dd
@@ -1059,7 +1102,7 @@ export function TypingPractice() {
                             : styles.summaryCardGood
                       }
                     >
-                      <dt>Keystrokes</dt>
+                      <dt>{isHindi ? 'Characters' : 'Keystrokes'}</dt>
                       <dd className={styles.summaryKeystrokes}>
                         <span className={styles.summaryValGood}>
                           {snapshot.correctAttempts} correct
@@ -1079,7 +1122,7 @@ export function TypingPractice() {
                       </dd>
                     </div>
                   </dl>
-                  {passageState.status === 'ready' && (
+                  {passageState.status === 'ready' && !isHindi && (
                     <AttemptComparison
                       passageId={passageState.passage.id}
                       mode="PRACTICE"
@@ -1125,6 +1168,7 @@ export function TypingPractice() {
                   onDragOver={(event) => event.preventDefault()}
                   onCompositionStart={handleCompositionStart}
                   onCompositionEnd={handleCompositionEnd}
+                  lang={isHindi ? 'hi' : undefined}
                   spellCheck={false}
                   autoCapitalize="off"
                   autoCorrect="off"

@@ -613,6 +613,7 @@ export function ExamMode() {
   const masterText = snapshot?.passage.text ?? '';
   const submittedText = session?.text ?? '';
   const versionRules = versionDetail?.rules ?? null;
+  const isHindiExam = snapshot?.version.language === 'hi';
   const evaluation = useMemo(
     () =>
       evaluateExamAttempt({
@@ -622,6 +623,7 @@ export function ExamMode() {
         examSlug: selectedExamSlug,
         examName: selectedExamName,
         rules: versionRules,
+        language: isHindiExam ? 'hi' : 'en',
       }),
     [
       phase,
@@ -631,12 +633,14 @@ export function ExamMode() {
       selectedExamSlug,
       selectedExamName,
       versionRules,
+      isHindiExam,
     ],
   );
 
   useEffect(() => {
     if (
       phase !== 'finished' ||
+      isHindiExam ||
       !snapshot ||
       !versionDetail ||
       !sessionChecked ||
@@ -680,6 +684,7 @@ export function ExamMode() {
     snapshot,
     versionDetail,
     session?.backspaceCount,
+    isHindiExam,
     evaluation.grossWpm,
     evaluation.netWpm,
     evaluation.accuracyPercent,
@@ -1084,7 +1089,7 @@ export function ExamMode() {
                 </svg>
               </span>
               <h2 id="passage-heading" className={styles.panelTitle}>
-                Official Master Passage
+                {isHindiExam ? 'Hindi Test Passage' : 'Official Master Passage'}
               </h2>
               {!isExamRunning && (
                 <span className={styles.panelBadge}>
@@ -1106,7 +1111,11 @@ export function ExamMode() {
               </div>
             )}
           </div>
-          <div ref={passageContainerRef} className={styles.passageContent}>
+          <div
+            ref={passageContainerRef}
+            className={styles.passageContent}
+            lang={isHindiExam ? 'hi' : undefined}
+          >
             {isLoadingVersionDetail || isLoadingSnapshot ? (
               <p className={styles.passagePlaceholder}>
                 Loading master passage...
@@ -1180,6 +1189,7 @@ export function ExamMode() {
             <textarea
               ref={textareaRef}
               id="typing-textarea"
+              lang={isHindiExam ? 'hi' : undefined}
               className={`${styles.typingTextarea} ${
                 requiresSignIn ||
                 (session?.phase === 'ready' &&
@@ -1584,7 +1594,9 @@ export function ExamMode() {
                 </div>
                 <div className={`${styles.scoreCard} ${styles.scoreCardInfo}`}>
                   <span className={styles.scoreCardLabel}>
-                    Keystrokes & Progress
+                    {isHindiExam
+                      ? 'Characters & Progress'
+                      : 'Keystrokes & Progress'}
                   </span>
                   <strong className={styles.scoreCardVal}>
                     {typedLength.toLocaleString()}
@@ -1592,7 +1604,7 @@ export function ExamMode() {
                   <span className={styles.scoreCardSub}>
                     {evaluation.completionPercent}% of{' '}
                     {passageLength.toLocaleString()} chars
-                    {evaluation.targetKeystrokes !== null
+                    {!isHindiExam && evaluation.targetKeystrokes !== null
                       ? ` (Target: ${evaluation.targetKeystrokes.toLocaleString()})`
                       : ''}
                   </span>
@@ -1615,14 +1627,16 @@ export function ExamMode() {
                     {evaluation.targetWpm} WPM
                   </strong>
                   <span className={styles.scoreCardSub}>
-                    {evaluation.categoryResults
-                      .map((c) => `${c.category} ≤${c.maxErrorPercent}%`)
-                      .join(' · ')}{' '}
+                    {isHindiExam
+                      ? `Test error threshold: ${versionRules?.maxErrorPercent ?? '—'}% · Keystroke reference: ${versionRules?.targetKeystrokes ?? '—'}`
+                      : evaluation.categoryResults
+                          .map((c) => `${c.category} ≤${c.maxErrorPercent}%`)
+                          .join(' · ')}{' '}
                     · {Math.round(durationProfileSecs / 60)}m
                   </span>
                 </div>
               </div>
-              {snapshot && (
+              {snapshot && !isHindiExam && (
                 <AttemptComparison
                   passageId={snapshot.passage.id}
                   mode="EXAM"

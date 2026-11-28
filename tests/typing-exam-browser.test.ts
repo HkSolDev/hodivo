@@ -51,6 +51,27 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
       scoringAvailable: false,
     },
   };
+  const hindiText = 'सुबह मैं अपनी किताबें लेकर गया।';
+  const hindi = {
+    ...snapshot,
+    version: {
+      ...snapshot.version,
+      id: 'version3',
+      label: 'Hindi Exam Mode test preset',
+      language: 'hi',
+      rules: {
+        ...snapshot.version.rules,
+        targetWpm: 30,
+        maxErrorPercent: 7,
+        targetKeystrokes: 1500,
+      },
+    },
+    passage: {
+      ...snapshot.passage,
+      text: hindiText,
+      contentHash: createHash('sha256').update(hindiText).digest('hex'),
+    },
+  };
   let state: 'ready' | 'empty' | 'error' = 'ready';
   const requests: { method: string; url: string; body: string }[] = [];
   const api = createServer((req, res) => {
@@ -72,6 +93,21 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
           );
           return;
         }
+        if (req.url === '/api/typing/exam-versions/version3/passage') {
+          res.end(JSON.stringify({ snapshot: hindi }));
+          return;
+        }
+        if (req.url === '/api/typing/exam-versions/version3') {
+          res.end(JSON.stringify({ version: hindi.version }));
+          return;
+        }
+        if (req.url === '/api/typing/exam-versions/version3/passages') {
+          const { id, title, sourceKind } = hindi.passage;
+          res.end(JSON.stringify({
+            passages: [{ id, title, sourceKind, examYear: null, shift: null }],
+          }));
+          return;
+        }
         const result =
           req.url === '/api/typing/exams'
             ? { exams: state === 'empty' ? [] : [exam], nextCursor: null }
@@ -79,6 +115,12 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
               ? {
                   versions: [
                     version,
+                    {
+                      ...version,
+                      id: 'version3',
+                      label: hindi.version.label,
+                      language: 'hi',
+                    },
                     {
                       ...version,
                       id: 'version2',
@@ -531,6 +573,32 @@ test('exam simulation integrates catalogue, local editing and responsive layout'
       ).toBeVisible();
       await expect(input).toHaveValue('A');
       await expect(input).not.toBeEditable();
+    },
+  );
+  await t.test(
+    'Hindi exam uses the same console and reports aligned mistakes',
+    async () => {
+      await page.reload();
+      await page.getByLabel('Exam', { exact: true }).selectOption('exam1');
+      await page
+        .getByLabel('Version', { exact: true })
+        .selectOption('version3');
+      await expect(input).toHaveAttribute('lang', 'hi');
+      await expect(page.getByText(hindiText, { exact: true })).toBeVisible();
+      await input.focus();
+      await page.keyboard.insertText('सुबह  अपनी किताबे लेकर गया।');
+      await page
+        .getByRole('button', { name: 'Submit examination', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Confirm submission', exact: true })
+        .click();
+      await expect(
+        page.getByText('Local Hindi test result', { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText('2 Full · 0 Half on typed words', { exact: true }),
+      ).toBeVisible();
     },
   );
   await t.test(

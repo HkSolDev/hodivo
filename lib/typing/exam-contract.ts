@@ -16,7 +16,7 @@ export interface ExamVersionSummary {
   examId: string;
   versionKey: string;
   label: string;
-  language: 'en';
+  language: 'en' | 'hi';
   examYear: number | null;
 }
 
@@ -80,3 +80,6 @@ export interface ExamSession {
   remainingSeconds: number;
   finishReason: 'submitted' | 'expired' | null;
 }
+
+export const HINDI_EXAM_TEXT = /^[\t\n -~ऀ-ॿ‌‍]+$/u;
+export const HINDI_EXAM_LETTER = /[अ-ह]/u;
