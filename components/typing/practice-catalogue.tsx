@@ -16,6 +16,7 @@ export function PracticeCatalogue({
 }) {
   const titleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
+  const [language, setLanguage] = useState<'en' | 'hi'>('en');
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<{ cursor?: string }>({});
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
@@ -24,7 +25,7 @@ export function PracticeCatalogue({
   useEffect(() => {
     if (!open) return;
     const request = new AbortController();
-    void loadPracticeCatalogue(request.signal, page.cursor).then(
+    void loadPracticeCatalogue(request.signal, page.cursor, language).then(
       (result) => {
         if (!request.signal.aborted) setCatalogue(result);
       },
@@ -33,7 +34,7 @@ export function PracticeCatalogue({
       },
     );
     return () => request.abort();
-  }, [open, page]);
+  }, [open, page, language]);
 
   function goTo(cursor?: string) {
     setCatalogue(null);
@@ -69,23 +70,47 @@ export function PracticeCatalogue({
               </button>
             </form>
           </header>
-          <div className={styles.body}>
-            {process.env.NODE_ENV === 'development' && (
+          <div
+            className={styles.languages}
+            role="group"
+            aria-label="Passage language"
+          >
+            {(['en', 'hi'] as const).map((option) => (
               <button
-                className={styles.row}
+                key={option}
+                className={styles.control}
                 type="button"
-                lang="hi"
+                lang={option}
+                aria-pressed={option === language}
                 onClick={() => {
-                  dialog.current?.close();
-                  onSelectHindi();
+                  if (option === language) return;
+                  setLanguage(option);
+                  goTo();
                 }}
               >
-                हिन्दी अभ्यास
-                <span className={styles.chevron} aria-hidden="true">
-                  ›
-                </span>
+                {option === 'en' ? 'English' : 'हिन्दी'}
               </button>
-            )}
+            ))}
+          </div>
+          <div className={styles.body}>
+            {process.env.NODE_ENV === 'development' &&
+              language === 'hi' &&
+              catalogue?.passages.length === 0 && (
+                <button
+                  className={styles.row}
+                  type="button"
+                  lang="hi"
+                  onClick={() => {
+                    dialog.current?.close();
+                    onSelectHindi();
+                  }}
+                >
+                  हिन्दी अभ्यास
+                  <span className={styles.chevron} aria-hidden="true">
+                    ›
+                  </span>
+                </button>
+              )}
             {failed ? (
               <div className={styles.status}>
                 <p role="status">Passages unavailable.</p>
@@ -103,6 +128,7 @@ export function PracticeCatalogue({
                   <li key={id}>
                     <a
                       className={styles.row}
+                      lang={language}
                       href={`/typing?passage=${encodeURIComponent(id)}`}
                     >
                       {title}
@@ -115,7 +141,11 @@ export function PracticeCatalogue({
               </ul>
             ) : (
               <p className={styles.status} role="status">
-                {catalogue ? 'No passages available.' : 'Loading catalogue…'}
+                {catalogue
+                  ? language === 'hi'
+                    ? 'कोई हिन्दी अनुच्छेद उपलब्ध नहीं है।'
+                    : 'No passages available.'
+                  : 'Loading catalogue…'}
               </p>
             )}
           </div>

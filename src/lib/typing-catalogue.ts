@@ -60,14 +60,16 @@ export function listPracticePassages(
   limit: number,
   cursor?: string,
   database: Database = prismaRead,
+  language?: 'en' | 'hi',
 ) {
-  const scope = catalogueScope();
+  const scope = language === 'en' ? 'english' : catalogueScope();
   return readTypingCache(
     database,
-    `catalogue:${scope === 'local' ? 'local:' : ''}${limit}:${cursor ?? ''}`,
+    `catalogue:${scope === 'local' ? 'local:' : ''}${language ?? 'all'}:${limit}:${cursor ?? ''}`,
     async () => {
       const rows = await database.$queryRaw<PassageSummary[]>`
       SELECT p."id", p."title" ${eligible(scope)}
+      ${language === 'hi' ? Prisma.sql`AND v."language" = 'hi'` : Prisma.empty}
       AND p."id" > ${cursor ?? ''}
       ORDER BY p."id" LIMIT ${limit + 1}
     `;

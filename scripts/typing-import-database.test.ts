@@ -188,7 +188,14 @@ test(
       where: { examVersionId: stored.id },
       data: publication,
     });
-    const published = await app.inject(practiceBase);
+    const english = await app.inject(`${practiceBase}?language=en`);
+    assert.equal(english.statusCode, 200);
+    assert.deepEqual(english.json().passages, []);
+    assert.equal(
+      (await app.inject(`${practiceBase}?language=xx`)).statusCode,
+      400,
+    );
+    const published = await app.inject(`${practiceBase}?language=hi`);
     assert.equal(published.statusCode, 200, published.body);
     assert.equal(published.json().passages.length, 3);
     const publicPassage = await app.inject(`${practiceBase}/${passages[0].id}`);
