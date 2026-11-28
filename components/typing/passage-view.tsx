@@ -53,15 +53,19 @@ export const PassageView = memo(function PassageView({
   typedText,
   keyboardHeight,
   showFeedback = true,
+  comparison,
+  language,
 }: {
   target: string;
   typedText: string;
   keyboardHeight?: number;
   showFeedback?: boolean;
+  comparison?: EvaluatedChar[];
+  language?: string;
 }) {
   const groups = useMemo(
-    () => groupPassageChars(evaluate(target, typedText).chars),
-    [target, typedText],
+    () => groupPassageChars(comparison ?? evaluate(target, typedText).chars),
+    [comparison, target, typedText],
   );
   const containerRef = useRef<HTMLParagraphElement | null>(null);
   const currentRef = useRef<HTMLSpanElement | null>(null);
@@ -106,6 +110,7 @@ export const PassageView = memo(function PassageView({
   return (
     <p
       ref={containerRef}
+      lang={language}
       className={styles.passage}
       aria-label="Passage to type"
     >

@@ -137,7 +137,7 @@ test('exam client rejects malformed payloads, unknown keys and inconsistent read
   }
   const badVersions = [
     { version: { ...version, extra: true } },
-    { version: { ...version, language: 'hi' } },
+    { version: { ...version, language: 'fr' } },
     { version: { ...version, examYear: 1899 } },
     { version: { ...version, rulesUpdatedAt: '2026-11-13' } },
     { version: { ...version, rules: { ...rules, durationSeconds: 3601 } } },

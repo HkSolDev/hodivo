@@ -300,12 +300,14 @@ await describe('parseTypingImport', async () => {
     assert.doesNotThrow(() => parseTypingImport(keystrokes));
   });
 
-  await test('accepts only the English language serialized as en', () => {
+  await test('accepts English and Hindi language codes', () => {
     const input = validInput();
     input.version.language = 'EN';
     assert.throws(() => parseTypingImport(input), TypingValidationError);
-    input.version.language = 'hi';
+    input.version.language = 'fr';
     assert.throws(() => parseTypingImport(input), TypingValidationError);
+    input.version.language = 'hi';
+    assert.equal(parseTypingImport(input).version.language, 'hi');
     input.version.language = 'en';
     assert.doesNotThrow(() => parseTypingImport(input));
   });

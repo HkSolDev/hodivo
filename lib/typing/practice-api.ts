@@ -2,7 +2,10 @@ export interface PracticePassage {
   id: string;
   title: string;
   text: string;
+  language?: 'hi';
 }
+
+import { HINDI_EXAM_LETTER, HINDI_EXAM_TEXT } from './exam-contract';
 
 const endpoint = '/api/typing/practice-passage';
 
@@ -24,11 +27,16 @@ export async function loadPracticePassage(
   if (payload.passage === null) return null;
   if (
     !isRecord(payload.passage) ||
-    !hasOnlyKeys(payload.passage, ['id', 'title', 'text'])
+    !hasOnlyKeys(
+      payload.passage,
+      payload.passage.language === 'hi'
+        ? ['id', 'title', 'text', 'language']
+        : ['id', 'title', 'text'],
+    )
   ) {
     throw new Error('Practice passage response was invalid.');
   }
-  const { id, title, text } = payload.passage;
+  const { id, title, text, language } = payload.passage;
   if (
     typeof id !== 'string' ||
     id.length === 0 ||
@@ -37,11 +45,13 @@ export async function loadPracticePassage(
     title.length === 0 ||
     Array.from(title).length > 200 ||
     typeof text !== 'string' ||
-    !isSupportedPassageText(text)
+    !isSupportedPassageText(text, language === 'hi')
   ) {
     throw new Error('Practice passage response was invalid.');
   }
-  return { id, title, text };
+  return language === 'hi'
+    ? { id, title, text, language }
+    : { id, title, text };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -53,12 +63,13 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
   return actual.length === keys.length && keys.every((key) => key in value);
 }
 
-function isSupportedPassageText(value: string): boolean {
+function isSupportedPassageText(value: string, hindi: boolean): boolean {
   return (
     value.length >= 1 &&
     value.length <= 50_000 &&
-    /^[\t\n -~]+$/.test(value) &&
-    /[!-~]/.test(value)
+    (hindi
+      ? HINDI_EXAM_TEXT.test(value) && HINDI_EXAM_LETTER.test(value)
+      : /^[\t\n -~]+$/.test(value) && /[!-~]/.test(value))
   );
 }
 

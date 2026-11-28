@@ -5,6 +5,7 @@ COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma
 RUN pnpm install --frozen-lockfile
 COPY src ./src
+COPY lib/typing/exam-contract.ts ./lib/typing/exam-contract.ts
 COPY scripts/match.ts scripts/match-age.ts scripts/validate-post.ts scripts/refresh-job-visitors.ts ./scripts/
 COPY scripts/store-extraction-candidate.ts scripts/publish-extraction-candidate.ts ./scripts/
 COPY services/ai/candidate-storage.schema.json ./services/ai/
@@ -20,6 +21,7 @@ ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080 DOTENV_CONFIG_PATH=/dev/null
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/generated ./generated
 COPY --from=build --chown=node:node /app/src ./src
+COPY --from=build --chown=node:node /app/lib/typing/exam-contract.ts ./lib/typing/exam-contract.ts
 COPY --from=build --chown=node:node /app/scripts ./scripts
 COPY --from=build --chown=node:node /app/services/ai/candidate-storage.schema.json ./services/ai/candidate-storage.schema.json
 COPY --from=build --chown=node:node /app/frontend ./frontend

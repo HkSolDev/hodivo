@@ -1,3 +1,4 @@
+import { HINDI_EXAM_LETTER, HINDI_EXAM_TEXT } from './exam-contract.js';
 import type {
   ExamPage,
   ExamPassageSummary,
@@ -202,7 +203,7 @@ function versionSummaryFields(v: Record<string, unknown>): ExamVersionSummary {
     examId: id(v['examId']),
     versionKey: str(v['versionKey'], 64),
     label: str(v['label'], 200),
-    language: enumOf(v['language'], ['en'] as const),
+    language: enumOf(v['language'], ['en', 'hi'] as const),
     examYear: nint(v['examYear'], 1900, 2100),
   };
 }
@@ -279,7 +280,7 @@ function parseStartSnapshot(value: unknown): ExamStartSnapshot {
   const v = requireKeys(value, ['contractRevision', 'version', 'passage']);
   if (v['contractRevision'] !== 'exam-v1') throw invalidPayload();
   const version = parseVersionDetail(v['version']);
-  const passage = parsePassage(v['passage']);
+  const passage = parsePassage(v['passage'], version.language);
   if (!version.readiness.canStart || version.readiness.reasons.length > 0)
     throw invalidPayload();
   return { contractRevision: 'exam-v1', version, passage };
@@ -302,7 +303,10 @@ function parsePassageSummary(value: unknown): ExamPassageSummary {
   };
 }
 
-function parsePassage(value: unknown): ExamStartSnapshot['passage'] {
+function parsePassage(
+  value: unknown,
+  language: ExamVersionSummary['language'],
+): ExamStartSnapshot['passage'] {
   const v = requireKeys(value, [
     'id',
     'title',
@@ -316,7 +320,7 @@ function parsePassage(value: unknown): ExamStartSnapshot['passage'] {
   return {
     id: id(v['id']),
     title: str(v['title'], 200),
-    text: passageText(v['text']),
+    text: passageText(v['text'], language),
     contentHash: contentHash(v['contentHash']),
     revision: int(v['revision'], 1, Number.MAX_SAFE_INTEGER),
     sourceKind: enumOf(v['sourceKind'], SOURCE_KINDS),
@@ -465,13 +469,17 @@ const timestamp = (value: unknown): string => {
     throw invalidPayload();
   return value;
 };
-const passageText = (value: unknown): string => {
+const passageText = (
+  value: unknown,
+  language: ExamVersionSummary['language'],
+): string => {
   if (
     typeof value !== 'string' ||
     value.length < 1 ||
     value.length > 50_000 ||
-    !/^[\x20-\x7e\t\n]+$/.test(value) ||
-    !/[!-~]/.test(value)
+    (language === 'hi'
+      ? !HINDI_EXAM_TEXT.test(value) || !HINDI_EXAM_LETTER.test(value)
+      : !/^[\x20-\x7e\t\n]+$/.test(value) || !/[!-~]/.test(value))
   )
     throw invalidPayload();
   return value;

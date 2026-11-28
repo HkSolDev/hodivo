@@ -294,3 +294,22 @@ test('scoringMethod supports strict-full-v1 and rrb-10x-v1 penalty rules dynamic
   assert.equal(rrb.typedFullMistakes, 2);
   assert.equal(rrb.netWpm, 0);
 });
+
+test('Hindi exam review aligns skipped words and treats a missing matra as a full mistake', () => {
+  const result = evaluateExamAttempt({
+    masterText: 'सुबह मैं अपनी किताबें लेकर गया।',
+    typedText: 'सुबह  अपनी किताबे लेकर गया।',
+    elapsedSeconds: 60,
+    language: 'hi',
+  });
+  assert.deepEqual(
+    result.reviewItems.map(({ kind }) => kind),
+    ['match', 'omission', 'match', 'substitution', 'match', 'match'],
+  );
+  assert.equal(result.fullMistakes, 2);
+  assert.equal(result.halfMistakes, 0);
+  assert.equal(result.grossWpm, 5);
+  assert.equal(result.netWpm, 3);
+  assert.equal(result.statusLabel, 'Local Hindi test result');
+  assert.deepEqual(result.categoryResults, []);
+});

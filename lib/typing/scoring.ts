@@ -18,6 +18,7 @@ export interface SessionScore {
 export function computeSessionScore(
   counts: AttemptCounts,
   elapsedMs: number | null,
+  words?: { typed: number; correct: number },
 ): SessionScore {
   const accuracy =
     counts.insertedAttempts === 0
@@ -29,6 +30,13 @@ export function computeSessionScore(
   }
 
   const minutes = elapsedMs / 60000;
+  if (words) {
+    return {
+      grossWpm: words.typed / minutes,
+      netWpm: words.correct / minutes,
+      accuracy,
+    };
+  }
   const grossWpm = counts.insertedAttempts / 5 / minutes;
   const netWpm = Math.max(0, grossWpm - counts.incorrectAttempts / 5 / minutes);
 

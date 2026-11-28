@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
 import { prismaRead } from '../db.js';
+import {
+  isLocalHindiEnabled,
+  localHindiPassage,
+  localHindiVersion,
+} from './typing-local-hindi.js';
 import { getPracticePassage } from './typing-catalogue.js';
 import {
   Prisma,
@@ -75,6 +80,7 @@ function inRange(
 export function evaluateExamReadiness(
   v: TypingExamVersion,
   hasPassage: boolean,
+  localHindi = false,
 ): ExamVersionDetail['readiness'] {
   const reasons: ExamReason[] = [];
   if (
@@ -84,8 +90,7 @@ export function evaluateExamReadiness(
     !v.editingPolicy ||
     !v.ruleSourceUrl?.trim() ||
     !v.ruleSourceNote?.trim() ||
-    !v.reviewedAt ||
-    !v.publishedAt
+    (!localHindi && (!v.reviewedAt || !v.publishedAt))
   )
     reasons.push('RULES_INCOMPLETE');
   if (
@@ -112,14 +117,17 @@ function versionSummary(
     'id' | 'examId' | 'versionKey' | 'label' | 'language' | 'examYear'
   >,
 ): ExamVersionSummary {
-  if (v.language !== 'en' || !inRange(v.examYear, 1900, 2100))
+  if (
+    (v.language !== 'en' && v.language !== 'hi') ||
+    !inRange(v.examYear, 1900, 2100)
+  )
     throw new Error('Invalid catalogue projection.');
   return {
     id: v.id,
     examId: v.examId,
     versionKey: v.versionKey,
     label: v.label,
-    language: 'en',
+    language: v.language,
     examYear: v.examYear,
   };
 }
@@ -127,6 +135,7 @@ function versionSummary(
 function versionDetail(
   v: TypingExamVersion,
   hasPassage: boolean,
+  localHindi: boolean,
 ): ExamVersionDetail {
   if (
     !inRange(v.durationSeconds, 1, 3600) ||
@@ -159,7 +168,7 @@ function versionDetail(
     ...versionSummary(v),
     rules,
     rulesUpdatedAt: v.updatedAt.toISOString(),
-    readiness: evaluateExamReadiness(v, hasPassage),
+    readiness: evaluateExamReadiness(v, hasPassage, localHindi),
   };
 }
 
@@ -176,16 +185,20 @@ function page<T extends { id: string }>(
 function eligiblePassageWhere(
   versionId: string,
   passageId?: string,
+  localHindi = false,
 ): Prisma.Sql {
   const compatible = '^[\t\n -~]+$';
   const passageFilter = passageId
     ? Prisma.sql`AND p."id" = ${passageId}`
     : Prisma.empty;
-  return Prisma.sql`
-    p."examVersionId" = ${versionId} AND p."status" = 'PUBLISHED'
+  const eligibility = localHindi
+    ? localHindiPassage
+    : Prisma.sql`p."status" = 'PUBLISHED'
       AND p."reviewedAt" IS NOT NULL AND p."publishedAt" IS NOT NULL
+      AND p."text" ~ ${compatible} AND p."text" ~ '[!-~]'`;
+  return Prisma.sql`
+    p."examVersionId" = ${versionId} AND ${eligibility}
       AND p."revision" > 0 AND char_length(p."text") BETWEEN 1 AND 50000
-      AND p."text" ~ ${compatible} AND p."text" ~ '[!-~]'
       AND p."contentHash" = encode(sha256(convert_to(p."text", 'UTF8')), 'hex')
       AND p."sourceKind" IN ('OFFICIAL_PREVIOUS_YEAR', 'RECONSTRUCTED', 'PRACTICE')
       AND (p."sourceKind" <> 'OFFICIAL_PREVIOUS_YEAR' OR
@@ -198,12 +211,13 @@ async function eligiblePassage(
   tx: Prisma.TransactionClient,
   versionId: string,
   passageId?: string,
+  localHindi = false,
 ): Promise<Omit<ExamStartSnapshot['passage'], 'text'> | null> {
   // shortcut: random sorting suits a small catalogue; measure before 10000 published passages.
   const rows = await tx.$queryRaw<Omit<ExamStartSnapshot['passage'], 'text'>[]>`
     SELECT p."id", p."title", p."contentHash", p."revision", p."sourceKind", p."sourceUrl", p."sourceNote"
     FROM "TypingPassage" p
-    WHERE ${eligiblePassageWhere(versionId, passageId)}
+    WHERE ${eligiblePassageWhere(versionId, passageId, localHindi)}
     ORDER BY random() LIMIT 1
   `;
   return rows[0] ?? null;
@@ -212,6 +226,10 @@ async function eligiblePassage(
 export function createExamCatalogue(
   database: PrismaClient = prismaRead,
 ): ExamCatalogue {
+  const versionVisibility: Prisma.TypingExamVersionWhereInput =
+    isLocalHindiEnabled()
+      ? { OR: [visibleVersion, localHindiVersion] }
+      : visibleVersion;
   function read<T>(
     versionId: string,
     passageId: string | undefined,
@@ -224,11 +242,21 @@ export function createExamCatalogue(
     return database.$transaction(
       async (tx) => {
         const version = await tx.typingExamVersion.findFirst({
-          where: { id: versionId, ...visibleVersion },
+          where: { id: versionId, ...versionVisibility },
         });
         if (!version) throw new ExamCatalogueError('NOT_FOUND');
-        const passage = await eligiblePassage(tx, versionId, passageId);
-        return project(versionDetail(version, passage !== null), passage, tx);
+        const localHindi = version.language === 'hi';
+        const passage = await eligiblePassage(
+          tx,
+          versionId,
+          passageId,
+          localHindi,
+        );
+        return project(
+          versionDetail(version, passage !== null, localHindi),
+          passage,
+          tx,
+        );
       },
       { isolationLevel: 'RepeatableRead', timeout: 5000 },
     );
@@ -236,7 +264,7 @@ export function createExamCatalogue(
   return {
     async listExams(limit, cursor) {
       const where: Prisma.TypingExamWhereInput = {
-        versions: { some: visibleVersion },
+        versions: { some: versionVisibility },
       };
       if (
         cursor &&
@@ -255,10 +283,10 @@ export function createExamCatalogue(
       return page(rows, limit);
     },
     async listVersions(examId, limit, cursor) {
-      const where = { examId, ...visibleVersion };
+      const where = { examId, ...versionVisibility };
       if (
         !(await database.typingExam.findFirst({
-          where: { id: examId, versions: { some: visibleVersion } },
+          where: { id: examId, versions: { some: versionVisibility } },
           select: { id: true },
         }))
       )
@@ -284,14 +312,14 @@ export function createExamCatalogue(
     },
     async listPassages(versionId) {
       const version = await database.typingExamVersion.findFirst({
-        where: { id: versionId, ...visibleVersion },
-        select: { id: true },
+        where: { id: versionId, ...versionVisibility },
+        select: { id: true, language: true },
       });
       if (!version) throw new ExamCatalogueError('NOT_FOUND');
       return database.$queryRaw<ExamPassageSummary[]>`
         SELECT p."id", p."title", p."sourceKind", p."examYear", p."shift"
         FROM "TypingPassage" p
-        WHERE ${eligiblePassageWhere(versionId)}
+        WHERE ${eligiblePassageWhere(versionId, undefined, version.language === 'hi')}
         ORDER BY p."sourceKind" ASC, p."title" ASC, p."id" ASC
       `;
     },
@@ -304,7 +332,13 @@ export function createExamCatalogue(
           );
 
         // Read the shared key using the same snapshot as Exam's eligibility check.
-        const content = await getPracticePassage(passage.id, tx);
+        const content =
+          version.language === 'hi'
+            ? await tx.typingPassage.findUnique({
+                where: { id: passage.id },
+                select: { text: true },
+              })
+            : await getPracticePassage(passage.id, tx);
         if (
           !content ||
           createHash('sha256').update(content.text).digest('hex') !==

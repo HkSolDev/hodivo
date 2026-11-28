@@ -12,6 +12,7 @@ export interface Evaluation {
   correct: number;
   incorrect: number;
   done: boolean;
+  words?: { typed: number; correct: number; skipped: number };
 }
 
 export function evaluate(target: string, typed: string): Evaluation {
